@@ -169,17 +169,30 @@ export function FacturasComprasTable({
     });
   };
 
-  // 1. Facturas Cartera / Deuda Directa con Proveedor (criterio estricto: saldo_pendiente > 0, no COMPRA_TC y no CONTADO)
+  // 1. Facturas Cartera / Deuda Directa con Proveedor (criterio estricto: saldo_pendiente > 0, no modalidades especiales ni CONTADO)
   const facturasCartera = useMemo(() => {
     return data.filter((f) => {
       const saldoPendiente = Number(
         f.monto_saldo !== undefined && f.monto_saldo !== null ? f.monto_saldo : f.monto_total
       );
+      const mods = [
+        f.estado,
+        (f as unknown as Record<string, unknown>).modalidad_pago as string | undefined,
+        (f as unknown as Record<string, unknown>).modalidad as string | undefined,
+      ].map((v) => v?.toUpperCase());
+
+      const tieneModalidadEspecial =
+        mods.includes("FACTORING") ||
+        mods.includes("CONFIRMING") ||
+        mods.includes("CHEQUE") ||
+        mods.includes("COMPRA_TC") ||
+        mods.includes("NETEO_NC") ||
+        mods.includes("PAGADA");
+
       return (
         f.tipo_doc !== 61 &&
         saldoPendiente > 0 &&
-        f.estado === "DEUDA_PROVEEDOR" &&
-        (f.estado as string) !== "COMPRA_TC" &&
+        !tieneModalidadEspecial &&
         f.condicion_pago !== "CONTADO"
       );
     });
@@ -191,12 +204,18 @@ export function FacturasComprasTable({
       const saldo = Number(
         f.monto_saldo !== undefined && f.monto_saldo !== null ? f.monto_saldo : f.monto_total
       );
-      const esCheque =
-        f.estado === "CHEQUE" ||
-        ((f as any).modalidad_pago && String((f as any).modalidad_pago).toUpperCase() === "CHEQUE");
+      const mods = [
+        f.estado,
+        (f as unknown as Record<string, unknown>).modalidad_pago as string | undefined,
+        (f as unknown as Record<string, unknown>).modalidad as string | undefined,
+      ].map((v) => v?.toUpperCase());
+
+      const esCheque = mods.includes("CHEQUE");
+      const esPagada = mods.includes("PAGADA");
+
       return (
         f.tipo_doc !== 61 &&
-        f.estado !== "PAGADA" &&
+        !esPagada &&
         saldo > 0 &&
         (esCheque ||
           (f.cheques && f.cheques.length > 0) ||
@@ -211,9 +230,13 @@ export function FacturasComprasTable({
       const saldo = Number(
         f.monto_saldo !== undefined && f.monto_saldo !== null ? f.monto_saldo : f.monto_total
       );
-      const esFactoring =
-        f.estado === "FACTORING" ||
-        ((f as any).modalidad_pago && String((f as any).modalidad_pago).toUpperCase() === "FACTORING");
+      const mods = [
+        f.estado,
+        (f as unknown as Record<string, unknown>).modalidad_pago as string | undefined,
+        (f as unknown as Record<string, unknown>).modalidad as string | undefined,
+      ].map((v) => v?.toUpperCase());
+
+      const esFactoring = mods.includes("FACTORING");
       return f.tipo_doc !== 61 && esFactoring && saldo > 0;
     });
   }, [data]);
@@ -224,9 +247,13 @@ export function FacturasComprasTable({
       const saldo = Number(
         f.monto_saldo !== undefined && f.monto_saldo !== null ? f.monto_saldo : f.monto_total
       );
-      const esConfirming =
-        f.estado === "CONFIRMING" ||
-        ((f as any).modalidad_pago && String((f as any).modalidad_pago).toUpperCase() === "CONFIRMING");
+      const mods = [
+        f.estado,
+        (f as unknown as Record<string, unknown>).modalidad_pago as string | undefined,
+        (f as unknown as Record<string, unknown>).modalidad as string | undefined,
+      ].map((v) => v?.toUpperCase());
+
+      const esConfirming = mods.includes("CONFIRMING");
       return f.tipo_doc !== 61 && esConfirming && saldo > 0;
     });
   }, [data]);

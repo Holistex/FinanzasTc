@@ -344,18 +344,24 @@ export async function getFacturasComprasAction(
       if (item.total_cheques_emitidos && item.total_cheques_emitidos > 0) {
         totalCheque += item.total_cheques_emitidos;
       }
-      if (item.estado === "DEUDA_PROVEEDOR") {
-        totalDeudaProveedor += saldo;
-        cantidadDeudaProveedor += 1;
-      } else if (item.estado === "FACTORING") {
+      const mods = [
+        item.estado,
+        (item as unknown as Record<string, unknown>).modalidad_pago,
+        (item as unknown as Record<string, unknown>).modalidad,
+      ].map((v) => (v ? String(v).toUpperCase() : ""));
+
+      if (mods.includes("FACTORING")) {
         totalFactoring += saldo;
         cantidadFactoring += 1;
-      } else if (item.estado === "CONFIRMING") {
+      } else if (mods.includes("CONFIRMING")) {
         totalConfirming += saldo;
         cantidadConfirming += 1;
-      } else if (item.estado === "CHEQUE") {
+      } else if (mods.includes("CHEQUE")) {
         totalCheque += saldo;
         cantidadCheque += 1;
+      } else {
+        totalDeudaProveedor += saldo;
+        cantidadDeudaProveedor += 1;
       }
     }
   }
@@ -576,9 +582,11 @@ export async function cambiarEstadoCompraAction(input: {
 
     const existingLocal = db.facturas_compras.find((x) => x.id === input.id);
 
-    const payload: Partial<FacturaCompra> & { modalidad_pago?: string } = {
+    const estadoUpper = input.estado.toUpperCase();
+    const payload: Partial<FacturaCompra> & { modalidad_pago?: string; modalidad?: string } = {
       estado: input.estado,
-      modalidad_pago: input.estado,
+      modalidad_pago: estadoUpper,
+      modalidad: estadoUpper,
       updated_at: new Date().toISOString(),
     };
 
@@ -667,16 +675,26 @@ export async function cambiarEstadoCompraAction(input: {
         .eq("id", input.id);
 
       if (error) {
-        // Fallback si las columnas colaborador_id/on_proyecto/observacion_tc aún no existen en Supabase
+        // Fallback si las columnas colaborador_id/on_proyecto/observacion_tc o modalidad aún no existen en Supabase
         const safePayload = { ...payload };
+        delete safePayload.modalidad;
         delete safePayload.colaborador_id;
         delete safePayload.on_proyecto;
         delete safePayload.observacion_tc;
         delete safePayload.deuda_proveedor;
-        const { error: err2 } = await supabase
+        let { error: err2 } = await supabase
           .from("facturas_compras")
           .update(safePayload)
           .eq("id", input.id);
+
+        if (err2) {
+          delete safePayload.modalidad_pago;
+          const { error: err3 } = await supabase
+            .from("facturas_compras")
+            .update(safePayload)
+            .eq("id", input.id);
+          err2 = err3;
+        }
 
         if (err2 && input.estado === "COMPRA_TC") {
           // Si la restricción CHECK de estado aún no permite COMPRA_TC en Supabase, asegurar monto_saldo = 0
@@ -768,6 +786,7 @@ export async function cambiarEstadoCompraAction(input: {
     }
 
     revalidatePath("/compras-tensacon/facturas-compras");
+    revalidatePath("/compras-tensacon/compromisos");
     revalidatePath("/compras-tensacon/historico-pagos");
     return { success: true };
   } catch (err: unknown) {
@@ -960,6 +979,8 @@ export interface ChequeCompraInputItem {
 export interface RegistrarChequesCompraInput {
   facturaId: string;
   cheques: ChequeCompraInputItem[];
+  folio?: number;
+  rutProveedor?: string;
 }
 
 /**
@@ -1003,13 +1024,53 @@ export async function registrarChequesCompraAction(
     if (!db.facturas_compras) db.facturas_compras = [];
     if (!db.cheques_compras) db.cheques_compras = [];
 
-    const factura = db.facturas_compras.find((f) => f.id === input.facturaId);
+    // 1. Localizar la factura: Primero en Supabase si está disponible, luego en LocalDB
+    let factura: FacturaCompra | null = null;
+
+    if (isServerSupabaseConfigured()) {
+      try {
+        const supabase = await createServerSupabaseClient();
+        const { data: supaFac } = await supabase
+          .from("facturas_compras")
+          .select("*")
+          .eq("id", input.facturaId)
+          .maybeSingle();
+
+        if (supaFac) {
+          factura = supaFac as unknown as FacturaCompra;
+        } else if (input.folio) {
+          const { data: supaFacByFolio } = await supabase
+            .from("facturas_compras")
+            .select("*")
+            .eq("folio", input.folio)
+            .maybeSingle();
+
+          if (supaFacByFolio) {
+            factura = supaFacByFolio as unknown as FacturaCompra;
+          }
+        }
+      } catch (err) {
+        console.error("Error al buscar factura en Supabase:", err);
+      }
+    }
+
+    if (!factura) {
+      factura = db.facturas_compras.find((f) => f.id === input.facturaId) || null;
+      if (!factura && input.folio) {
+        factura = db.facturas_compras.find((f) => f.folio === input.folio) || null;
+      }
+    }
+
     if (!factura) {
       return { success: false, error: "La factura seleccionada no fue encontrada." };
     }
 
     const sumaCheques = input.cheques.reduce((sum, c) => sum + Number(c.montoCheque || 0), 0);
-    const saldoActual = factura.monto_saldo !== undefined ? factura.monto_saldo : factura.monto_total;
+    const saldoActual = Number(
+      factura.monto_saldo !== undefined && factura.monto_saldo !== null
+        ? factura.monto_saldo
+        : factura.monto_total
+    );
 
     if (sumaCheques > saldoActual) {
       return {
@@ -1019,11 +1080,12 @@ export async function registrarChequesCompraAction(
     }
 
     const nuevoSaldo = Math.max(0, saldoActual - sumaCheques);
+    const estaSaldadaConCheques = nuevoSaldo === 0;
 
     // Crear entidades ChequeCompra
     const nuevosCheques: ChequeCompra[] = input.cheques.map((c, idx) => ({
       id: `chk-compra-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
-      factura_id: factura.id,
+      factura_id: factura!.id,
       numero_cheque: c.numeroCheque.trim(),
       banco_emisor: c.bancoEmisor.trim(),
       fecha_vencimiento: c.fechaVencimiento,
@@ -1033,63 +1095,112 @@ export async function registrarChequesCompraAction(
       created_at: new Date().toISOString(),
     }));
 
-    // Insertar en localDb
+    // Actualizar localDb
+    let localIdx = db.facturas_compras.findIndex((f) => f.id === factura!.id);
+    if (localIdx === -1) {
+      db.facturas_compras.unshift({ ...factura! });
+      localIdx = 0;
+    }
+
     db.cheques_compras.push(...nuevosCheques);
 
-    // Actualizar factura
-    factura.monto_saldo = nuevoSaldo;
-    if (nuevoSaldo === 0) {
-      factura.estado = "CHEQUE";
+    const refNumCheque =
+      input.cheques.length === 1
+        ? input.cheques[0].numeroCheque.trim()
+        : input.cheques.map((c) => c.numeroCheque.trim()).join(", ");
+    const refBanco = input.cheques[0].bancoEmisor.trim();
+    const refFechaVcto = input.cheques[0].fechaVencimiento;
+
+    db.facturas_compras[localIdx].monto_saldo = nuevoSaldo;
+    db.facturas_compras[localIdx].deuda_proveedor = estaSaldadaConCheques ? 0 : nuevoSaldo;
+    if (estaSaldadaConCheques) {
+      db.facturas_compras[localIdx].estado = "CHEQUE";
+      (db.facturas_compras[localIdx] as unknown as Record<string, unknown>).modalidad_pago = "CHEQUE";
+      (db.facturas_compras[localIdx] as unknown as Record<string, unknown>).modalidad = "CHEQUE";
     }
-    // Guardar referencia en factura (del primer cheque o concatenado)
-    factura.numero_cheque = input.cheques.length === 1 
-      ? input.cheques[0].numeroCheque.trim() 
-      : input.cheques.map(c => c.numeroCheque.trim()).join(", ");
-    factura.banco_emisor = input.cheques[0].bancoEmisor.trim();
-    factura.fecha_vencimiento_cheque = input.cheques[0].fechaVencimiento;
-    factura.updated_at = new Date().toISOString();
+    db.facturas_compras[localIdx].numero_cheque = refNumCheque;
+    db.facturas_compras[localIdx].banco_emisor = refBanco;
+    db.facturas_compras[localIdx].fecha_vencimiento_cheque = refFechaVcto;
+    db.facturas_compras[localIdx].updated_at = new Date().toISOString();
 
     writeLocalDb(db);
 
     // Persistir en Supabase si está disponible
     if (isServerSupabaseConfigured()) {
       const supabase = await createServerSupabaseClient();
-      await supabase.from("cheques_compras").insert(
-        nuevosCheques.map((c) => ({
-          factura_id: c.factura_id,
-          numero_cheque: c.numero_cheque,
-          banco_emisor: c.banco_emisor,
-          fecha_vencimiento: c.fecha_vencimiento,
-          monto_cheque: c.monto_cheque,
-          estado: c.estado,
-          observacion: c.observacion,
-        }))
-      );
+      try {
+        await supabase.from("cheques_compras").insert(
+          nuevosCheques.map((c) => ({
+            id: c.id,
+            factura_id: c.factura_id,
+            numero_cheque: c.numero_cheque,
+            banco_emisor: c.banco_emisor,
+            fecha_vencimiento: c.fecha_vencimiento,
+            monto_cheque: c.monto_cheque,
+            estado: c.estado,
+            observacion: c.observacion,
+            created_at: c.created_at,
+          }))
+        );
+      } catch (errChk) {
+        console.warn("Advertencia al registrar en cheques_compras:", errChk);
+      }
 
-      await supabase
+      const updateData: Record<string, unknown> = {
+        monto_saldo: nuevoSaldo,
+        saldo_pendiente: nuevoSaldo,
+        deuda_proveedor: estaSaldadaConCheques ? 0 : nuevoSaldo,
+        estado: estaSaldadaConCheques ? "CHEQUE" : factura.estado,
+        modalidad_pago: estaSaldadaConCheques
+          ? "CHEQUE"
+          : (factura as unknown as Record<string, unknown>).modalidad_pago || factura.estado,
+        modalidad: estaSaldadaConCheques
+          ? "CHEQUE"
+          : (factura as unknown as Record<string, unknown>).modalidad || factura.estado,
+        numero_cheque: refNumCheque,
+        banco_emisor: refBanco,
+        fecha_vencimiento_cheque: refFechaVcto,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: supaUpdErr } = await supabase
         .from("facturas_compras")
-        .update({
-          monto_saldo: nuevoSaldo,
-          estado: nuevoSaldo === 0 ? "CHEQUE" : factura.estado,
-          numero_cheque: factura.numero_cheque,
-          banco_emisor: factura.banco_emisor,
-          fecha_vencimiento_cheque: factura.fecha_vencimiento_cheque,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq("id", factura.id);
+
+      if (supaUpdErr) {
+        // Fallback sin columnas optativas
+        delete updateData.modalidad;
+        delete updateData.saldo_pendiente;
+        delete updateData.deuda_proveedor;
+        await supabase
+          .from("facturas_compras")
+          .update(updateData)
+          .eq("id", factura.id);
+      }
     }
 
     revalidatePath("/compras-tensacon/facturas-compras");
+    revalidatePath("/compras-tensacon/compromisos");
+    revalidatePath("/compras-tensacon/historico-pagos");
+
     return {
       success: true,
       nuevoSaldo,
       totalChequesEmitidos: sumaCheques,
     };
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Error al registrar los cheques de compra";
-    return { success: false, error: msg };
+    const errorMsg =
+      err instanceof Error ? err.message : "Error inesperado al emitir cheques para la factura.";
+    return {
+      success: false,
+      error: errorMsg,
+    };
   }
 }
+
+/** Alias para compatibilidad con llamadas de emisión de cheques */
+export const emitirChequeCompraAction = registrarChequesCompraAction;
 
 /**
  * Elimina un cheque emitido y restaura el saldo correspondiente en la factura
@@ -1368,6 +1479,7 @@ export async function registrarPagoFacturaCompraAction(
 
     // 5. Revalidar rutas para refrescar inmediatamente
     revalidatePath("/compras-tensacon/facturas-compras");
+    revalidatePath("/compras-tensacon/compromisos");
     revalidatePath("/compras-tensacon/historico-pagos");
     revalidatePath("/compras-tensacon/compromisos");
     revalidatePath("/compras-tensacon/deuda-proveedores");

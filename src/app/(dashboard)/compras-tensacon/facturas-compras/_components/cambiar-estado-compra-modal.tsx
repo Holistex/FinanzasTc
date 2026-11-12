@@ -445,6 +445,8 @@ export function CambiarEstadoCompraModal({
 
           const resCheques = await registrarChequesCompraAction({
             facturaId: factura.id,
+            folio: factura.folio,
+            rutProveedor: factura.rut_proveedor,
             cheques: chequesPayload,
           });
 
