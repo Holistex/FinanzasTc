@@ -486,30 +486,37 @@ export async function importarComprasCsvAction(
     // Inserción en Supabase con cláusula ON CONFLICT DO NOTHING
     if (isServerSupabaseConfigured() && finalRowsToInsert.length > 0) {
       const supabase = await createServerSupabaseClient();
+      const payloadToUpsert = finalRowsToInsert.map((r) => ({
+        nro: r.nro,
+        tipo_doc: r.tipo_doc,
+        tipo_compra: r.tipo_compra,
+        rut_proveedor: r.rut_proveedor,
+        razon_social: r.razon_social,
+        folio: r.folio,
+        fecha_docto: r.fecha_docto,
+        fecha_vencimiento: r.fecha_vencimiento,
+        fecha_recepcion: r.fecha_recepcion,
+        fecha_acuse_recibo: r.fecha_acuse_recibo,
+        condicion_pago: r.condicion_pago,
+        monto_total: r.monto_total,
+        monto_saldo: r.monto_saldo,
+        saldo_pendiente: r.monto_saldo,
+        deuda_proveedor: r.deuda_proveedor,
+        modalidad_pago: r.condicion_pago,
+        estado: r.estado,
+      }));
+
       const { error } = await supabase.from("facturas_compras").upsert(
-        finalRowsToInsert.map((r) => ({
-          nro: r.nro,
-          tipo_doc: r.tipo_doc,
-          tipo_compra: r.tipo_compra,
-          rut_proveedor: r.rut_proveedor,
-          razon_social: r.razon_social,
-          folio: r.folio,
-          fecha_docto: r.fecha_docto,
-          fecha_vencimiento: r.fecha_vencimiento,
-          fecha_recepcion: r.fecha_recepcion,
-          fecha_acuse_recibo: r.fecha_acuse_recibo,
-          condicion_pago: r.condicion_pago,
-          monto_total: r.monto_total,
-          monto_saldo: r.monto_saldo,
-          estado: r.estado,
-        })),
+        payloadToUpsert,
         {
           onConflict: "rut_proveedor,folio",
           ignoreDuplicates: true,
         }
       );
+
       if (error) {
-        console.warn("Error en upsert compras Supabase:", error.message);
+        console.error("Error en upsert compras Supabase:", error.message, error);
+        throw new Error(`Error al guardar en Supabase (facturas_compras): ${error.message}`);
       }
     }
 
