@@ -12,7 +12,7 @@ try {
 }
 
 const RETRY_BACKOFF_MS = [150, 400];
-const FALLBACK_SUPABASE_URL = "https://yarmvjkhxyovtyoecdpi.supabase.co";
+const FALLBACK_SUPABASE_URL = "https://yarmvkhyxovtyoecdpi.supabase.co";
 
 function sanitizeEnvValue(val?: string | null): string {
   if (!val) return "";
@@ -23,8 +23,12 @@ export function getSanitizedSupabaseUrl(): string {
   const sanitized = sanitizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_URL);
   if (!sanitized) return FALLBACK_SUPABASE_URL;
 
-  // Corrección si falta la letra 'x' o hay un error tipográfico en el subdominio
-  if (sanitized.includes("yarmvjkhyovtyoecdpi")) {
+  // Corrección de errores tipográficos en el subdominio si persisten en Vercel
+  if (
+    sanitized.includes("yarmvjkhyovtyoecdpi") ||
+    sanitized.includes("yarmvjkhxyovtyoecdpi") ||
+    sanitized.includes("yarmvkhyovtyoecdpi")
+  ) {
     return FALLBACK_SUPABASE_URL;
   }
   return sanitized;
@@ -60,11 +64,15 @@ async function safeSupabaseFetch(
 
   // Sanitizar URL ante comillas, espacios o caracteres de escape accidentales
   targetUrl = targetUrl.trim().replace(/['"\r\n]+/g, "");
-  if (targetUrl.includes("yarmvjkhyovtyoecdpi.supabase.co")) {
-    targetUrl = targetUrl.replace(
-      "yarmvjkhyovtyoecdpi.supabase.co",
-      "yarmvjkhxyovtyoecdpi.supabase.co"
-    );
+  if (
+    targetUrl.includes("yarmvjkhyovtyoecdpi.supabase.co") ||
+    targetUrl.includes("yarmvjkhxyovtyoecdpi.supabase.co") ||
+    targetUrl.includes("yarmvkhyovtyoecdpi.supabase.co")
+  ) {
+    targetUrl = targetUrl
+      .replace("yarmvjkhyovtyoecdpi.supabase.co", "yarmvkhyxovtyoecdpi.supabase.co")
+      .replace("yarmvjkhxyovtyoecdpi.supabase.co", "yarmvkhyxovtyoecdpi.supabase.co")
+      .replace("yarmvkhyovtyoecdpi.supabase.co", "yarmvkhyxovtyoecdpi.supabase.co");
   }
 
   const requestInit: RequestInit = {

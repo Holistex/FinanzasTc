@@ -1,6 +1,6 @@
 import { createBrowserClient } from "@supabase/ssr";
 
-const FALLBACK_SUPABASE_URL = "https://yarmvjkhxyovtyoecdpi.supabase.co";
+const FALLBACK_SUPABASE_URL = "https://yarmvkhyxovtyoecdpi.supabase.co";
 
 function sanitizeEnvValue(val?: string | null): string {
   if (!val) return "";
@@ -10,7 +10,11 @@ function sanitizeEnvValue(val?: string | null): string {
 export function getSanitizedBrowserSupabaseUrl(): string {
   const sanitized = sanitizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_URL);
   if (!sanitized) return FALLBACK_SUPABASE_URL;
-  if (sanitized.includes("yarmvjkhyovtyoecdpi")) {
+  if (
+    sanitized.includes("yarmvjkhyovtyoecdpi") ||
+    sanitized.includes("yarmvjkhxyovtyoecdpi") ||
+    sanitized.includes("yarmvkhyovtyoecdpi")
+  ) {
     return FALLBACK_SUPABASE_URL;
   }
   return sanitized;
