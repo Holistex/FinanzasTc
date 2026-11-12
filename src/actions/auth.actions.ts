@@ -53,25 +53,14 @@ export async function loginUserAction(
     try {
       const supabase = await createServerSupabaseClient();
 
-      // 1. Probar en tabla 'usuarios_sistema'
-      let res = await supabase
+      // Consulta exclusivamente a la tabla 'usuarios_sistema'
+      const res = await supabase
         .from("usuarios_sistema")
         .select("*")
         .or(`usuario.ilike.${cleanUsername},correo.ilike.${cleanUsername}`)
         .or(`password_text.eq.${cleanPassword},contrasena.eq.${cleanPassword}`)
         .eq("estado", "Activo")
         .maybeSingle();
-
-      // Si no hay match con password_text/contrasena en usuarios_sistema, probar con 'usuarios'
-      if (res.error || !res.data) {
-        res = await supabase
-          .from("usuarios")
-          .select("*")
-          .or(`usuario.ilike.${cleanUsername},correo.ilike.${cleanUsername}`)
-          .or(`password_text.eq.${cleanPassword},contrasena.eq.${cleanPassword}`)
-          .eq("estado", "Activo")
-          .maybeSingle();
-      }
 
       if (!res.error && res.data) {
         const u = res.data;

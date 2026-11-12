@@ -35,31 +35,28 @@ export async function getPerfilesAction(): Promise<PerfilUsuario[]> {
   if (isServerSupabaseConfigured()) {
     try {
       const supabase = await createServerSupabaseClient();
+      const { data, error } = await supabase
+        .from("perfiles_acceso")
+        .select("*")
+        .order("created_at", { ascending: true });
 
-      for (const tableName of ["perfiles_acceso", "perfiles"] as const) {
-        const { data, error } = await supabase
-          .from(tableName)
-          .select("*")
-          .order("created_at", { ascending: true });
-
-        if (!error && data && data.length > 0) {
-          return (data as Array<Record<string, unknown>>).map((row) => ({
-            id: String(row.id),
-            nombre_perfil: String(row.nombre_perfil || row.tipo_perfil || row.nombre || ""),
-            descripcion:
-              row.descripcion !== null && row.descripcion !== undefined
-                ? String(row.descripcion)
-                : null,
-            permisos: buildNormalizedPermisosMatrix(
-              (row.permisos as Record<string, string>) || {}
-            ),
-            created_at: String(row.created_at || new Date().toISOString()),
-            updated_at: row.updated_at ? String(row.updated_at) : undefined,
-          }));
-        }
+      if (!error && data && data.length > 0) {
+        return (data as Array<Record<string, unknown>>).map((row) => ({
+          id: String(row.id),
+          nombre_perfil: String(row.nombre_perfil || row.tipo_perfil || row.nombre || ""),
+          descripcion:
+            row.descripcion !== null && row.descripcion !== undefined
+              ? String(row.descripcion)
+              : null,
+          permisos: buildNormalizedPermisosMatrix(
+            (row.permisos as Record<string, string>) || {}
+          ),
+          created_at: String(row.created_at || new Date().toISOString()),
+          updated_at: row.updated_at ? String(row.updated_at) : undefined,
+        }));
       }
     } catch {
-      // Si las tablas no existen en Supabase, recurrir al store local
+      // Si la tabla no existe en Supabase, recurrir al store local
     }
   }
 
@@ -94,55 +91,46 @@ export async function savePerfilAction(
       const supabase = await createServerSupabaseClient();
       let lastError: any = null;
 
-      // Intentar primero en perfiles_acceso y luego en perfiles
-      for (const tableName of ["perfiles_acceso", "perfiles"] as const) {
-        if (payload.id) {
-          // Intentar actualizar por id o tipo_perfil
-          const { data, error } = await supabase
-            .from(tableName)
-            .update({
-              tipo_perfil: nombreLimpio,
-              nombre_perfil: nombreLimpio,
-              nombre: nombreLimpio,
-              descripcion: payload.descripcion?.trim() || null,
-              permisos: permisosNormalizados,
-              updated_at: nowIso,
-            })
-            .eq("id", payload.id)
-            .select();
+      if (payload.id) {
+        // Intentar actualizar en perfiles_acceso
+        const { data, error } = await supabase
+          .from("perfiles_acceso")
+          .update({
+            tipo_perfil: nombreLimpio,
+            nombre_perfil: nombreLimpio,
+            nombre: nombreLimpio,
+            descripcion: payload.descripcion?.trim() || null,
+            permisos: permisosNormalizados,
+            updated_at: nowIso,
+          })
+          .eq("id", payload.id)
+          .select();
 
-          if (error) {
-            lastError = error;
-            continue;
-          }
+        if (error) {
+          lastError = error;
+        } else if (data && data.length > 0) {
+          revalidatePath("/configuracion/adm-perfiles");
+          revalidatePath("/configuracion/maestro-usuarios");
+          return mapPerfilRow(data[0] as Record<string, unknown>);
+        }
+      } else {
+        const { data, error } = await supabase
+          .from("perfiles_acceso")
+          .insert({
+            tipo_perfil: nombreLimpio,
+            nombre_perfil: nombreLimpio,
+            nombre: nombreLimpio,
+            descripcion: payload.descripcion?.trim() || null,
+            permisos: permisosNormalizados,
+          })
+          .select();
 
-          if (data && data.length > 0) {
-            revalidatePath("/configuracion/adm-perfiles");
-            revalidatePath("/configuracion/maestro-usuarios");
-            return mapPerfilRow(data[0] as Record<string, unknown>);
-          }
-        } else {
-          const { data, error } = await supabase
-            .from(tableName)
-            .insert({
-              tipo_perfil: nombreLimpio,
-              nombre_perfil: nombreLimpio,
-              nombre: nombreLimpio,
-              descripcion: payload.descripcion?.trim() || null,
-              permisos: permisosNormalizados,
-            })
-            .select();
-
-          if (error) {
-            lastError = error;
-            continue;
-          }
-
-          if (data && data.length > 0) {
-            revalidatePath("/configuracion/adm-perfiles");
-            revalidatePath("/configuracion/maestro-usuarios");
-            return mapPerfilRow(data[0] as Record<string, unknown>);
-          }
+        if (error) {
+          lastError = error;
+        } else if (data && data.length > 0) {
+          revalidatePath("/configuracion/adm-perfiles");
+          revalidatePath("/configuracion/maestro-usuarios");
+          return mapPerfilRow(data[0] as Record<string, unknown>);
         }
       }
 
@@ -210,8 +198,9 @@ export async function deletePerfilAction(id: string): Promise<{ success: boolean
   if (isServerSupabaseConfigured()) {
     try {
       const supabase = await createServerSupabaseClient();
-      for (const tableName of ["perfiles_acceso", "perfiles"] as const) {
-        await supabase.from(tableName).delete().eq("id", id);
+      const { error } = await supabase.from("perfiles_acceso").delete().eq("id", id);
+      if (error) {
+        throw new Error(`Error al eliminar perfil en Supabase (perfiles_acceso): ${error.message}`);
       }
     } catch (err: any) {
       console.error("[deletePerfilAction] Error:", err);
@@ -237,17 +226,10 @@ export async function getUsuariosAction(): Promise<UsuarioSistema[]> {
   if (isServerSupabaseConfigured()) {
     try {
       const supabase = await createServerSupabaseClient();
-      let res = await supabase
+      const res = await supabase
         .from("usuarios_sistema")
         .select("*")
         .order("created_at", { ascending: false });
-
-      if (res.error || !res.data || res.data.length === 0) {
-        res = await supabase
-          .from("usuarios")
-          .select("*")
-          .order("created_at", { ascending: false });
-      }
 
       if (!res.error && res.data && res.data.length > 0) {
         return (res.data as Array<Record<string, unknown>>).map((u) => {
@@ -315,11 +297,28 @@ export async function saveUsuarioAction(
   if (isServerSupabaseConfigured()) {
     try {
       const supabase = await createServerSupabaseClient();
-      for (const tableName of ["usuarios_sistema", "usuarios"] as const) {
-        if (payload.id) {
-          // Intentar actualizar por id
-          let { data, error } = await supabase
-            .from(tableName)
+      if (payload.id) {
+        // Intentar actualizar por id
+        let { data, error } = await supabase
+          .from("usuarios_sistema")
+          .update({
+            nombre,
+            usuario: username,
+            password_text: contrasena,
+            contrasena,
+            correo,
+            perfil_id,
+            perfil: perfilNombre,
+            estado,
+            updated_at: nowIso,
+          })
+          .eq("id", payload.id)
+          .select();
+
+        // Si no coincidió por ID o no devolvió registros, intentar por username original
+        if (!error && (!data || data.length === 0) && usuarioOriginal) {
+          const fallbackRes = await supabase
+            .from("usuarios_sistema")
             .update({
               nombre,
               usuario: username,
@@ -331,69 +330,54 @@ export async function saveUsuarioAction(
               estado,
               updated_at: nowIso,
             })
-            .eq("id", payload.id)
+            .eq("usuario", usuarioOriginal)
             .select();
 
-          // Si no coincidió por ID o no devolvió registros, intentar por username original
-          if (!error && (!data || data.length === 0) && usuarioOriginal) {
-            const fallbackRes = await supabase
-              .from(tableName)
-              .update({
-                nombre,
-                usuario: username,
-                password_text: contrasena,
-                contrasena,
-                correo,
-                perfil_id,
-                perfil: perfilNombre,
-                estado,
-                updated_at: nowIso,
-              })
-              .eq("usuario", usuarioOriginal)
-              .select();
-
-            if (!fallbackRes.error && fallbackRes.data && fallbackRes.data.length > 0) {
-              data = fallbackRes.data;
-              error = null;
-            }
+          if (!fallbackRes.error && fallbackRes.data && fallbackRes.data.length > 0) {
+            data = fallbackRes.data;
+            error = null;
           }
+        }
 
-          if (error) {
-            throw new Error(`Error al actualizar usuario en Supabase (${tableName}): ${error.message}`);
-          }
+        if (error) {
+          throw new Error(`Error al actualizar usuario en Supabase (usuarios_sistema): ${error.message}`);
+        }
 
-          if (data && data.length > 0) {
-            revalidatePath("/configuracion/maestro-usuarios");
-            revalidatePath("/bienvenida");
-            return {
-              ...(data[0] as UsuarioSistema),
-              perfil_nombre: perfilNombre,
-            };
-          }
-        } else {
-          const { data, error } = await supabase
-            .from(tableName)
-            .insert({
-              nombre,
-              usuario: username,
-              password_text: contrasena,
-              contrasena,
-              correo,
-              perfil_id,
-              perfil: perfilNombre,
-              estado,
-            })
-            .select()
-            .single();
+        if (data && data.length > 0) {
+          revalidatePath("/configuracion/maestro-usuarios");
+          revalidatePath("/bienvenida");
+          return {
+            ...(data[0] as UsuarioSistema),
+            perfil_nombre: perfilNombre,
+          };
+        }
+      } else {
+        const { data, error } = await supabase
+          .from("usuarios_sistema")
+          .insert({
+            nombre,
+            usuario: username,
+            password_text: contrasena,
+            contrasena,
+            correo,
+            perfil_id,
+            perfil: perfilNombre,
+            estado,
+          })
+          .select()
+          .single();
 
-          if (!error && data) {
-            revalidatePath("/configuracion/maestro-usuarios");
-            revalidatePath("/bienvenida");
-            return {
-              ...(data as UsuarioSistema),
-              perfil_nombre: perfilNombre,
-            };
-          }
+        if (error) {
+          throw new Error(`Error al crear usuario en Supabase (usuarios_sistema): ${error.message}`);
+        }
+
+        if (data) {
+          revalidatePath("/configuracion/maestro-usuarios");
+          revalidatePath("/bienvenida");
+          return {
+            ...(data as UsuarioSistema),
+            perfil_nombre: perfilNombre,
+          };
         }
       }
     } catch (err: any) {
@@ -455,10 +439,12 @@ export async function saveUsuarioAction(
 export async function deleteUsuarioAction(id: string): Promise<{ success: boolean }> {
   if (isServerSupabaseConfigured()) {
     const supabase = await createServerSupabaseClient();
-    for (const tableName of ["usuarios_sistema", "usuarios"] as const) {
-      await supabase.from(tableName).delete().eq("id", id);
+    const { error } = await supabase.from("usuarios_sistema").delete().eq("id", id);
+    if (error) {
+      throw new Error(`Error al eliminar usuario en Supabase (usuarios_sistema): ${error.message}`);
     }
     revalidatePath("/configuracion/maestro-usuarios");
+    revalidatePath("/bienvenida");
     return { success: true };
   }
 
