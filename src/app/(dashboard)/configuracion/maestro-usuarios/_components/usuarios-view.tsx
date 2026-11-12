@@ -97,6 +97,7 @@ export function UsuariosView({ initialUsuarios, perfiles }: UsuariosViewProps) {
       try {
         const saved = await saveUsuarioAction({
           id: editingUsuario?.id,
+          usuarioOriginal: editingUsuario?.usuario,
           nombre: formNombre,
           usuario: formUsuario,
           contrasena: formContrasena,
@@ -431,6 +432,12 @@ export function UsuariosView({ initialUsuarios, perfiles }: UsuariosViewProps) {
 
             {/* Formulario */}
             <form onSubmit={handleSaveUsuario} className="p-5 space-y-3.5">
+              {editingUsuario?.id && (
+                <input type="hidden" name="id" value={editingUsuario.id} />
+              )}
+              {editingUsuario?.usuario && (
+                <input type="hidden" name="usuarioOriginal" value={editingUsuario.usuario} />
+              )}
               {formError && (
                 <div className="rounded border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-700">
                   {formError}

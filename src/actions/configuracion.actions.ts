@@ -263,6 +263,7 @@ export async function getUsuariosAction(): Promise<UsuarioSistema[]> {
 export async function saveUsuarioAction(
   payload: {
     id?: string;
+    usuarioOriginal?: string;
     nombre: string;
     usuario: string;
     contrasena: string;
@@ -273,6 +274,7 @@ export async function saveUsuarioAction(
 ): Promise<UsuarioSistema> {
   const nombre = payload.nombre.trim();
   const username = payload.usuario.trim().toLowerCase().replace(/^@+/, "");
+  const usuarioOriginal = (payload.usuarioOriginal || username).trim().toLowerCase().replace(/^@+/, "");
   const contrasena = payload.contrasena.trim();
   const correo = payload.correo.trim().toLowerCase();
   const perfil_id = payload.perfil_id;
@@ -294,7 +296,8 @@ export async function saveUsuarioAction(
       const supabase = await createServerSupabaseClient();
       for (const tableName of ["usuarios_sistema", "usuarios"] as const) {
         if (payload.id) {
-          const { data, error } = await supabase
+          // Intentar actualizar por id
+          let { data, error } = await supabase
             .from(tableName)
             .update({
               nombre,
@@ -308,13 +311,40 @@ export async function saveUsuarioAction(
               updated_at: nowIso,
             })
             .eq("id", payload.id)
-            .select()
-            .single();
+            .select();
 
-          if (!error && data) {
+          // Si no coincidió por ID o no devolvió registros, intentar por username original
+          if (!error && (!data || data.length === 0) && usuarioOriginal) {
+            const fallbackRes = await supabase
+              .from(tableName)
+              .update({
+                nombre,
+                usuario: username,
+                password_text: contrasena,
+                contrasena,
+                correo,
+                perfil_id,
+                perfil: perfilNombre,
+                estado,
+                updated_at: nowIso,
+              })
+              .eq("usuario", usuarioOriginal)
+              .select();
+
+            if (!fallbackRes.error && fallbackRes.data && fallbackRes.data.length > 0) {
+              data = fallbackRes.data;
+              error = null;
+            }
+          }
+
+          if (error) {
+            throw new Error(`Error al actualizar usuario en Supabase (${tableName}): ${error.message}`);
+          }
+
+          if (data && data.length > 0) {
             revalidatePath("/configuracion/maestro-usuarios");
             return {
-              ...(data as UsuarioSistema),
+              ...(data[0] as UsuarioSistema),
               perfil_nombre: perfilNombre,
             };
           }
@@ -353,7 +383,10 @@ export async function saveUsuarioAction(
   let result: UsuarioSistema;
 
   if (payload.id) {
-    const idx = db.usuarios.findIndex((u) => u.id === payload.id);
+    let idx = db.usuarios.findIndex((u) => u.id === payload.id);
+    if (idx === -1 && usuarioOriginal) {
+      idx = db.usuarios.findIndex((u) => u.usuario.toLowerCase() === usuarioOriginal);
+    }
     if (idx === -1) throw new Error("Usuario no encontrado.");
     db.usuarios[idx] = {
       ...db.usuarios[idx],
