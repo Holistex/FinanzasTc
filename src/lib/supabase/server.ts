@@ -11,15 +11,37 @@ import { cookies } from "next/headers";
 dns.setDefaultResultOrder("ipv4first");
 
 const RETRY_BACKOFF_MS = [150, 400];
-const DNS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
+const DNS_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutos
 
-// Resolver DNS explícito usando Cloudflare (1.1.1.1) y Google (8.8.8.8)
-// para evitar el resolver local del contenedor en Vercel cuando devuelve ENOTFOUND
-const publicDnsResolver = new dnsPromises.Resolver();
-publicDnsResolver.setServers(["1.1.1.1", "8.8.8.8"]);
+interface DnsJsonAnswer {
+  name?: string;
+  type?: number;
+  TTL?: number;
+  data?: string;
+}
+
+interface DnsJsonResponse {
+  Status?: number;
+  Answer?: DnsJsonAnswer[];
+}
 
 const dnsCache = new Map<string, { address: string; expiresAt: number }>();
 const inFlightDnsLookups = new Map<string, Promise<string>>();
+
+async function queryDoH(url: string): Promise<string | null> {
+  const response = await fetch(url, {
+    headers: { Accept: "application/dns-json" },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    throw new Error(`DoH HTTP ${response.status} from ${url}`);
+  }
+  const data = (await response.json()) as DnsJsonResponse;
+  const recordA = data.Answer?.find(
+    (ans) => ans.type === 1 && typeof ans.data === "string" && net.isIP(ans.data) === 4
+  );
+  return recordA?.data ?? null;
+}
 
 async function resolveHostnameIPv4(hostname: string): Promise<string> {
   if (net.isIP(hostname) !== 0) {
@@ -39,24 +61,33 @@ async function resolveHostnameIPv4(hostname: string): Promise<string> {
 
   const lookupPromise = (async () => {
     try {
-      const addresses = await publicDnsResolver.resolve4(hostname);
-      const address = addresses[0];
-      if (!address) {
-        throw new Error(`No IPv4 A records found for ${hostname}`);
+      const encodedName = encodeURIComponent(hostname);
+      const dohEndpoints = [
+        `https://cloudflare-dns.com/dns-query?name=${encodedName}&type=A`,
+        `https://dns.google/resolve?name=${encodedName}&type=A`,
+      ];
+
+      let address: string | null = null;
+      for (const endpoint of dohEndpoints) {
+        try {
+          address = await queryDoH(endpoint);
+          if (address) break;
+        } catch {
+          // Intentar con el siguiente proveedor DoH
+        }
       }
+
+      if (!address) {
+        // Fallback al resolver del sistema (ej. localhost)
+        const fallback = await dnsPromises.lookup(hostname, { family: 4 });
+        address = fallback.address;
+      }
+
       dnsCache.set(hostname, {
         address,
         expiresAt: Date.now() + DNS_CACHE_TTL_MS,
       });
       return address;
-    } catch {
-      // Fallback al resolver del sistema si fuera un host local (ej. localhost)
-      const fallback = await dnsPromises.lookup(hostname, { family: 4 });
-      dnsCache.set(hostname, {
-        address: fallback.address,
-        expiresAt: Date.now() + DNS_CACHE_TTL_MS,
-      });
-      return fallback.address;
     } finally {
       inFlightDnsLookups.delete(hostname);
     }
@@ -89,7 +120,7 @@ const supabaseAgent = new Agent({
 
 /**
  * Fetch personalizado para Supabase en entorno Node.js / Vercel Serverless:
- * - Usa undici Agent con lookup DNS público (1.1.1.1 / 8.8.8.8) y caché IPv4 de 5 min.
+ * - Usa undici Agent con lookup DNS-over-HTTPS (Cloudflare / Google) y caché IPv4 de 10 min.
  * - Fuerza cache: 'no-store' para evitar respuestas cacheadas obsoletas.
  * - Fuerza Connection: 'close' para evitar reutilizar sockets keep-alive cerrados.
  * - Reintenta hasta 3 veces con backoff escalonado (150ms y 400ms) ante fallos transitorios.
