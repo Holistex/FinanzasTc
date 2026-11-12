@@ -294,7 +294,7 @@ const INITIAL_SEED: LocalDatabaseSchema = {
       contacto_nombre: "Marcelo Ríos - Tesorería",
       contacto_telefono_email: "+56 9 8765 4321 / mrios@altiplano.cl",
       usuario_id: "usr-1",
-      usuario_nombre: "Carlos Vargas",
+      usuario_nombre: "Cedrix Vargas",
       created_at: "2026-10-14T11:30:00.000Z",
     },
     {
@@ -407,7 +407,7 @@ const INITIAL_SEED: LocalDatabaseSchema = {
     },
     {
       id: "usr-1",
-      nombre: "Carlos Vargas",
+      nombre: "Cedrix Vargas",
       usuario: "cvargas",
       contrasena: "Tensacon2026!",
       correo: "cvargas@tensacon.cl",

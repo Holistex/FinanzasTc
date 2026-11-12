@@ -454,7 +454,7 @@ export function UsuariosView({ initialUsuarios, perfiles }: UsuariosViewProps) {
                   required
                   value={formNombre}
                   onChange={(e) => setFormNombre(e.target.value)}
-                  placeholder="ej. Carlos Vargas Matte"
+                  placeholder="ej. Cedrix Vargas"
                   className="w-full rounded border border-slate-300 bg-[#F8FAFC] px-2.5 py-1.5 text-xs text-[#0F172A] focus:bg-white focus:border-[#E05A10] focus:outline-none"
                 />
               </div>

@@ -343,6 +343,7 @@ export async function saveUsuarioAction(
 
           if (data && data.length > 0) {
             revalidatePath("/configuracion/maestro-usuarios");
+            revalidatePath("/bienvenida");
             return {
               ...(data[0] as UsuarioSistema),
               perfil_nombre: perfilNombre,
@@ -366,6 +367,7 @@ export async function saveUsuarioAction(
 
           if (!error && data) {
             revalidatePath("/configuracion/maestro-usuarios");
+            revalidatePath("/bienvenida");
             return {
               ...(data as UsuarioSistema),
               perfil_nombre: perfilNombre,
@@ -422,6 +424,7 @@ export async function saveUsuarioAction(
 
   writeLocalDb(db);
   revalidatePath("/configuracion/maestro-usuarios");
+  revalidatePath("/bienvenida");
   return result;
 }
 
