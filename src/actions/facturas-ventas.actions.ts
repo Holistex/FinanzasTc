@@ -20,7 +20,7 @@ import {
   parseAndValidateSiiCsv,
 } from "@/services/sii-csv-parser";
 import { normalizeRut } from "@/lib/utils";
-import { getServerUserSession } from "@/lib/auth/session";
+import { assertIsAdmin, getServerUserSession } from "@/lib/auth/session";
 import {
   queryFacturasVentasServer,
   resolveDeudaCliente,
@@ -359,6 +359,11 @@ export async function injectSiiCsvBatchAction(csvText: string): Promise<{
   omittedCount: number;
   creditNotesApplied: number;
 }> {
+  const auth = await assertIsAdmin();
+  if (auth.error) {
+    throw new Error(auth.error || "Acceso denegado: Solo el perfil ADMINISTRADOR puede importar archivos CSV.");
+  }
+
   const summary = await previewSiiCsvAction(csvText);
 
   // 1. Consulta previa y exhaustiva de llaves existentes (RUT + Folio) en la BD

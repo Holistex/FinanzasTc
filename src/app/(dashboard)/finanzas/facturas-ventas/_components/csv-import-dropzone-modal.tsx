@@ -30,11 +30,16 @@ import {
 
 interface CsvImportDropzoneModalProps {
   onImportSuccess: () => void;
+  isAdmin?: boolean;
 }
 
 export function CsvImportDropzoneModal({
   onImportSuccess,
+  isAdmin = true,
 }: CsvImportDropzoneModalProps) {
+  if (!isAdmin) {
+    return null;
+  }
   const [isOpen, setIsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);

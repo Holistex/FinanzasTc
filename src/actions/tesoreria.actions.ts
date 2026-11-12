@@ -8,6 +8,7 @@ import {
   isServerSupabaseConfigured,
 } from "@/lib/supabase/server";
 import { readLocalDb, writeLocalDb } from "@/lib/supabase/local-fallback-db";
+import { assertIsAdmin } from "@/lib/auth/session";
 import {
   BancoCartola,
   CartolaBancaria,
@@ -667,6 +668,14 @@ export async function asignarTipoMovimientoMasivoAction(
 export async function importarCartolaBancariaExcelAction(
   formData: FormData
 ): Promise<ImportacionCartolaResult> {
+  const auth = await assertIsAdmin();
+  if (auth.error) {
+    return {
+      success: false,
+      error: auth.error,
+    };
+  }
+
   try {
     const bancoRaw = formData.get("banco");
     const file = formData.get("file");

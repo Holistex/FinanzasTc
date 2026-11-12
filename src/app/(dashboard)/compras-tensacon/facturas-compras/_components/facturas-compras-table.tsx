@@ -562,7 +562,7 @@ export function FacturasComprasTable({
         </div>
 
         {/* Acciones del encabezado: Exclusivas para ADMINISTRADOR */}
-        {userSession?.esAdmin && (
+        {(userSession?.esAdmin || userSession?.perfil?.toUpperCase() === "ADMINISTRADOR") && (
           <div className="flex items-center gap-2 pb-1 shrink-0 ml-2">
             <button
               onClick={() => setIsImportModalOpen(true)}

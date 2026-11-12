@@ -317,13 +317,18 @@ export function FacturasVentasTable({
         </div>
 
         <div className="flex items-center gap-2">
-          <ImportarVencimientosModal
-            onSuccess={() => fetchServerPage({ page: 1 })}
-            isAdmin={isAdmin}
-          />
-          <CsvImportDropzoneModal
-            onImportSuccess={() => fetchServerPage({ page: 1 })}
-          />
+          {isAdmin && (
+            <>
+              <ImportarVencimientosModal
+                onSuccess={() => fetchServerPage({ page: 1 })}
+                isAdmin={isAdmin}
+              />
+              <CsvImportDropzoneModal
+                onImportSuccess={() => fetchServerPage({ page: 1 })}
+                isAdmin={isAdmin}
+              />
+            </>
+          )}
         </div>
       </div>
 

@@ -42,12 +42,14 @@ import { cn, formatCLP, formatDateCL } from "@/lib/utils";
 
 interface CartolasBancariasClientProps {
   initialData: CartolasTesoreriaResponse;
+  isAdmin?: boolean;
 }
 
 type ActiveTab = "PENDIENTES" | "CLASIFICADOS";
 
 export function CartolasBancariasClient({
   initialData,
+  isAdmin = false,
 }: CartolasBancariasClientProps) {
   const [lineas, setLineas] = useState<CartolaLinea[]>(initialData.lineas);
   const [cartolas, setCartolas] = useState<CartolaBancaria[]>(initialData.cartolas);
@@ -458,14 +460,16 @@ export function CartolasBancariasClient({
             Vaciar Datos
           </button>
 
-          <button
-            type="button"
-            onClick={openImportModal}
-            className="bg-[#E05A10] hover:bg-[#c84e0c] text-white font-semibold text-xs px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-colors"
-          >
-            <FileSpreadsheet className="h-4 w-4" />
-            Importar Saldos Bancarios
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={openImportModal}
+              className="bg-[#E05A10] hover:bg-[#c84e0c] text-white font-semibold text-xs px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-colors"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Importar Saldos Bancarios
+            </button>
+          )}
         </div>
       </div>
 
