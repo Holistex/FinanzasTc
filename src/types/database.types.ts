@@ -86,6 +86,9 @@ export interface FacturaCompra {
   monto_saldo?: number; // Saldo deudor pendiente tras posibles neteos o cheques parciales
   deuda_proveedor?: number | null; // Para facturas CONTADO o COMPRA_TC = 0
   estado: EstadoFacturaCompra;
+  modalidad_pago?: string | null;
+  modalidad?: string | null;
+  factoring_id?: string | null;
   factoring_proveedor_id?: string | null;
   empresa_factoring_proveedor?: EmpresaFactoringProveedor | null;
   confirming_id?: string | null;
@@ -101,6 +104,7 @@ export interface FacturaCompra {
   cheques?: ChequeCompra[];
   total_cheques_emitidos?: number;
   saldo_restante_nc?: number; // Para NC (tipo 61): saldo disponible para netear
+  saldo_pendiente?: number | null;
   created_at: string;
   updated_at?: string;
 }

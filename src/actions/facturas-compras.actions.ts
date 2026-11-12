@@ -83,36 +83,62 @@ export async function getFacturasComprasAction(
       .order("folio", { ascending: false });
 
     if (!error && data) {
-      rawCompras = (data as unknown as Array<Record<string, unknown>>).map((r) => ({
-        id: String(r.id),
-        nro: Number(r.nro || 0),
-        tipo_doc: Number(r.tipo_doc || 33),
-        tipo_compra: r.tipo_compra ? String(r.tipo_compra) : null,
-        rut_proveedor: String(r.rut_proveedor || ""),
-        razon_social: String(r.razon_social || ""),
-        folio: Number(r.folio || 0),
-        fecha_docto: String(r.fecha_docto || ""),
-        fecha_vencimiento: String(r.fecha_vencimiento || ""),
-        fecha_recepcion: r.fecha_recepcion ? String(r.fecha_recepcion) : null,
-        fecha_acuse_recibo: r.fecha_acuse_recibo ? String(r.fecha_acuse_recibo) : null,
-        condicion_pago: (r.condicion_pago as CondicionPago) || (r.deuda_proveedor === 0 ? "CONTADO" : "CREDITO"),
-        monto_total: Number(r.monto_total || 0),
-        monto_saldo: r.condicion_pago === "CONTADO" || r.estado === "COMPRA_TC" ? 0 : r.monto_saldo !== undefined && r.monto_saldo !== null ? Number(r.monto_saldo) : Number(r.monto_total || 0),
-        deuda_proveedor: r.condicion_pago === "CONTADO" || r.estado === "COMPRA_TC" ? 0 : Number(r.deuda_proveedor ?? r.monto_saldo ?? r.monto_total),
-        estado: (r.estado as EstadoFacturaCompra) || "DEUDA_PROVEEDOR",
-        factoring_proveedor_id: r.factoring_proveedor_id ? String(r.factoring_proveedor_id) : null,
-        empresa_factoring_proveedor: (r.empresa_factoring_proveedores as EmpresaFactoringProveedor) || null,
-        confirming_id: r.confirming_id ? String(r.confirming_id) : null,
-        empresa_confirming: (r.empresa_confirming as EmpresaConfirming) || null,
-        numero_cheque: r.numero_cheque ? String(r.numero_cheque) : null,
-        fecha_vencimiento_cheque: r.fecha_vencimiento_cheque ? String(r.fecha_vencimiento_cheque) : null,
-        banco_emisor: r.banco_emisor ? String(r.banco_emisor) : null,
-        colaborador_id: r.colaborador_id ? String(r.colaborador_id) : null,
-        on_proyecto: r.on_proyecto ? String(r.on_proyecto) : null,
-        observacion_tc: r.observacion_tc ? String(r.observacion_tc) : null,
-        created_at: String(r.created_at || ""),
-        updated_at: r.updated_at ? String(r.updated_at) : undefined,
-      }));
+      rawCompras = (data as unknown as Array<Record<string, unknown>>).map((r) => {
+        const rawEstado = String(r.estado || "").toUpperCase();
+        const rawModPago = String(r.modalidad_pago || "").toUpperCase();
+        const rawMod = String(r.modalidad || "").toUpperCase();
+
+        let estadoFinal: EstadoFacturaCompra = (r.estado as EstadoFacturaCompra) || "DEUDA_PROVEEDOR";
+        if (rawEstado === "FACTORING" || rawModPago === "FACTORING" || rawMod === "FACTORING") {
+          estadoFinal = "FACTORING";
+        } else if (rawEstado === "CONFIRMING" || rawModPago === "CONFIRMING" || rawMod === "CONFIRMING") {
+          estadoFinal = "CONFIRMING";
+        } else if (rawEstado === "CHEQUE" || rawModPago === "CHEQUE" || rawMod === "CHEQUE") {
+          estadoFinal = "CHEQUE";
+        } else if (rawEstado === "COMPRA_TC" || rawModPago === "COMPRA_TC" || rawMod === "COMPRA_TC") {
+          estadoFinal = "COMPRA_TC";
+        } else if (rawEstado === "NETEO_NC" || rawModPago === "NETEO_NC" || rawMod === "NETEO_NC") {
+          estadoFinal = "NETEO_NC";
+        } else if (rawEstado === "PAGADA" || rawModPago === "PAGADA" || rawMod === "PAGADA") {
+          estadoFinal = "PAGADA";
+        }
+
+        const factId = r.factoring_id ? String(r.factoring_id) : r.factoring_proveedor_id ? String(r.factoring_proveedor_id) : null;
+
+        return {
+          id: String(r.id),
+          nro: Number(r.nro || 0),
+          tipo_doc: Number(r.tipo_doc || 33),
+          tipo_compra: r.tipo_compra ? String(r.tipo_compra) : null,
+          rut_proveedor: String(r.rut_proveedor || ""),
+          razon_social: String(r.razon_social || ""),
+          folio: Number(r.folio || 0),
+          fecha_docto: String(r.fecha_docto || ""),
+          fecha_vencimiento: String(r.fecha_vencimiento || ""),
+          fecha_recepcion: r.fecha_recepcion ? String(r.fecha_recepcion) : null,
+          fecha_acuse_recibo: r.fecha_acuse_recibo ? String(r.fecha_acuse_recibo) : null,
+          condicion_pago: (r.condicion_pago as CondicionPago) || (r.deuda_proveedor === 0 ? "CONTADO" : "CREDITO"),
+          monto_total: Number(r.monto_total || 0),
+          monto_saldo: r.condicion_pago === "CONTADO" || estadoFinal === "COMPRA_TC" ? 0 : r.monto_saldo !== undefined && r.monto_saldo !== null ? Number(r.monto_saldo) : Number(r.monto_total || 0),
+          deuda_proveedor: r.condicion_pago === "CONTADO" || estadoFinal === "COMPRA_TC" ? 0 : Number(r.deuda_proveedor ?? r.monto_saldo ?? r.monto_total),
+          estado: estadoFinal,
+          modalidad_pago: (r.modalidad_pago as string) || (r.modalidad as string) || estadoFinal,
+          modalidad: (r.modalidad as string) || (r.modalidad_pago as string) || estadoFinal,
+          factoring_id: factId,
+          factoring_proveedor_id: factId,
+          empresa_factoring_proveedor: (r.empresa_factoring_proveedores as EmpresaFactoringProveedor) || null,
+          confirming_id: r.confirming_id ? String(r.confirming_id) : null,
+          empresa_confirming: (r.empresa_confirming as EmpresaConfirming) || null,
+          numero_cheque: r.numero_cheque ? String(r.numero_cheque) : null,
+          fecha_vencimiento_cheque: r.fecha_vencimiento_cheque ? String(r.fecha_vencimiento_cheque) : null,
+          banco_emisor: r.banco_emisor ? String(r.banco_emisor) : null,
+          colaborador_id: r.colaborador_id ? String(r.colaborador_id) : null,
+          on_proyecto: r.on_proyecto ? String(r.on_proyecto) : null,
+          observacion_tc: r.observacion_tc ? String(r.observacion_tc) : null,
+          created_at: String(r.created_at || ""),
+          updated_at: r.updated_at ? String(r.updated_at) : undefined,
+        };
+      });
     }
 
     // 2. Consultar neteos de compras
@@ -555,6 +581,7 @@ export async function cambiarEstadoCompraAction(input: {
   id: string;
   estado: EstadoFacturaCompra;
   factoringProveedorId?: string | null;
+  factoringId?: string | null;
   confirmingId?: string | null;
   nuevaFechaVencimiento?: string | null;
   numeroCheque?: string | null;
@@ -580,7 +607,14 @@ export async function cambiarEstadoCompraAction(input: {
     const existingLocal = db.facturas_compras.find((x) => x.id === input.id);
 
     const estadoUpper = input.estado.toUpperCase();
-    const payload: Partial<FacturaCompra> & { modalidad_pago?: string; modalidad?: string } = {
+    const factoringIdSeleccionado = input.factoringId || input.factoringProveedorId || null;
+    const confirmingIdSeleccionado = input.confirmingId || null;
+
+    const payload: Partial<FacturaCompra> & {
+      modalidad_pago?: string;
+      modalidad?: string;
+      factoring_id?: string | null;
+    } = {
       estado: input.estado,
       modalidad_pago: estadoUpper,
       modalidad: estadoUpper,
@@ -588,6 +622,7 @@ export async function cambiarEstadoCompraAction(input: {
     };
 
     if (input.estado === "DEUDA_PROVEEDOR") {
+      payload.factoring_id = null;
       payload.factoring_proveedor_id = null;
       payload.confirming_id = null;
       payload.numero_cheque = null;
@@ -601,7 +636,8 @@ export async function cambiarEstadoCompraAction(input: {
         payload.deuda_proveedor = existingLocal.monto_total;
       }
     } else if (input.estado === "FACTORING") {
-      payload.factoring_proveedor_id = input.factoringProveedorId || null;
+      payload.factoring_id = factoringIdSeleccionado;
+      payload.factoring_proveedor_id = factoringIdSeleccionado;
       payload.confirming_id = null;
       payload.numero_cheque = null;
       payload.fecha_vencimiento_cheque = null;
@@ -610,7 +646,8 @@ export async function cambiarEstadoCompraAction(input: {
       payload.on_proyecto = null;
       payload.observacion_tc = null;
     } else if (input.estado === "CONFIRMING") {
-      payload.confirming_id = input.confirmingId || null;
+      payload.confirming_id = confirmingIdSeleccionado;
+      payload.factoring_id = null;
       payload.factoring_proveedor_id = null;
       payload.numero_cheque = null;
       payload.fecha_vencimiento_cheque = null;
@@ -625,12 +662,14 @@ export async function cambiarEstadoCompraAction(input: {
       payload.numero_cheque = input.numeroCheque || null;
       payload.fecha_vencimiento_cheque = input.fechaVencimientoCheque || null;
       payload.banco_emisor = input.bancoEmisor || null;
+      payload.factoring_id = null;
       payload.factoring_proveedor_id = null;
       payload.confirming_id = null;
       payload.colaborador_id = null;
       payload.on_proyecto = null;
       payload.observacion_tc = null;
     } else if (input.estado === "NETEO_NC") {
+      payload.factoring_id = null;
       payload.factoring_proveedor_id = null;
       payload.confirming_id = null;
       payload.numero_cheque = null;
@@ -640,6 +679,7 @@ export async function cambiarEstadoCompraAction(input: {
       payload.on_proyecto = null;
       payload.observacion_tc = null;
     } else if (input.estado === "COMPRA_TC") {
+      payload.factoring_id = null;
       payload.factoring_proveedor_id = null;
       payload.confirming_id = null;
       payload.numero_cheque = null;
@@ -666,39 +706,123 @@ export async function cambiarEstadoCompraAction(input: {
         supaFacturaRow = existingSupa as Record<string, unknown>;
       }
 
-      const { error } = await supabase
-        .from("facturas_compras")
-        .update(payload)
-        .eq("id", input.id);
+      if (input.estado === "FACTORING") {
+        // Actualización estricta de FACTORING en Supabase
+        const factoringObj: Record<string, unknown> = {
+          estado: "FACTORING",
+          modalidad: "FACTORING",
+          modalidad_pago: "FACTORING",
+          factoring_id: factoringIdSeleccionado,
+          factoring_proveedor_id: factoringIdSeleccionado,
+          updated_at: new Date().toISOString(),
+        };
 
-      if (error) {
-        // Fallback si las columnas colaborador_id/on_proyecto/observacion_tc o modalidad aún no existen en Supabase
-        const safePayload = { ...payload };
-        delete safePayload.modalidad;
-        delete safePayload.colaborador_id;
-        delete safePayload.on_proyecto;
-        delete safePayload.observacion_tc;
-        delete safePayload.deuda_proveedor;
-        let { error: err2 } = await supabase
+        let { error: errFact } = await supabase
           .from("facturas_compras")
-          .update(safePayload)
+          .update(factoringObj)
           .eq("id", input.id);
 
-        if (err2) {
-          delete safePayload.modalidad_pago;
-          const { error: err3 } = await supabase
+        if (errFact) {
+          // Si factoring_id no existe como columna
+          delete factoringObj.factoring_id;
+          let { error: errFact2 } = await supabase
+            .from("facturas_compras")
+            .update(factoringObj)
+            .eq("id", input.id);
+
+          if (errFact2) {
+            // Si factoring_proveedor_id no existe pero factoring_id sí
+            delete factoringObj.factoring_proveedor_id;
+            factoringObj.factoring_id = factoringIdSeleccionado;
+            let { error: errFact3 } = await supabase
+              .from("facturas_compras")
+              .update(factoringObj)
+              .eq("id", input.id);
+
+            if (errFact3) {
+              // Si modalidad o factoring_id fallan
+              delete factoringObj.modalidad;
+              delete factoringObj.factoring_id;
+              const { error: errFactFinal } = await supabase
+                .from("facturas_compras")
+                .update(factoringObj)
+                .eq("id", input.id);
+
+              if (errFactFinal) throw new Error(errFactFinal.message);
+            }
+          }
+        }
+      } else if (input.estado === "CONFIRMING") {
+        // Actualización estricta de CONFIRMING en Supabase
+        const confirmingObj: Record<string, unknown> = {
+          estado: "CONFIRMING",
+          modalidad: "CONFIRMING",
+          modalidad_pago: "CONFIRMING",
+          confirming_id: confirmingIdSeleccionado,
+          updated_at: new Date().toISOString(),
+        };
+        if (input.nuevaFechaVencimiento) {
+          confirmingObj.fecha_vencimiento = input.nuevaFechaVencimiento;
+        }
+
+        let { error: errConf } = await supabase
+          .from("facturas_compras")
+          .update(confirmingObj)
+          .eq("id", input.id);
+
+        if (errConf) {
+          delete confirmingObj.modalidad;
+          let { error: errConf2 } = await supabase
+            .from("facturas_compras")
+            .update(confirmingObj)
+            .eq("id", input.id);
+
+          if (errConf2) {
+            delete confirmingObj.modalidad_pago;
+            const { error: errConfFinal } = await supabase
+              .from("facturas_compras")
+              .update(confirmingObj)
+              .eq("id", input.id);
+
+            if (errConfFinal) throw new Error(errConfFinal.message);
+          }
+        }
+      } else {
+        const { error } = await supabase
+          .from("facturas_compras")
+          .update(payload)
+          .eq("id", input.id);
+
+        if (error) {
+          // Fallback si las columnas colaborador_id/on_proyecto/observacion_tc o modalidad aún no existen en Supabase
+          const safePayload = { ...payload };
+          delete safePayload.modalidad;
+          delete safePayload.factoring_id;
+          delete safePayload.colaborador_id;
+          delete safePayload.on_proyecto;
+          delete safePayload.observacion_tc;
+          delete safePayload.deuda_proveedor;
+          let { error: err2 } = await supabase
             .from("facturas_compras")
             .update(safePayload)
             .eq("id", input.id);
-          err2 = err3;
-        }
 
-        if (err2 && input.estado === "COMPRA_TC") {
-          // Si la restricción CHECK de estado aún no permite COMPRA_TC en Supabase, asegurar monto_saldo = 0
-          await supabase
-            .from("facturas_compras")
-            .update({ monto_saldo: 0, updated_at: new Date().toISOString() })
-            .eq("id", input.id);
+          if (err2) {
+            delete safePayload.modalidad_pago;
+            const { error: err3 } = await supabase
+              .from("facturas_compras")
+              .update(safePayload)
+              .eq("id", input.id);
+            err2 = err3;
+          }
+
+          if (err2 && input.estado === "COMPRA_TC") {
+            // Si la restricción CHECK de estado aún no permite COMPRA_TC en Supabase, asegurar monto_saldo = 0
+            await supabase
+              .from("facturas_compras")
+              .update({ monto_saldo: 0, updated_at: new Date().toISOString() })
+              .eq("id", input.id);
+          }
         }
       }
     }
@@ -737,6 +861,12 @@ export async function cambiarEstadoCompraAction(input: {
       db.facturas_compras[idx] = {
         ...db.facturas_compras[idx],
         ...payload,
+        estado: input.estado,
+        modalidad_pago: estadoUpper,
+        modalidad: estadoUpper,
+        factoring_id: factoringIdSeleccionado,
+        factoring_proveedor_id: factoringIdSeleccionado,
+        confirming_id: confirmingIdSeleccionado,
       };
 
       const fac = db.facturas_compras[idx];

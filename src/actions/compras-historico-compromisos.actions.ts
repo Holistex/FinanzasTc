@@ -500,18 +500,27 @@ export async function getCompromisosComprasAction(params?: {
         const { data: supaFacs } = await supabase
           .from("facturas_compras")
           .select("*")
-          .or("estado.in.(FACTORING,CONFIRMING,CHEQUE),modalidad_pago.in.(FACTORING,CONFIRMING,CHEQUE)");
+          .neq("tipo_doc", 61);
 
         if (supaFacs && supaFacs.length > 0) {
           for (const sf of supaFacs) {
             const fol = Number(sf.folio || 0);
-            if (!rawCompromisos.some((rc) => rc.referencia_doc.includes(String(fol)))) {
-              const est = String(sf.estado || "").toUpperCase();
-              const modPago = String(sf.modalidad_pago || "").toUpperCase();
+            const mods = [
+              sf.estado,
+              (sf as unknown as Record<string, unknown>).modalidad_pago,
+              (sf as unknown as Record<string, unknown>).modalidad,
+            ].map((v) => (v ? String(v).toUpperCase() : ""));
+
+            const esCompromiso =
+              mods.includes("FACTORING") ||
+              mods.includes("CONFIRMING") ||
+              mods.includes("CHEQUE");
+
+            if (esCompromiso && !rawCompromisos.some((rc) => rc.referencia_doc.includes(String(fol)))) {
               const mod: ModalidadCompromiso =
-                est === "CHEQUE" || modPago === "CHEQUE"
+                mods.includes("CHEQUE")
                   ? "CHEQUE"
-                  : est === "CONFIRMING" || modPago === "CONFIRMING"
+                  : mods.includes("CONFIRMING")
                   ? "CONFIRMING"
                   : "FACTORING";
 

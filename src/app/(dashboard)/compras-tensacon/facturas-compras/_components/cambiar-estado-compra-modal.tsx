@@ -476,6 +476,7 @@ export function CambiarEstadoCompraModal({
           id: factura.id,
           estado,
           factoringProveedorId: estado === "FACTORING" ? factoringProveedorId : null,
+          factoringId: estado === "FACTORING" ? factoringProveedorId : null,
           confirmingId: estado === "CONFIRMING" ? confirmingId : null,
           nuevaFechaVencimiento: estado === "CONFIRMING" ? nuevaFechaVencimiento : null,
           colaboradorId: estado === "COMPRA_TC" ? colaboradorId : null,
