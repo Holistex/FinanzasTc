@@ -81,34 +81,34 @@ export async function upsertMandanteAction(input: {
   }
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const payload = {
-        ...(input.id ? { id: input.id } : {}),
-        rut_mandante: cleanRut,
-        razon_social: input.razon_social.trim(),
-        contacto_nombre: input.contacto_nombre?.trim() || null,
-        contacto_email: input.contacto_email?.trim() || null,
-        contacto_telefono: input.contacto_telefono?.trim() || null,
-      };
+    const supabase = await createServerSupabaseClient();
+    const payload = {
+      ...(input.id ? { id: input.id } : {}),
+      rut_mandante: cleanRut,
+      razon_social: input.razon_social.trim(),
+      contacto_nombre: input.contacto_nombre?.trim() || null,
+      contacto_email: input.contacto_email?.trim() || null,
+      contacto_telefono: input.contacto_telefono?.trim() || null,
+    };
 
-      const { data, error } = await supabase
-        .from("mantenedor_mandantes")
-        .upsert(payload)
-        .select()
-        .single();
+    const { data, error } = await supabase
+      .from("mantenedor_mandantes")
+      .upsert(payload)
+      .select()
+      .single();
 
-      if (!error && data) {
-        revalidatePath("/configuracion/mandantes-companias");
-        revalidatePath("/gestion-garantias/boletas-garantias");
-        revalidatePath("/gestion-garantias/polizas-garantias");
-        return {
-          ...(data as any),
-          rut: data.rut_mandante,
-        } as MantenedorMandante;
-      }
-    } catch {
-      // Fallback a local DB
+    if (error) {
+      throw new Error(`Error al guardar Mandante en Supabase: ${error.message}`);
+    }
+
+    if (data) {
+      revalidatePath("/configuracion/mandantes-companias");
+      revalidatePath("/gestion-garantias/boletas-garantias");
+      revalidatePath("/gestion-garantias/polizas-garantias");
+      return {
+        ...(data as any),
+        rut: data.rut_mandante,
+      } as MantenedorMandante;
     }
   }
 
@@ -158,22 +158,20 @@ export async function deleteMandanteAction(id: string): Promise<void> {
   if (!id) throw new Error("ID de Mandante no proporcionado.");
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { error } = await supabase
-        .from("mantenedor_mandantes")
-        .delete()
-        .eq("id", id);
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase
+      .from("mantenedor_mandantes")
+      .delete()
+      .eq("id", id);
 
-      if (!error) {
-        revalidatePath("/configuracion/mandantes-companias");
-        revalidatePath("/gestion-garantias/boletas-garantias");
-        revalidatePath("/gestion-garantias/polizas-garantias");
-        return;
-      }
-    } catch {
-      // Fallback a local DB
+    if (error) {
+      throw new Error(`Error al eliminar Mandante en Supabase: ${error.message}`);
     }
+
+    revalidatePath("/configuracion/mandantes-companias");
+    revalidatePath("/gestion-garantias/boletas-garantias");
+    revalidatePath("/gestion-garantias/polizas-garantias");
+    return;
   }
 
   const db = readLocalDb();
@@ -256,34 +254,34 @@ export async function upsertCompaniaAction(input: {
   }
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const payload = {
-        ...(input.id ? { id: input.id } : {}),
-        rut_compania: cleanRut,
-        razon_social: input.razon_social.trim(),
-        contacto_nombre: input.contacto_nombre?.trim() || null,
-        contacto_email: input.contacto_email?.trim() || null,
-        contacto_telefono: input.contacto_telefono?.trim() || null,
-      };
+    const supabase = await createServerSupabaseClient();
+    const payload = {
+      ...(input.id ? { id: input.id } : {}),
+      rut_compania: cleanRut,
+      razon_social: input.razon_social.trim(),
+      contacto_nombre: input.contacto_nombre?.trim() || null,
+      contacto_email: input.contacto_email?.trim() || null,
+      contacto_telefono: input.contacto_telefono?.trim() || null,
+    };
 
-      const { data, error } = await supabase
-        .from("mantenedor_companias")
-        .upsert(payload)
-        .select()
-        .single();
+    const { data, error } = await supabase
+      .from("mantenedor_companias")
+      .upsert(payload)
+      .select()
+      .single();
 
-      if (!error && data) {
-        revalidatePath("/configuracion/mandantes-companias");
-        revalidatePath("/gestion-garantias/boletas-garantias");
-        revalidatePath("/gestion-garantias/polizas-garantias");
-        return {
-          ...(data as any),
-          rut: data.rut_compania,
-        } as MantenedorCompania;
-      }
-    } catch {
-      // Fallback a local DB
+    if (error) {
+      throw new Error(`Error al guardar Compañía en Supabase: ${error.message}`);
+    }
+
+    if (data) {
+      revalidatePath("/configuracion/mandantes-companias");
+      revalidatePath("/gestion-garantias/boletas-garantias");
+      revalidatePath("/gestion-garantias/polizas-garantias");
+      return {
+        ...(data as any),
+        rut: data.rut_compania,
+      } as MantenedorCompania;
     }
   }
 
@@ -333,22 +331,20 @@ export async function deleteCompaniaAction(id: string): Promise<void> {
   if (!id) throw new Error("ID de Compañía no proporcionado.");
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { error } = await supabase
-        .from("mantenedor_companias")
-        .delete()
-        .eq("id", id);
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase
+      .from("mantenedor_companias")
+      .delete()
+      .eq("id", id);
 
-      if (!error) {
-        revalidatePath("/configuracion/mandantes-companias");
-        revalidatePath("/gestion-garantias/boletas-garantias");
-        revalidatePath("/gestion-garantias/polizas-garantias");
-        return;
-      }
-    } catch {
-      // Fallback a local DB
+    if (error) {
+      throw new Error(`Error al eliminar Compañía en Supabase: ${error.message}`);
     }
+
+    revalidatePath("/configuracion/mandantes-companias");
+    revalidatePath("/gestion-garantias/boletas-garantias");
+    revalidatePath("/gestion-garantias/polizas-garantias");
+    return;
   }
 
   const db = readLocalDb();

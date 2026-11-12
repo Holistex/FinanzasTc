@@ -369,7 +369,11 @@ export async function upsertEmpresaConfirmingAction(input: {
       .select()
       .single();
 
-    if (!error && data) {
+    if (error) {
+      throw new Error(`Error guardando empresa_confirming: ${error.message}`);
+    }
+
+    if (data) {
       revalidatePath("/mantenedores");
       revalidatePath("/compras-tensacon/facturas-compras");
       return data as EmpresaConfirming;
@@ -424,11 +428,13 @@ export async function deleteEmpresaConfirmingAction(
       .delete()
       .eq("id", id);
 
-    if (!error) {
-      revalidatePath("/mantenedores");
-      revalidatePath("/compras-tensacon/facturas-compras");
-      return { success: true };
+    if (error) {
+      throw new Error(`Error eliminando empresa confirming: ${error.message}`);
     }
+
+    revalidatePath("/mantenedores");
+    revalidatePath("/compras-tensacon/facturas-compras");
+    return { success: true };
   }
 
   const db = readLocalDb();

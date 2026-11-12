@@ -447,7 +447,7 @@ export async function injectSiiCsvBatchAction(csvText: string): Promise<{
     });
 
     if (error) {
-      console.warn("Error en upsert Supabase facturas_ventas:", error.message);
+      throw new Error(`Error al importar facturas de venta en Supabase: ${error.message}`);
     }
 
     for (const neteo of summary.neteoNotasCredito) {
@@ -464,6 +464,8 @@ export async function injectSiiCsvBatchAction(csvText: string): Promise<{
     }
 
     revalidatePath("/finanzas/facturas-ventas");
+    revalidatePath("/ventas-tensacon/facturas-ventas");
+    revalidatePath("/ventas-tensacon/gestion-cobranza");
     return {
       insertedCount: finalNewRows.length,
       omittedCount: totalOmitted,

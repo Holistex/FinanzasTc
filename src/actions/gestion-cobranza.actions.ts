@@ -561,14 +561,7 @@ export async function registrarGestionCobranzaLoteAction(
         .select();
 
       if (error) {
-        console.warn(
-          "Supabase batch insert gestiones_cobranza falló, guardando en local:",
-          error.message
-        );
-        const db = readLocalDb();
-        if (!db.gestiones_cobranza) db.gestiones_cobranza = [];
-        db.gestiones_cobranza.unshift(...newGestiones);
-        writeLocalDb(db);
+        throw new Error(`Error al registrar gestiones de cobranza en Supabase: ${error.message}`);
       } else if (data) {
         const db = readLocalDb();
         if (!db.gestiones_cobranza) db.gestiones_cobranza = [];

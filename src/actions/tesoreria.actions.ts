@@ -278,34 +278,34 @@ export async function upsertTipoPagoAction(input: {
   };
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { data, error } = await supabase
-        .from("mantenedor_tipos_pago")
-        .upsert(
-          {
-            ...(input.id && !input.id.startsWith("mtp-") ? { id: input.id } : {}),
-            nombre: cleanNombre,
-            descripcion: cleanDesc,
-            activo,
-          },
-          { onConflict: "nombre" }
-        )
-        .select("*")
-        .single();
+    const supabase = await createServerSupabaseClient();
+    const { data, error } = await supabase
+      .from("mantenedor_tipos_pago")
+      .upsert(
+        {
+          ...(input.id && !input.id.startsWith("mtp-") ? { id: input.id } : {}),
+          nombre: cleanNombre,
+          descripcion: cleanDesc,
+          activo,
+        },
+        { onConflict: "nombre" }
+      )
+      .select("*")
+      .single();
 
-      if (!error && data) {
-        savedItem = {
-          id: String(data.id),
-          nombre: String(data.nombre).toUpperCase(),
-          descripcion: data.descripcion ? String(data.descripcion) : null,
-          activo: data.activo !== false,
-          created_at: String(data.created_at || now),
-          updated_at: now,
-        };
-      }
-    } catch {
-      // Continuar con persistencia local
+    if (error) {
+      throw new Error(`Error al guardar Tipo de Pago en Supabase: ${error.message}`);
+    }
+
+    if (data) {
+      savedItem = {
+        id: String(data.id),
+        nombre: String(data.nombre).toUpperCase(),
+        descripcion: data.descripcion ? String(data.descripcion) : null,
+        activo: data.activo !== false,
+        created_at: String(data.created_at || now),
+        updated_at: now,
+      };
     }
   }
 
@@ -552,21 +552,22 @@ export async function asignarTipoPagoLineaCartolaAction(
     }
 
     if (isServerSupabaseConfigured() && !lineaId.startsWith("cl-")) {
-      try {
-        const supabase = await createServerSupabaseClient();
-        await supabase
-          .from("cartolas_lineas")
-          .update({
-            tipo_pago_id:
-              cleanTipoId && !cleanTipoId.startsWith("mtp-") ? cleanTipoId : null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", lineaId);
-      } catch {
-        // Ignorar si aún no está migrado en Supabase
+      const supabase = await createServerSupabaseClient();
+      const { error } = await supabase
+        .from("cartolas_lineas")
+        .update({
+          tipo_pago_id:
+            cleanTipoId && !cleanTipoId.startsWith("mtp-") ? cleanTipoId : null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", lineaId);
+
+      if (error) {
+        throw new Error(`Error al clasificar movimiento en Supabase: ${error.message}`);
       }
     }
 
+    revalidatePath("/tesoreria/saldos-bancarios");
     revalidatePath("/tesoreria/cartolas-bancarias");
     revalidatePath("/tesoreria/pagos");
     return { success: true };
@@ -626,21 +627,21 @@ export async function asignarTipoMovimientoMasivoAction(
 
     // 2. Actualización en Supabase si está configurado
     if (isServerSupabaseConfigured()) {
-      try {
-        const supabase = await createServerSupabaseClient();
-        const validSupaIds = lineaIds.filter((id) => !id.startsWith("cl-"));
-        if (validSupaIds.length > 0) {
-          const finalSupaTipoId = !cleanTipoId.startsWith("mtp-") ? cleanTipoId : null;
-          await supabase
-            .from("cartolas_lineas")
-            .update({
-              tipo_pago_id: finalSupaTipoId,
-              updated_at: new Date().toISOString(),
-            })
-            .in("id", validSupaIds);
+      const supabase = await createServerSupabaseClient();
+      const validSupaIds = lineaIds.filter((id) => !id.startsWith("cl-"));
+      if (validSupaIds.length > 0) {
+        const finalSupaTipoId = !cleanTipoId.startsWith("mtp-") ? cleanTipoId : null;
+        const { error } = await supabase
+          .from("cartolas_lineas")
+          .update({
+            tipo_pago_id: finalSupaTipoId,
+            updated_at: new Date().toISOString(),
+          })
+          .in("id", validSupaIds);
+
+        if (error) {
+          throw new Error(`Error al actualizar clasificación masiva en Supabase: ${error.message}`);
         }
-      } catch (supaErr) {
-        console.error("Error al actualizar tipo_pago masivo en Supabase:", supaErr);
       }
     }
 
@@ -1325,40 +1326,46 @@ export async function importarCartolaBancariaExcelAction(
       created_at: now,
     }));
 
-    // 6. Inserción en Supabase con manejo de colisiones
+    // 6. Inserción en Supabase con validación explícita de errores
     if (isServerSupabaseConfigured()) {
-      try {
-        const supabase = await createServerSupabaseClient();
-        await supabase.from("cartolas_bancarias").insert({
-          id: cartolaId,
-          banco,
-          numero_cartola: cartolaDisplay,
-          numero_cuenta: cuentaDisplay,
-          fecha_desde: fechaDesde,
-          fecha_hasta: fechaHasta,
-          saldo_inicial: 0,
-          saldo_final: saldoFinal,
-        });
+      const supabase = await createServerSupabaseClient();
+      const { error: errCartola } = await supabase.from("cartolas_bancarias").insert({
+        id: cartolaId,
+        banco,
+        numero_cartola: cartolaDisplay,
+        numero_cuenta: cuentaDisplay,
+        fecha_desde: fechaDesde,
+        fecha_hasta: fechaHasta,
+        saldo_inicial: 0,
+        saldo_final: saldoFinal,
+      });
 
-        // Insertar líneas con ON CONFLICT (movimiento_key) DO NOTHING
-        await supabase.from("cartolas_lineas").upsert(
-          nuevasLineas.map((l) => ({
-            cartola_id: l.cartola_id,
-            banco: l.banco,
-            numero_cuenta: l.numero_cuenta,
-            movimiento_key: l.movimiento_key,
-            fecha: l.fecha,
-            numero_operacion: l.numero_operacion,
-            descripcion: l.descripcion,
-            giro: l.giro,
-            abono: l.abono,
-            saldo: l.saldo,
-            tipo_pago_id: null,
-          })),
-          { onConflict: "movimiento_key", ignoreDuplicates: true }
-        );
-      } catch {
-        // Fallback a persistencia local
+      if (errCartola) {
+        throw new Error(`Error al insertar cartola en Supabase: ${errCartola.message}`);
+      }
+
+      // Insertar líneas con ON CONFLICT (movimiento_key) DO NOTHING
+      const { error: errLineas } = await supabase.from("cartolas_lineas").upsert(
+        nuevasLineas.map((l) => ({
+          banco: l.banco,
+          numero_cuenta: l.numero_cuenta,
+          numero_cartola: l.numero_cartola,
+          fecha: l.fecha,
+          numero_operacion: l.numero_operacion,
+          sucursal: null,
+          descripcion: l.descripcion,
+          giro: l.giro,
+          abono: l.abono,
+          saldo: l.saldo,
+          movimiento_key: l.movimiento_key,
+          cartola_id: l.cartola_id,
+          tipo_pago_id: null,
+        })),
+        { onConflict: "movimiento_key", ignoreDuplicates: true }
+      );
+
+      if (errLineas) {
+        throw new Error(`Error al insertar movimientos en cartolas_lineas: ${errLineas.message}`);
       }
     }
 
@@ -1367,6 +1374,7 @@ export async function importarCartolaBancariaExcelAction(
     db.cartolas_lineas = [...nuevasLineas, ...db.cartolas_lineas];
     writeLocalDb(db);
 
+    revalidatePath("/tesoreria/saldos-bancarios");
     revalidatePath("/tesoreria/cartolas-bancarias");
     revalidatePath("/tesoreria/pagos");
 

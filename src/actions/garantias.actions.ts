@@ -220,20 +220,20 @@ export async function upsertBoletaGarantiaAction(input: {
   };
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { data, error } = await supabase
-        .from("boletas_garantias")
-        .upsert(payload)
-        .select()
-        .single();
+    const supabase = await createServerSupabaseClient();
+    const { data, error } = await supabase
+      .from("boletas_garantias")
+      .upsert(payload)
+      .select()
+      .single();
 
-      if (!error && data) {
-        revalidatePath("/gestion-garantias/boletas-garantias");
-        return data as BoletaGarantia;
-      }
-    } catch {
-      // Fallback a local DB
+    if (error) {
+      throw new Error(`Error al guardar Boleta de Garantía en Supabase: ${error.message}`);
+    }
+
+    if (data) {
+      revalidatePath("/gestion-garantias/boletas-garantias");
+      return data as BoletaGarantia;
     }
   }
 
@@ -465,20 +465,20 @@ export async function upsertPolizaGarantiaAction(input: {
   };
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { data, error } = await supabase
-        .from("polizas_garantias")
-        .upsert(payload)
-        .select()
-        .single();
+    const supabase = await createServerSupabaseClient();
+    const { data, error } = await supabase
+      .from("polizas_garantias")
+      .upsert(payload)
+      .select()
+      .single();
 
-      if (!error && data) {
-        revalidatePath("/gestion-garantias/polizas-garantias");
-        return data as PolizaGarantia;
-      }
-    } catch {
-      // Fallback a local DB
+    if (error) {
+      throw new Error(`Error al guardar Póliza de Garantía en Supabase: ${error.message}`);
+    }
+
+    if (data) {
+      revalidatePath("/gestion-garantias/polizas-garantias");
+      return data as PolizaGarantia;
     }
   }
 
@@ -543,50 +543,56 @@ export async function renovarGarantiaAction(input: {
   let nuevoContador = 1;
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { data: currentDoc, error: fetchErr } = await supabase
+    const supabase = await createServerSupabaseClient();
+    const { data: currentDoc, error: fetchErr } = await supabase
+      .from(tableName)
+      .select("fecha_vencimiento, contador_renovaciones")
+      .eq("id", input.id)
+      .single();
+
+    if (fetchErr) {
+      throw new Error(`Error al consultar garantía en Supabase: ${fetchErr.message}`);
+    }
+
+    if (currentDoc) {
+      fechaAnterior = currentDoc.fecha_vencimiento;
+      nuevoContador = (currentDoc.contador_renovaciones || 0) + 1;
+
+      const { error: updateErr } = await supabase
         .from(tableName)
-        .select("fecha_vencimiento, contador_renovaciones")
-        .eq("id", input.id)
-        .single();
+        .update({
+          fecha_vencimiento: input.nuevaFechaVencimiento,
+          contador_renovaciones: nuevoContador,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", input.id);
 
-      if (!fetchErr && currentDoc) {
-        fechaAnterior = currentDoc.fecha_vencimiento;
-        nuevoContador = (currentDoc.contador_renovaciones || 0) + 1;
-
-        const { error: updateErr } = await supabase
-          .from(tableName)
-          .update({
-            fecha_vencimiento: input.nuevaFechaVencimiento,
-            contador_renovaciones: nuevoContador,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", input.id);
-
-        if (!updateErr) {
-          // Registrar en historial
-          await supabase.from("historial_renovaciones_garantias").insert({
-            tipo_garantia: input.tipo,
-            documento_id: input.id,
-            nro_renovacion: nuevoContador,
-            fecha_vencimiento_anterior: fechaAnterior,
-            fecha_vencimiento_nueva: input.nuevaFechaVencimiento,
-            observaciones: input.observaciones?.trim() || null,
-            usuario_id: input.usuarioId || null,
-            created_at: new Date().toISOString(),
-          });
-
-          revalidatePath(path);
-          return {
-            success: true,
-            contador_renovaciones: nuevoContador,
-            nueva_fecha_vencimiento: input.nuevaFechaVencimiento,
-          };
-        }
+      if (updateErr) {
+        throw new Error(`Error al renovar garantía en Supabase: ${updateErr.message}`);
       }
-    } catch {
-      // Fallback a local DB
+
+      // Registrar en historial
+      const { error: histErr } = await supabase.from("historial_renovaciones_garantias").insert({
+        tipo_garantia: input.tipo,
+        documento_id: input.id,
+        nro_renovacion: nuevoContador,
+        fecha_vencimiento_anterior: fechaAnterior,
+        fecha_vencimiento_nueva: input.nuevaFechaVencimiento,
+        observaciones: input.observaciones?.trim() || null,
+        usuario_id: input.usuarioId || null,
+        created_at: new Date().toISOString(),
+      });
+
+      if (histErr) {
+        throw new Error(`Error al registrar historial de renovación en Supabase: ${histErr.message}`);
+      }
+
+      revalidatePath(path);
+      return {
+        success: true,
+        contador_renovaciones: nuevoContador,
+        nueva_fecha_vencimiento: input.nuevaFechaVencimiento,
+      };
     }
   }
 
@@ -751,29 +757,29 @@ export async function registrarGestionGarantiaAction(input: {
   };
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { data, error } = await supabase
-        .from("gestiones_garantias")
-        .insert(payload)
-        .select()
-        .single();
+    const supabase = await createServerSupabaseClient();
+    const { data, error } = await supabase
+      .from("gestiones_garantias")
+      .insert(payload)
+      .select()
+      .single();
 
-      if (!error && data) {
-        // Sincronizar también en local DB para mantener consistencia inmediata
-        try {
-          const db = readLocalDb();
-          if (!db.gestiones_garantias) db.gestiones_garantias = [];
-          db.gestiones_garantias.unshift(data as GestionGarantia);
-          writeLocalDb(db);
-        } catch {
-          // ignore
-        }
-        revalidatePath(path);
-        return data as GestionGarantia;
+    if (error) {
+      throw new Error(`Error al registrar gestión de garantía en Supabase: ${error.message}`);
+    }
+
+    if (data) {
+      // Sincronizar también en local DB para mantener consistencia inmediata
+      try {
+        const db = readLocalDb();
+        if (!db.gestiones_garantias) db.gestiones_garantias = [];
+        db.gestiones_garantias.unshift(data as GestionGarantia);
+        writeLocalDb(db);
+      } catch {
+        // ignore
       }
-    } catch {
-      // Fallback a local DB
+      revalidatePath(path);
+      return data as GestionGarantia;
     }
   }
 

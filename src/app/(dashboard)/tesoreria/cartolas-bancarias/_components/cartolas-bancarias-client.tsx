@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useRef, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Landmark,
   FileSpreadsheet,
@@ -51,6 +52,7 @@ export function CartolasBancariasClient({
   initialData,
   isAdmin = false,
 }: CartolasBancariasClientProps) {
+  const router = useRouter();
   const [lineas, setLineas] = useState<CartolaLinea[]>(initialData.lineas);
   const [cartolas, setCartolas] = useState<CartolaBancaria[]>(initialData.cartolas);
   const [tiposPago, setTiposPago] = useState<MantenedorTipoPago[]>(
@@ -377,6 +379,7 @@ export function CartolasBancariasClient({
       setLineas(fresh.lineas);
       setCartolas(fresh.cartolas);
       setTiposPago(fresh.tiposPago);
+      router.refresh();
     } catch (err: unknown) {
       setImportError(
         err instanceof Error
@@ -1053,7 +1056,10 @@ export function CartolasBancariasClient({
               </div>
               <button
                 type="button"
-                onClick={() => setIsImportModalOpen(false)}
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  router.refresh();
+                }}
                 disabled={isImporting}
                 className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
               >
@@ -1226,7 +1232,10 @@ export function CartolasBancariasClient({
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setIsImportModalOpen(false)}
+                  onClick={() => {
+                  setIsImportModalOpen(false);
+                  router.refresh();
+                }}
                   disabled={isImporting}
                   className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >

@@ -170,20 +170,20 @@ export async function upsertLitigioMultaAction(input: {
   };
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { data, error } = await supabase
-        .from("litigios_multas")
-        .upsert(payload)
-        .select()
-        .single();
+    const supabase = await createServerSupabaseClient();
+    const { data, error } = await supabase
+      .from("litigios_multas")
+      .upsert(payload)
+      .select()
+      .single();
 
-      if (!error && data) {
-        safeRevalidatePath("/reg-litigios/multas");
-        return data as LitigioMulta;
-      }
-    } catch {
-      // Fallback local DB
+    if (error) {
+      throw new Error(`Error al guardar Multa en Supabase: ${error.message}`);
+    }
+
+    if (data) {
+      safeRevalidatePath("/reg-litigios/multas");
+      return data as LitigioMulta;
     }
   }
 
@@ -293,20 +293,20 @@ export async function upsertAudienciaJuicioAction(input: {
   };
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { data, error } = await supabase
-        .from("litigios_audiencias_juicio")
-        .upsert(payload)
-        .select()
-        .single();
+    const supabase = await createServerSupabaseClient();
+    const { data, error } = await supabase
+      .from("litigios_audiencias_juicio")
+      .upsert(payload)
+      .select()
+      .single();
 
-      if (!error && data) {
-        safeRevalidatePath("/reg-litigios/juicios");
-        return data as LitigioAudienciaJuicio;
-      }
-    } catch {
-      // Fallback local DB
+    if (error) {
+      throw new Error(`Error al guardar Audiencia en Supabase: ${error.message}`);
+    }
+
+    if (data) {
+      safeRevalidatePath("/reg-litigios/juicios");
+      return data as LitigioAudienciaJuicio;
     }
   }
 
@@ -347,16 +347,16 @@ export async function deleteAudienciaJuicioAction(
   if (!audienciaId) throw new Error("El ID de la audiencia es obligatorio.");
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      await supabase
-        .from("litigios_audiencias_juicio")
-        .delete()
-        .eq("id", audienciaId);
-      safeRevalidatePath("/reg-litigios/juicios");
-    } catch {
-      // Fallback local DB
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase
+      .from("litigios_audiencias_juicio")
+      .delete()
+      .eq("id", audienciaId);
+
+    if (error) {
+      throw new Error(`Error al eliminar Audiencia en Supabase: ${error.message}`);
     }
+    safeRevalidatePath("/reg-litigios/juicios");
   }
 
   const db = readLocalDb();
@@ -568,37 +568,40 @@ export async function upsertLitigioJuicioAction(
   let savedJuicioId = input.id;
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { data, error } = await supabase
-        .from("litigios_juicios")
-        .upsert(payload)
-        .select()
-        .single();
+    const supabase = await createServerSupabaseClient();
+    const { data, error } = await supabase
+      .from("litigios_juicios")
+      .upsert(payload)
+      .select()
+      .single();
 
-      if (!error && data) {
-        savedJuicioId = data.id;
+    if (error) {
+      throw new Error(`Error al guardar Juicio en Supabase: ${error.message}`);
+    }
 
-        // Guardar audiencias asociadas si vienen en el input
-        if (input.audiencias && input.audiencias.length > 0) {
-          for (let i = 0; i < input.audiencias.length; i++) {
-            const a = input.audiencias[i];
-            await supabase.from("litigios_audiencias_juicio").upsert({
-              ...(a.id ? { id: a.id } : {}),
-              juicio_id: savedJuicioId,
-              numero_audiencia: a.numero_audiencia || i + 1,
-              fecha_audiencia: a.fecha_audiencia,
-              resultado_dictamen: (a.resultado_dictamen || "").trim() || "Pendiente de dictamen",
-              updated_at: new Date().toISOString(),
-            });
+    if (data) {
+      savedJuicioId = data.id;
+
+      // Guardar audiencias asociadas si vienen en el input
+      if (input.audiencias && input.audiencias.length > 0) {
+        for (let i = 0; i < input.audiencias.length; i++) {
+          const a = input.audiencias[i];
+          const { error: audErr } = await supabase.from("litigios_audiencias_juicio").upsert({
+            ...(a.id ? { id: a.id } : {}),
+            juicio_id: savedJuicioId,
+            numero_audiencia: a.numero_audiencia || i + 1,
+            fecha_audiencia: a.fecha_audiencia,
+            resultado_dictamen: (a.resultado_dictamen || "").trim() || "Pendiente de dictamen",
+            updated_at: new Date().toISOString(),
+          });
+          if (audErr) {
+            throw new Error(`Error al guardar Audiencia del juicio en Supabase: ${audErr.message}`);
           }
         }
-
-        safeRevalidatePath("/reg-litigios/juicios");
-        return data as LitigioJuicio;
       }
-    } catch {
-      // Fallback local DB
+
+      safeRevalidatePath("/reg-litigios/juicios");
+      return data as LitigioJuicio;
     }
   }
 
@@ -1020,33 +1023,33 @@ export async function upsertLitigioComparendoAction(
   };
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { data: saved, error } = await supabase
-        .from("litigios_comparendos")
-        .upsert({
-          id: payload.id,
-          nombre_trabajador: payload.nombre_trabajador,
-          fecha_finiquito: payload.fecha_finiquito,
-          reserva_derechos: payload.reserva_derechos,
-          causal_termino: payload.causal_termino,
-          fecha_comparendo: payload.fecha_comparendo,
-          asistencia_empresa: payload.asistencia_empresa,
-          motivo_observacion: payload.motivo_observacion,
-          monto_acuerdo_total: payload.monto_acuerdo_total,
-          estado: payload.estado,
-          updated_at: now,
-        })
-        .select()
-        .single();
+    const supabase = await createServerSupabaseClient();
+    const { data: saved, error } = await supabase
+      .from("litigios_comparendos")
+      .upsert({
+        id: payload.id,
+        nombre_trabajador: payload.nombre_trabajador,
+        fecha_finiquito: payload.fecha_finiquito,
+        reserva_derechos: payload.reserva_derechos,
+        causal_termino: payload.causal_termino,
+        fecha_comparendo: payload.fecha_comparendo,
+        asistencia_empresa: payload.asistencia_empresa,
+        motivo_observacion: payload.motivo_observacion,
+        monto_acuerdo_total: payload.monto_acuerdo_total,
+        estado: payload.estado,
+        updated_at: now,
+      })
+      .select()
+      .single();
 
-      if (!error && saved) {
-        safeRevalidatePath("/reg-litigios/comparendos");
-        safeRevalidatePath("/reg-litigios/calendario");
-        return saved as LitigioComparendo;
-      }
-    } catch {
-      // fallback
+    if (error) {
+      throw new Error(`Error al guardar Comparendo en Supabase: ${error.message}`);
+    }
+
+    if (saved) {
+      safeRevalidatePath("/reg-litigios/comparendos");
+      safeRevalidatePath("/reg-litigios/calendario");
+      return saved as LitigioComparendo;
     }
   }
 
@@ -1099,40 +1102,47 @@ export async function saveAcuerdoComparendoAction(
   }));
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      // 1. Actualizar comparendo
-      await supabase
-        .from("litigios_comparendos")
-        .update({
-          monto_acuerdo_total: montoTotal,
-          estado: nuevoEstado,
+    const supabase = await createServerSupabaseClient();
+    // 1. Actualizar comparendo
+    const { error: errComp } = await supabase
+      .from("litigios_comparendos")
+      .update({
+        monto_acuerdo_total: montoTotal,
+        estado: nuevoEstado,
+        updated_at: now,
+      })
+      .eq("id", comparendoId);
+
+    if (errComp) {
+      throw new Error(`Error al actualizar acuerdo de comparendo en Supabase: ${errComp.message}`);
+    }
+
+    // 2. Eliminar cuotas previas y reinsertar las cuotas pactadas
+    const { error: errDel } = await supabase
+      .from("litigios_cuotas_comparendo")
+      .delete()
+      .eq("comparendo_id", comparendoId);
+
+    if (errDel) {
+      throw new Error(`Error al limpiar cuotas previas de comparendo en Supabase: ${errDel.message}`);
+    }
+
+    if (formattedCuotas.length > 0) {
+      const { error: errIns } = await supabase.from("litigios_cuotas_comparendo").insert(
+        formattedCuotas.map((q) => ({
+          id: q.id,
+          comparendo_id: q.comparendo_id,
+          numero_cuota: q.numero_cuota,
+          monto_cuota: q.monto_cuota,
+          fecha_vencimiento_cuota: q.fecha_vencimiento_cuota,
+          estado_cuota: q.estado_cuota,
+          fecha_pago_real: q.fecha_pago_real,
           updated_at: now,
-        })
-        .eq("id", comparendoId);
-
-      // 2. Eliminar cuotas previas y reinsertar las cuotas pactadas
-      await supabase
-        .from("litigios_cuotas_comparendo")
-        .delete()
-        .eq("comparendo_id", comparendoId);
-
-      if (formattedCuotas.length > 0) {
-        await supabase.from("litigios_cuotas_comparendo").insert(
-          formattedCuotas.map((q) => ({
-            id: q.id,
-            comparendo_id: q.comparendo_id,
-            numero_cuota: q.numero_cuota,
-            monto_cuota: q.monto_cuota,
-            fecha_vencimiento_cuota: q.fecha_vencimiento_cuota,
-            estado_cuota: q.estado_cuota,
-            fecha_pago_real: q.fecha_pago_real,
-            updated_at: now,
-          }))
-        );
+        }))
+      );
+      if (errIns) {
+        throw new Error(`Error al insertar cuotas de comparendo en Supabase: ${errIns.message}`);
       }
-    } catch {
-      // fallback
     }
   }
 
@@ -1212,27 +1222,31 @@ export async function togglePagoCuotaComparendoAction(
   }
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      await supabase
-        .from("litigios_cuotas_comparendo")
-        .update({
-          estado_cuota: nuevoEstado,
-          fecha_pago_real:
-            nuevoEstado === "PAGADA" ? fechaPagoReal || now.slice(0, 10) : null,
-          updated_at: now,
-        })
-        .eq("id", cuotaId);
+    const supabase = await createServerSupabaseClient();
+    const { error: errCuota } = await supabase
+      .from("litigios_cuotas_comparendo")
+      .update({
+        estado_cuota: nuevoEstado,
+        fecha_pago_real:
+          nuevoEstado === "PAGADA" ? fechaPagoReal || now.slice(0, 10) : null,
+        updated_at: now,
+      })
+      .eq("id", cuotaId);
 
-      await supabase
-        .from("litigios_comparendos")
-        .update({
-          estado: compEstado,
-          updated_at: now,
-        })
-        .eq("id", comparendoId);
-    } catch {
-      // fallback
+    if (errCuota) {
+      throw new Error(`Error al actualizar cuota de comparendo en Supabase: ${errCuota.message}`);
+    }
+
+    const { error: errComp } = await supabase
+      .from("litigios_comparendos")
+      .update({
+        estado: compEstado,
+        updated_at: now,
+      })
+      .eq("id", comparendoId);
+
+    if (errComp) {
+      throw new Error(`Error al actualizar estado de comparendo en Supabase: ${errComp.message}`);
     }
   }
 
@@ -1251,12 +1265,20 @@ export async function togglePagoCuotaComparendoAction(
 
 export async function deleteLitigioComparendoAction(id: string): Promise<void> {
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      await supabase.from("litigios_cuotas_comparendo").delete().eq("comparendo_id", id);
-      await supabase.from("litigios_comparendos").delete().eq("id", id);
-    } catch {
-      // fallback
+    const supabase = await createServerSupabaseClient();
+    const { error: errCuotas } = await supabase
+      .from("litigios_cuotas_comparendo")
+      .delete()
+      .eq("comparendo_id", id);
+    if (errCuotas) {
+      throw new Error(`Error al eliminar cuotas de comparendo en Supabase: ${errCuotas.message}`);
+    }
+    const { error: errComp } = await supabase
+      .from("litigios_comparendos")
+      .delete()
+      .eq("id", id);
+    if (errComp) {
+      throw new Error(`Error al eliminar comparendo en Supabase: ${errComp.message}`);
     }
   }
 

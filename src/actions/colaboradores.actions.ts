@@ -202,34 +202,34 @@ export async function upsertColaboradorAction(
   writeLocalDb(db);
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const { data, error } = await supabase
-        .from("mantenedor_colaboradores")
-        .upsert(
-          {
-            rut: cleanRut,
-            nombre: cleanNombre,
-            cargo: cleanCargo,
-            activo: targetActivo,
-            updated_at: now,
-          },
-          { onConflict: "rut" }
-        )
-        .select()
-        .single();
+    const supabase = await createServerSupabaseClient();
+    const { data, error } = await supabase
+      .from("mantenedor_colaboradores")
+      .upsert(
+        {
+          rut: cleanRut,
+          nombre: cleanNombre,
+          cargo: cleanCargo,
+          activo: targetActivo,
+          updated_at: now,
+        },
+        { onConflict: "rut" }
+      )
+      .select()
+      .single();
 
-      if (!error && data) {
-        record = {
-          ...data,
-          rut: cleanColaboradorRut(data.rut),
-          nombre: (data.nombre || "").trim().toUpperCase(),
-          cargo: (data.cargo || "").trim(),
-          activo: data.activo !== false,
-        } as MantenedorColaborador;
-      }
-    } catch (err: any) {
-      console.warn(`[Supabase upsert mantenedor_colaboradores warning]: ${err?.message}`);
+    if (error) {
+      throw new Error(`Error al guardar colaborador en Supabase: ${error.message}`);
+    }
+
+    if (data) {
+      record = {
+        ...data,
+        rut: cleanColaboradorRut(data.rut),
+        nombre: (data.nombre || "").trim().toUpperCase(),
+        cargo: (data.cargo || "").trim(),
+        activo: data.activo !== false,
+      } as MantenedorColaborador;
     }
   }
 
@@ -261,14 +261,14 @@ export async function toggleColaboradorStatusAction(
   }
 
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      await supabase
-        .from("mantenedor_colaboradores")
-        .update({ activo, updated_at: now })
-        .or(`id.eq.${id},rut.eq.${cleanRut}`);
-    } catch {
-      // fallback local
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase
+      .from("mantenedor_colaboradores")
+      .update({ activo, updated_at: now })
+      .or(`id.eq.${id},rut.eq.${cleanRut}`);
+
+    if (error) {
+      throw new Error(`Error al actualizar estado de colaborador en Supabase: ${error.message}`);
     }
   }
 
@@ -525,25 +525,25 @@ export async function importarColaboradoresExcelAction(
 
   // Persistir en Supabase si está configurado
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      const payloadToUpsert = consolidatedList.map((c) => ({
-        rut: c.rut,
-        nombre: c.nombre,
-        cargo: c.cargo,
-        activo: c.activo,
-        updated_at: now,
-      }));
+    const supabase = await createServerSupabaseClient();
+    const payloadToUpsert = consolidatedList.map((c) => ({
+      rut: c.rut,
+      nombre: c.nombre,
+      cargo: c.cargo,
+      activo: c.activo,
+      updated_at: now,
+    }));
 
-      // Upsert en lotes de 500 para máxima confiabilidad
-      for (let i = 0; i < payloadToUpsert.length; i += 500) {
-        const chunk = payloadToUpsert.slice(i, i + 500);
-        await supabase
-          .from("mantenedor_colaboradores")
-          .upsert(chunk, { onConflict: "rut" });
+    // Upsert en lotes de 500 para máxima confiabilidad
+    for (let i = 0; i < payloadToUpsert.length; i += 500) {
+      const chunk = payloadToUpsert.slice(i, i + 500);
+      const { error } = await supabase
+        .from("mantenedor_colaboradores")
+        .upsert(chunk, { onConflict: "rut" });
+
+      if (error) {
+        throw new Error(`Error al sincronizar colaboradores en Supabase: ${error.message}`);
       }
-    } catch (err: any) {
-      console.warn(`[Supabase sync mantenedor_colaboradores warning]: ${err?.message}`);
     }
   }
 
