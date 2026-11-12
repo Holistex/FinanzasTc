@@ -75,12 +75,39 @@ export async function getFacturasComprasAction(
   if (isServerSupabaseConfigured()) {
     const supabase = await createServerSupabaseClient();
 
-    // 1. Consultar facturas de compras
+    // 1. Consultar mantenedores primero para cruzar en memoria sin JOIN foráneo
+    const { data: provData } = await supabase.from("empresa_factoring_proveedores").select("*");
+    if (provData) factoringProveedores = provData as EmpresaFactoringProveedor[];
+
+    const { data: confData } = await supabase.from("empresa_confirming").select("*");
+    if (confData) empresasConfirming = confData as EmpresaConfirming[];
+
+    const { data: colabData } = await supabase.from("mantenedor_colaboradores").select("*");
+    if (colabData) colaboradores = colabData as MantenedorColaborador[];
+
+    const { data: onData } = await supabase.from("mantenedor_on").select("*");
+    if (onData) catalogoOn = onData as MantenedorON[];
+
+    const localDbPre = readLocalDb();
+    if (factoringProveedores.length === 0 && localDbPre.empresa_factoring_proveedores) {
+      factoringProveedores = localDbPre.empresa_factoring_proveedores;
+    }
+    if (empresasConfirming.length === 0 && localDbPre.empresa_confirming) {
+      empresasConfirming = localDbPre.empresa_confirming;
+    }
+
+    const factoringMap = new Map(factoringProveedores.map((p) => [String(p.id), p]));
+    const confirmingMap = new Map(empresasConfirming.map((c) => [String(c.id), c]));
+
+    // 2. Consultar facturas de compras (lectura directa sin JOIN por foreign key)
     const { data, error } = await supabase
       .from("facturas_compras")
-      .select("*, empresa_factoring_proveedores(*), empresa_confirming(*)")
-      .order("fecha_docto", { ascending: false })
-      .order("folio", { ascending: false });
+      .select("*")
+      .order("fecha_docto", { ascending: false });
+
+    if (error) {
+      console.error("[FacturasCompras] Error lectura:", error.message);
+    }
 
     if (!error && data) {
       rawCompras = (data as unknown as Array<Record<string, unknown>>).map((r) => {
@@ -104,6 +131,7 @@ export async function getFacturasComprasAction(
         }
 
         const factId = r.factoring_id ? String(r.factoring_id) : r.factoring_proveedor_id ? String(r.factoring_proveedor_id) : null;
+        const confId = r.confirming_id ? String(r.confirming_id) : null;
 
         return {
           id: String(r.id),
@@ -126,9 +154,9 @@ export async function getFacturasComprasAction(
           modalidad: (r.modalidad as string) || (r.modalidad_pago as string) || estadoFinal,
           factoring_id: factId,
           factoring_proveedor_id: factId,
-          empresa_factoring_proveedor: (r.empresa_factoring_proveedores as EmpresaFactoringProveedor) || null,
-          confirming_id: r.confirming_id ? String(r.confirming_id) : null,
-          empresa_confirming: (r.empresa_confirming as EmpresaConfirming) || null,
+          empresa_factoring_proveedor: factId ? factoringMap.get(factId) || null : null,
+          confirming_id: confId,
+          empresa_confirming: confId ? confirmingMap.get(confId) || null : null,
           numero_cheque: r.numero_cheque ? String(r.numero_cheque) : null,
           fecha_vencimiento_cheque: r.fecha_vencimiento_cheque ? String(r.fecha_vencimiento_cheque) : null,
           banco_emisor: r.banco_emisor ? String(r.banco_emisor) : null,
@@ -141,30 +169,17 @@ export async function getFacturasComprasAction(
       });
     }
 
-    // 2. Consultar neteos de compras
+    // 3. Consultar neteos de compras
     const { data: neteosData } = await supabase.from("neteos_compras").select("*");
     if (neteosData) {
       rawNeteos = neteosData as NeteoCompra[];
     }
 
-    // 3. Consultar cheques de compras
+    // 4. Consultar cheques de compras
     const { data: chequesData } = await supabase.from("cheques_compras").select("*");
     if (chequesData) {
       rawCheques = chequesData as ChequeCompra[];
     }
-
-    // 4. Consultar mantenedores
-    const { data: provData } = await supabase.from("empresa_factoring_proveedores").select("*");
-    if (provData) factoringProveedores = provData as EmpresaFactoringProveedor[];
-
-    const { data: confData } = await supabase.from("empresa_confirming").select("*");
-    if (confData) empresasConfirming = confData as EmpresaConfirming[];
-
-    const { data: colabData } = await supabase.from("mantenedor_colaboradores").select("*");
-    if (colabData) colaboradores = colabData as MantenedorColaborador[];
-
-    const { data: onData } = await supabase.from("mantenedor_on").select("*");
-    if (onData) catalogoOn = onData as MantenedorON[];
   }
 
   // Fallback si no hay Supabase o para hidratación local
