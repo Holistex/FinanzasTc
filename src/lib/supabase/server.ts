@@ -4,34 +4,36 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
-// Priorizar resolución IPv4 en Node.js (evita ENOTFOUND por IPv6 no ruteable en contenedores)
-try {
-  dns.setDefaultResultOrder?.("ipv4first");
-} catch {
-  // Ignore si no está soportado
+// Priorizar resolución IPv4 en Node.js (evita ENOTFOUND por IPv6 no ruteable en contenedores de Vercel)
+if (typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
 }
 
 const RETRY_BACKOFF_MS = [150, 400];
-const FALLBACK_SUPABASE_URL = "https://yarmvkhyxovtyoecdpi.supabase.co";
+// Dominio real y verificado en Supabase (con 'j' y con 'x' antes de ov: yarmvjkhxyovtyoecdpi)
+const REAL_SUPABASE_DOMAIN = "yarmvjkhxyovtyoecdpi.supabase.co";
+const FALLBACK_SUPABASE_URL = `https://${REAL_SUPABASE_DOMAIN}`;
 
 function sanitizeEnvValue(val?: string | null): string {
   if (!val) return "";
   return val.replace(/['"\s\r\n]+/g, "").replace(/\/+$/, "");
 }
 
+function normalizeSupabaseDomain(input: string): string {
+  return input
+    .replace("yarmvjkhyxovtyoecdpi.supabase.co", REAL_SUPABASE_DOMAIN)
+    .replace("yarmvkhyxovtyoecdpi.supabase.co", REAL_SUPABASE_DOMAIN)
+    .replace("yarmvjkhyovtyoecdpi.supabase.co", REAL_SUPABASE_DOMAIN)
+    .replace("yarmvkhyovtyoecdpi.supabase.co", REAL_SUPABASE_DOMAIN);
+}
+
 export function getSanitizedSupabaseUrl(): string {
   const sanitized = sanitizeEnvValue(process.env.NEXT_PUBLIC_SUPABASE_URL);
   if (!sanitized) return FALLBACK_SUPABASE_URL;
 
-  // Corrección de errores tipográficos en el subdominio si persisten en Vercel
-  if (
-    sanitized.includes("yarmvjkhyovtyoecdpi") ||
-    sanitized.includes("yarmvjkhxyovtyoecdpi") ||
-    sanitized.includes("yarmvkhyovtyoecdpi")
-  ) {
-    return FALLBACK_SUPABASE_URL;
-  }
-  return sanitized;
+  // Si contiene variaciones con typo introducidas en Vercel, normalizar al dominio real
+  const normalized = normalizeSupabaseDomain(sanitized);
+  return normalized;
 }
 
 export function getSanitizedSupabaseAnonKey(): string {
@@ -47,7 +49,7 @@ export const SUPABASE_ANON_KEY = getSanitizedSupabaseAnonKey();
 
 /**
  * Fetch personalizado para Supabase en entorno Node.js / Vercel Serverless:
- * - Sanitiza y valida la URL de destino para prevenir ENOTFOUND por caracteres espurios.
+ * - Sanitiza y normaliza la URL de destino para prevenir ENOTFOUND por typos o caracteres espurios.
  * - Usa el fetch nativo de Node.js con cache: 'no-store'.
  * - Reintenta ante errores de red transitorios con backoff escalonado.
  */
@@ -62,18 +64,8 @@ async function safeSupabaseFetch(
       ? input.toString()
       : input.url;
 
-  // Sanitizar URL ante comillas, espacios o caracteres de escape accidentales
-  targetUrl = targetUrl.trim().replace(/['"\r\n]+/g, "");
-  if (
-    targetUrl.includes("yarmvjkhyovtyoecdpi.supabase.co") ||
-    targetUrl.includes("yarmvjkhxyovtyoecdpi.supabase.co") ||
-    targetUrl.includes("yarmvkhyovtyoecdpi.supabase.co")
-  ) {
-    targetUrl = targetUrl
-      .replace("yarmvjkhyovtyoecdpi.supabase.co", "yarmvkhyxovtyoecdpi.supabase.co")
-      .replace("yarmvjkhxyovtyoecdpi.supabase.co", "yarmvkhyxovtyoecdpi.supabase.co")
-      .replace("yarmvkhyovtyoecdpi.supabase.co", "yarmvkhyxovtyoecdpi.supabase.co");
-  }
+  // Sanitizar y corregir variaciones del subdominio de Supabase
+  targetUrl = normalizeSupabaseDomain(targetUrl.trim().replace(/['"\r\n]+/g, ""));
 
   const requestInit: RequestInit = {
     ...init,
