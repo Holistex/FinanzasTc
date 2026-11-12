@@ -92,47 +92,66 @@ export async function savePerfilAction(
   if (isServerSupabaseConfigured()) {
     try {
       const supabase = await createServerSupabaseClient();
+      let lastError: any = null;
+
+      // Intentar primero en perfiles_acceso y luego en perfiles
       for (const tableName of ["perfiles_acceso", "perfiles"] as const) {
         if (payload.id) {
+          // Intentar actualizar por id o tipo_perfil
           const { data, error } = await supabase
             .from(tableName)
             .update({
-              nombre_perfil: nombreLimpio,
               tipo_perfil: nombreLimpio,
+              nombre_perfil: nombreLimpio,
+              nombre: nombreLimpio,
               descripcion: payload.descripcion?.trim() || null,
               permisos: permisosNormalizados,
               updated_at: nowIso,
             })
             .eq("id", payload.id)
-            .select()
-            .single();
+            .select();
 
-          if (!error && data) {
+          if (error) {
+            lastError = error;
+            continue;
+          }
+
+          if (data && data.length > 0) {
             revalidatePath("/configuracion/adm-perfiles");
             revalidatePath("/configuracion/maestro-usuarios");
-            return mapPerfilRow(data as Record<string, unknown>);
+            return mapPerfilRow(data[0] as Record<string, unknown>);
           }
         } else {
           const { data, error } = await supabase
             .from(tableName)
             .insert({
-              nombre_perfil: nombreLimpio,
               tipo_perfil: nombreLimpio,
+              nombre_perfil: nombreLimpio,
+              nombre: nombreLimpio,
               descripcion: payload.descripcion?.trim() || null,
               permisos: permisosNormalizados,
             })
-            .select()
-            .single();
+            .select();
 
-          if (!error && data) {
+          if (error) {
+            lastError = error;
+            continue;
+          }
+
+          if (data && data.length > 0) {
             revalidatePath("/configuracion/adm-perfiles");
             revalidatePath("/configuracion/maestro-usuarios");
-            return mapPerfilRow(data as Record<string, unknown>);
+            return mapPerfilRow(data[0] as Record<string, unknown>);
           }
         }
       }
-    } catch {
-      // Fallback
+
+      if (lastError) {
+        throw new Error(`Error en Supabase (perfiles_acceso): ${lastError.message}`);
+      }
+    } catch (err: any) {
+      console.error("[savePerfilAction] Error:", err);
+      throw err instanceof Error ? err : new Error(String(err));
     }
   }
 
@@ -191,10 +210,12 @@ export async function deletePerfilAction(id: string): Promise<{ success: boolean
   if (isServerSupabaseConfigured()) {
     try {
       const supabase = await createServerSupabaseClient();
-      await supabase.from("perfiles_acceso").delete().eq("id", id);
-      await supabase.from("perfiles").delete().eq("id", id);
-    } catch {
-      // Ignorar si alguna tabla no existe
+      for (const tableName of ["perfiles_acceso", "perfiles"] as const) {
+        await supabase.from(tableName).delete().eq("id", id);
+      }
+    } catch (err: any) {
+      console.error("[deletePerfilAction] Error:", err);
+      throw err instanceof Error ? err : new Error(String(err));
     }
   }
 
