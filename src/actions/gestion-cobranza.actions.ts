@@ -139,25 +139,30 @@ export async function getCarteraCobranzaAction(): Promise<CarteraCobranzaData> {
   if (isServerSupabaseConfigured()) {
     const supabase = await createServerSupabaseClient();
 
-    // 1. Obtener facturas con empresa_factoring
-    const { data: facturasData, error: facturasErr } = await supabase
-      .from("facturas_ventas")
-      .select("*, empresa_factoring_cliente(*)")
-      .neq("tipo_doc", 61)
-      .neq("tipo_doc", 46)
-      .order("fecha_docto", { ascending: false })
-      .order("folio", { ascending: false });
+    // Ejecutar las 3 consultas a Supabase en paralelo para minimizar latencia
+    const [facturasRes, pagosRes, gestionesRes] = await Promise.all([
+      supabase
+        .from("facturas_ventas")
+        .select("*, empresa_factoring_cliente(*)")
+        .neq("tipo_doc", 61)
+        .neq("tipo_doc", 46)
+        .order("fecha_docto", { ascending: false })
+        .order("folio", { ascending: false }),
+      supabase.from("pagos_facturas").select("*"),
+      supabase
+        .from("gestiones_cobranza")
+        .select("*")
+        .order("created_at", { ascending: false }),
+    ]);
 
+    const { data: facturasData, error: facturasErr } = facturasRes;
     if (facturasErr) {
       console.warn("Error consultando facturas en Supabase:", facturasErr.message);
     } else {
       allFacturas = (facturasData as FacturaVenta[]) || [];
     }
 
-    // 2. Obtener pagos reales para calcular saldo exacto si aplica
-    const { data: supaPagos } = await supabase
-      .from("pagos_facturas")
-      .select("*");
+    const { data: supaPagos } = pagosRes;
     const pagosMap = new Map<string, PagoFactura[]>();
     if (supaPagos) {
       for (const p of supaPagos as Array<Record<string, unknown>>) {
@@ -176,11 +181,7 @@ export async function getCarteraCobranzaAction(): Promise<CarteraCobranzaData> {
       }
     }
 
-    // 3. Obtener gestiones de cobranza
-    const { data: gestionesData, error: gestionesErr } = await supabase
-      .from("gestiones_cobranza")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data: gestionesData, error: gestionesErr } = gestionesRes;
 
     if (!gestionesErr && gestionesData) {
       for (const g of gestionesData as Array<Record<string, unknown>>) {

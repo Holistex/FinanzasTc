@@ -9,6 +9,7 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
+export const preferredRegion = "yul1";
 
 export default async function GestionCobranzaPage() {
   const data = await getCarteraCobranzaAction();

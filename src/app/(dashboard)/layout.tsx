@@ -3,6 +3,8 @@ import { DashboardSidebar } from "@/components/layout/dashboard-nav";
 import { isServerSupabaseConfigured } from "@/lib/supabase/server";
 import { getServerUserSession } from "@/lib/auth/session";
 
+export const preferredRegion = "yul1";
+
 export default async function DashboardLayout({
   children,
 }: {
