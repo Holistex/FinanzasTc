@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <!-- Gradiente de fondo del contenedor oscuro con relieve y brillo superior -->
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b1329" />
+      <stop offset="50%" stop-color="#070d1d" />
+      <stop offset="100%" stop-color="#030712" />
+    </linearGradient>
+
+    <!-- Gradiente Barra Diagonal 1 (Celeste a Verde-Agua vibrante) -->
+    <linearGradient id="bar1-grad" x1="20%" y1="20%" x2="80%" y2="80%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="45%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+
+    <!-- Gradiente Barra Diagonal 2 (Azul real / Violeta a Naranja en la punta) -->
+    <linearGradient id="bar2-grad" x1="80%" y1="20%" x2="20%" y2="80%">
+      <stop offset="0%" stop-color="#6366f1" />
+      <stop offset="35%" stop-color="#3b82f6" />
+      <stop offset="75%" stop-color="#0ea5e9" />
+      <stop offset="100%" stop-color="#ea580c" />
+    </linearGradient>
+
+    <!-- Resplandor sutil para dar volumen y tecnología -->
+    <filter id="soft-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Contenedor cuadrado con esquinas redondeadas suaves (Squircle) -->
+  <rect width="100" height="100" rx="26" fill="url(#bg-grad)" stroke="#1e293b" stroke-width="2" />
+  
+  <!-- Borde interior sutil con destello de luz -->
+  <rect x="2.5" y="2.5" width="95" height="95" rx="24" fill="none" stroke="rgba(255,255,255,0.09)" stroke-width="1.2" />
+
+  <!-- Letra X Estilizada con extremos cilíndricos/redondeados y corte limpio -->
+  <g filter="url(#soft-glow)">
+    <!-- Barra Diagonal 1 (Celeste -> Cian -> Verde Esmeralda) -->
+    <rect 
+      x="43" y="14" 
+      width="14" height="72" 
+      rx="7" 
+      transform="rotate(45 50 50)" 
+      fill="url(#bar1-grad)" 
+    />
+    
+    <!-- Barra Diagonal 2 Superior (Azul / Violeta -> Centro) -->
+    <path 
+      d="M 50 50 L 73 27 A 7 7 0 0 0 63 17 L 40 40 Z" 
+      transform="rotate(0 50 50)" 
+      fill="#6366f1" 
+      opacity="0.95"
+    />
+    
+    <!-- Barra Diagonal 2 Completa superpuesta con sombra y degradado -->
+    <rect 
+      x="43" y="14" 
+      width="14" height="72" 
+      rx="7" 
+      transform="rotate(-45 50 50)" 
+      fill="url(#bar2-grad)" 
+    />
+
+    <!-- Toque de relieve en el cruce de la X -->
+    <circle cx="50" cy="50" r="5" fill="#38bdf8" opacity="0.6" />
+    <circle cx="50" cy="50" r="2.5" fill="#ffffff" opacity="0.95" />
+  </g>
+</svg>

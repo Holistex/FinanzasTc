@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --tensacon-primary: #E05A10;
+    --tensacon-primary-hover: #C2410C;
+    --tensacon-slate-dark: #0F172A;
+    --tensacon-slate-surface: #1E293B;
+    --tensacon-bg-light: #F8FAFC;
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-[#F8FAFC] text-[#0F172A] antialiased selection:bg-[#E05A10] selection:text-white;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "tnum";
+  }
+}
+
+/* Tabular numbers para montos financieros y folios SII */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================================ */
+/* ANIMACIONES ATÓMICAS Y ÓRBITAS HOLISTEX (/login)                             */
+/* ============================================================================ */
+@keyframes spin-slow {
+  from {
+    transform: rotate(12deg);
+  }
+  to {
+    transform: rotate(372deg);
+  }
+}
+
+@keyframes spin-reverse {
+  from {
+    transform: rotate(-45deg);
+  }
+  to {
+    transform: rotate(-405deg);
+  }
+}
+
+@keyframes spin-pulse {
+  0% {
+    transform: rotate(75deg) scale(0.96);
+  }
+  50% {
+    transform: rotate(255deg) scale(1.04);
+  }
+  100% {
+    transform: rotate(435deg) scale(0.96);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 8s linear infinite;
+}
+
+.animate-spin-reverse {
+  animation: spin-reverse 6s linear infinite;
+}
+
+.animate-spin-pulse {
+  animation: spin-pulse 10s ease-in-out infinite;
+}
