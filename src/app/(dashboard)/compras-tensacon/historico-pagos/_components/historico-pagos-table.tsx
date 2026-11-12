@@ -39,8 +39,19 @@ export function HistoricoPagosTable({
   // Filtrado
   const filteredData = useMemo(() => {
     return data.filter((item) => {
-      const matchModalidad =
-        selectedModalidad === "TODAS" || item.modalidad_pago === selectedModalidad;
+      const modItem = (item.modalidad_pago || "").toUpperCase();
+      let matchModalidad = selectedModalidad === "TODAS";
+      if (!matchModalidad) {
+        if (selectedModalidad === "DIRECTO") {
+          matchModalidad =
+            modItem === "DIRECTO" ||
+            modItem === "TRANSFERENCIA" ||
+            modItem === "PAGADA" ||
+            modItem === "DEUDA_PROVEEDOR";
+        } else {
+          matchModalidad = modItem === selectedModalidad;
+        }
+      }
 
       const itemDate = toDateOnlyString(item.fecha_real_pago);
       const matchFechaDesde = !fechaDesde || (Boolean(itemDate) && itemDate >= fechaDesde);
@@ -89,6 +100,7 @@ export function HistoricoPagosTable({
   const getModalidadBadge = (modalidad: ModalidadPagoCompra) => {
     switch (modalidad) {
       case "DIRECTO":
+      case "PAGADA" as unknown as ModalidadPagoCompra:
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>

@@ -169,17 +169,21 @@ export function FacturasComprasTable({
     });
   };
 
-  // 1. Facturas Cartera / Deuda Directa con Proveedor (criterio estricto: saldo_pendiente > 0, no modalidades especiales ni CONTADO)
+  // 1. Facturas Cartera / Deuda Directa con Proveedor (saldo > 0 y no modalidades especiales)
   const facturasCartera = useMemo(() => {
     return data.filter((f) => {
+      if (f.tipo_doc === 61) return false;
       const saldoPendiente = Number(
         f.monto_saldo !== undefined && f.monto_saldo !== null ? f.monto_saldo : f.monto_total
       );
+      if (saldoPendiente <= 0) return false;
+      if (f.condicion_pago === "CONTADO") return false;
+
       const mods = [
         f.estado,
         (f as unknown as Record<string, unknown>).modalidad_pago as string | undefined,
         (f as unknown as Record<string, unknown>).modalidad as string | undefined,
-      ].map((v) => v?.toUpperCase());
+      ].map((v) => v?.toUpperCase() || "");
 
       const tieneModalidadEspecial =
         mods.includes("FACTORING") ||
@@ -189,82 +193,67 @@ export function FacturasComprasTable({
         mods.includes("NETEO_NC") ||
         mods.includes("PAGADA");
 
-      return (
-        f.tipo_doc !== 61 &&
-        saldoPendiente > 0 &&
-        !tieneModalidadEspecial &&
-        f.condicion_pago !== "CONTADO"
-      );
+      return !tieneModalidadEspecial;
     });
   }, [data]);
 
-  // 2. Facturas con Cheques (DTE 33/34 en modalidad o estado CHEQUE o con abonos de cheques emitidos)
+  // 2. Facturas con Cheques: [f.estado, f.modalidad_pago, f.modalidad].some(v => v?.toUpperCase() === 'CHEQUE') o vinculadas
   const facturasCheques = useMemo(() => {
     return data.filter((f) => {
-      const saldo = Number(
-        f.monto_saldo !== undefined && f.monto_saldo !== null ? f.monto_saldo : f.monto_total
-      );
+      if (f.tipo_doc === 61) return false;
       const mods = [
         f.estado,
         (f as unknown as Record<string, unknown>).modalidad_pago as string | undefined,
         (f as unknown as Record<string, unknown>).modalidad as string | undefined,
-      ].map((v) => v?.toUpperCase());
+      ];
+      const esCheque = mods.some((v) => v?.toUpperCase() === "CHEQUE");
+      const tieneCheques =
+        (f.cheques && f.cheques.length > 0) ||
+        Boolean(f.total_cheques_emitidos && f.total_cheques_emitidos > 0);
 
-      const esCheque = mods.includes("CHEQUE");
-      const esPagada = mods.includes("PAGADA");
-
-      return (
-        f.tipo_doc !== 61 &&
-        !esPagada &&
-        saldo > 0 &&
-        (esCheque ||
-          (f.cheques && f.cheques.length > 0) ||
-          (f.total_cheques_emitidos && f.total_cheques_emitidos > 0))
-      );
+      return esCheque || tieneCheques;
     });
   }, [data]);
 
-  // 3. Facturas en Factoring (DTE 33/34 en modalidad o estado FACTORING)
+  // 3. Facturas en Factoring: [f.estado, f.modalidad_pago, f.modalidad].some(v => v?.toUpperCase() === 'FACTORING')
   const facturasFactoring = useMemo(() => {
     return data.filter((f) => {
-      const saldo = Number(
-        f.monto_saldo !== undefined && f.monto_saldo !== null ? f.monto_saldo : f.monto_total
-      );
+      if (f.tipo_doc === 61) return false;
       const mods = [
         f.estado,
         (f as unknown as Record<string, unknown>).modalidad_pago as string | undefined,
         (f as unknown as Record<string, unknown>).modalidad as string | undefined,
-      ].map((v) => v?.toUpperCase());
-
-      const esFactoring = mods.includes("FACTORING");
-      return f.tipo_doc !== 61 && esFactoring && saldo > 0;
+      ];
+      return mods.some((v) => v?.toUpperCase() === "FACTORING");
     });
   }, [data]);
 
-  // 4. Facturas en Confirming (DTE 33/34 en modalidad o estado CONFIRMING)
+  // 4. Facturas en Confirming: [f.estado, f.modalidad_pago, f.modalidad].some(v => v?.toUpperCase() === 'CONFIRMING')
   const facturasConfirming = useMemo(() => {
     return data.filter((f) => {
-      const saldo = Number(
-        f.monto_saldo !== undefined && f.monto_saldo !== null ? f.monto_saldo : f.monto_total
-      );
+      if (f.tipo_doc === 61) return false;
       const mods = [
         f.estado,
         (f as unknown as Record<string, unknown>).modalidad_pago as string | undefined,
         (f as unknown as Record<string, unknown>).modalidad as string | undefined,
-      ].map((v) => v?.toUpperCase());
-
-      const esConfirming = mods.includes("CONFIRMING");
-      return f.tipo_doc !== 61 && esConfirming && saldo > 0;
+      ];
+      return mods.some((v) => v?.toUpperCase() === "CONFIRMING");
     });
   }, [data]);
 
-  // 5. Facturas y NCs pertenecientes a la Pestaña FAC / NC (DTE 61 o saldadas por neteo o con neteos)
+  // 5. Facturas y NCs pertenecientes a la Pestaña FAC / NC: [f.estado, f.modalidad_pago, f.modalidad].some(v => v?.toUpperCase() === 'NETEO_NC') o tipo_doc === 61
   const facturasFacNc = useMemo(() => {
     return data.filter((f) => {
-      if (f.tipo_doc === 61) return true; // Todas las Notas de Crédito
-      if (f.estado === "NETEO_NC") return true; // Facturas saldadas por neteo
-      if (f.neteos && f.neteos.length > 0) return true; // Facturas con neteos parciales
-      return false;
+      if (f.tipo_doc === 61) return true;
+      const mods = [
+        f.estado,
+        (f as unknown as Record<string, unknown>).modalidad_pago as string | undefined,
+        (f as unknown as Record<string, unknown>).modalidad as string | undefined,
+      ];
+      return (
+        mods.some((v) => v?.toUpperCase() === "NETEO_NC") ||
+        (f.neteos && f.neteos.length > 0)
+      );
     });
   }, [data]);
 
@@ -592,7 +581,7 @@ export function FacturasComprasTable({
                   : "bg-slate-100 text-slate-600 border-slate-200"
               )}
             >
-              {facNcCount}
+              {facturasFacNc.length}
             </span>
           </button>
         </div>

@@ -115,11 +115,14 @@ export async function getHistoricoPagosComprasAction(params?: {
         .select("*")
         .order("fecha_real_pago", { ascending: false });
 
+      const facturasIdRegistrados = new Set(rawPagos.map((p) => p.factura_id).filter(Boolean));
+
       if (supaPagosFac && supaPagosFac.length > 0) {
         for (const p of supaPagosFac as PagoCompraHistorico[]) {
-          if (!foliosRegistrados.has(p.folio)) {
+          if (!foliosRegistrados.has(p.folio) && (!p.factura_id || !facturasIdRegistrados.has(p.factura_id))) {
             rawPagos.unshift(p);
             foliosRegistrados.add(p.folio);
+            if (p.factura_id) facturasIdRegistrados.add(p.factura_id);
           }
         }
       }
@@ -132,50 +135,77 @@ export async function getHistoricoPagosComprasAction(params?: {
 
       if (supaPagos && supaPagos.length > 0) {
         for (const p of supaPagos as PagoCompraHistorico[]) {
-          if (!foliosRegistrados.has(p.folio)) {
+          if (!foliosRegistrados.has(p.folio) && (!p.factura_id || !facturasIdRegistrados.has(p.factura_id))) {
             rawPagos.unshift(p);
             foliosRegistrados.add(p.folio);
+            if (p.factura_id) facturasIdRegistrados.add(p.factura_id);
           }
         }
       }
 
-      // 3.3 Consultar facturas saldadas en Supabase
-      const { data: supaFacsSaldadas } = await supabase
+      // 3.3 Consultar facturas saldadas o con modalidades especiales en Supabase (evitando duplicar)
+      const { data: supaFacs } = await supabase
         .from("facturas_compras")
         .select("*")
-        .or("estado.eq.PAGADA,monto_saldo.eq.0,condicion_pago.eq.CONTADO,estado.eq.COMPRA_TC")
         .neq("tipo_doc", 61);
 
-      if (supaFacsSaldadas && supaFacsSaldadas.length > 0) {
-        for (const sFac of supaFacsSaldadas) {
+      if (supaFacs && supaFacs.length > 0) {
+        for (const sFac of supaFacs) {
           const folioNum = Number(sFac.folio || 0);
-          if (folioNum > 0 && !foliosRegistrados.has(folioNum)) {
+          const facId = String(sFac.id);
+          const saldo = Number(
+            sFac.monto_saldo !== undefined && sFac.monto_saldo !== null
+              ? sFac.monto_saldo
+              : sFac.monto_total
+          );
+          const mods = [
+            sFac.estado,
+            (sFac as unknown as Record<string, unknown>).modalidad_pago,
+            (sFac as unknown as Record<string, unknown>).modalidad,
+          ].map((v) => (v ? String(v).toUpperCase() : ""));
+
+          const esSaldada =
+            mods.includes("PAGADA") ||
+            mods.includes("COMPRA_TC") ||
+            sFac.condicion_pago === "CONTADO" ||
+            saldo === 0;
+
+          if (
+            esSaldada &&
+            folioNum > 0 &&
+            !foliosRegistrados.has(folioNum) &&
+            !facturasIdRegistrados.has(facId)
+          ) {
             let mod: ModalidadPagoCompra = "DIRECTO";
-            const est = String(sFac.estado || "").toUpperCase();
-            if (est === "CHEQUE") mod = "CHEQUE";
-            else if (est === "FACTORING") mod = "FACTORING";
-            else if (est === "CONFIRMING") mod = "CONFIRMING";
-            else if (est === "NETEO_NC") mod = "NETEO_NC";
-            else if (est === "COMPRA_TC") mod = "COMPRA_TC";
+            if (mods.includes("CHEQUE")) mod = "CHEQUE";
+            else if (mods.includes("FACTORING")) mod = "FACTORING";
+            else if (mods.includes("CONFIRMING")) mod = "CONFIRMING";
+            else if (mods.includes("NETEO_NC")) mod = "NETEO_NC";
+            else if (mods.includes("COMPRA_TC")) mod = "COMPRA_TC";
+            else mod = "DIRECTO";
 
             rawPagos.push({
               id: `pago-supa-${sFac.id}`,
-              factura_id: String(sFac.id),
+              factura_id: facId,
               rut_proveedor: String(sFac.rut_proveedor || ""),
               razon_social: String(sFac.razon_social || ""),
               folio: folioNum,
               tipo_doc: Number(sFac.tipo_doc || 33),
               modalidad_pago: mod,
               monto_pagado: Number(sFac.monto_total || 0),
-              fecha_real_pago: sFac.fecha_vencimiento_cheque || (sFac.updated_at ? String(sFac.updated_at).slice(0, 10) : sFac.fecha_vencimiento || sFac.fecha_docto || new Date().toISOString().slice(0, 10)),
-              observacion: est === "COMPRA_TC"
+              fecha_real_pago:
+                sFac.fecha_vencimiento_cheque ||
+                (sFac.updated_at
+                  ? String(sFac.updated_at).slice(0, 10)
+                  : sFac.fecha_vencimiento || sFac.fecha_docto || new Date().toISOString().slice(0, 10)),
+              observacion: mods.includes("COMPRA_TC")
                 ? "Compra TC — Rendición de Trabajador"
                 : sFac.condicion_pago === "CONTADO"
                 ? "Fondo por Rendir / Compra al Contado"
                 : sFac.numero_cheque
                 ? `Cheque #${sFac.numero_cheque}`
                 : "Factura saldada en Tesorería",
-              comprobante_ref: est === "COMPRA_TC"
+              comprobante_ref: mods.includes("COMPRA_TC")
                 ? `TC-${folioNum}`
                 : sFac.condicion_pago === "CONTADO"
                 ? `CONTADO-${folioNum}`
@@ -185,6 +215,7 @@ export async function getHistoricoPagosComprasAction(params?: {
               created_at: String(sFac.created_at || new Date().toISOString()),
             });
             foliosRegistrados.add(folioNum);
+            facturasIdRegistrados.add(facId);
           }
         }
       }
@@ -210,20 +241,23 @@ export async function getHistoricoPagosComprasAction(params?: {
     const m = Number(p.monto_pagado || 0);
     totalPagado += m;
 
-    if (p.modalidad_pago === "DIRECTO") {
-      totalDirecto += m;
-      cantidadDirecto++;
-    } else if (p.modalidad_pago === "CHEQUE") {
+    const mod = String(p.modalidad_pago || "").toUpperCase();
+
+    if (mod === "CHEQUE") {
       totalCheque += m;
       cantidadCheque++;
-    } else if (p.modalidad_pago === "FACTORING") {
+    } else if (mod === "FACTORING") {
       totalFactoring += m;
       cantidadFactoring++;
-    } else if (p.modalidad_pago === "CONFIRMING") {
+    } else if (mod === "CONFIRMING") {
       totalConfirming += m;
       cantidadConfirming++;
-    } else if (p.modalidad_pago === "NETEO_NC") {
+    } else if (mod === "NETEO_NC") {
       totalNeteo += m;
+    } else {
+      // DIRECTO, TRANSFERENCIA, EFECTIVO, PAGADA, COMPRA_TC
+      totalDirecto += m;
+      cantidadDirecto++;
     }
   }
 
@@ -242,7 +276,20 @@ export async function getHistoricoPagosComprasAction(params?: {
   }
 
   if (params?.modalidad && params.modalidad !== "TODOS") {
-    filtered = filtered.filter((p) => p.modalidad_pago === params.modalidad);
+    const targetMod = params.modalidad.toUpperCase();
+    filtered = filtered.filter((p) => {
+      const pMod = String(p.modalidad_pago || "").toUpperCase();
+      if (targetMod === "DIRECTO") {
+        return (
+          pMod === "DIRECTO" ||
+          pMod === "TRANSFERENCIA" ||
+          pMod === "EFECTIVO" ||
+          pMod === "PAGADA" ||
+          pMod === "DEUDA_PROVEEDOR"
+        );
+      }
+      return pMod === targetMod;
+    });
   }
 
   // Ordenar por fecha descendente

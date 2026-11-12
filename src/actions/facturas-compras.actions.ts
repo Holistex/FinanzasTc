@@ -330,39 +330,36 @@ export async function getFacturasComprasAction(
     // Es Factura (DTE 33/34)
     totalCompras += monto;
 
-    if (item.estado === "NETEO_NC" || saldo === 0) {
-      if (item.estado === "NETEO_NC") {
-        facNcCount += 1;
-        totalNeteoNC += monto;
-      }
-      if (item.estado === "CHEQUE" || (item.total_cheques_emitidos && item.total_cheques_emitidos > 0)) {
-        totalCheque += (item.total_cheques_emitidos || monto);
-        cantidadCheque += 1;
-      }
-    } else {
-      // Saldo pendiente
-      if (item.total_cheques_emitidos && item.total_cheques_emitidos > 0) {
-        totalCheque += item.total_cheques_emitidos;
-      }
-      const mods = [
-        item.estado,
-        (item as unknown as Record<string, unknown>).modalidad_pago,
-        (item as unknown as Record<string, unknown>).modalidad,
-      ].map((v) => (v ? String(v).toUpperCase() : ""));
+    const mods = [
+      item.estado,
+      (item as unknown as Record<string, unknown>).modalidad_pago,
+      (item as unknown as Record<string, unknown>).modalidad,
+    ].map((v) => (v ? String(v).toUpperCase() : ""));
 
-      if (mods.includes("FACTORING")) {
-        totalFactoring += saldo;
-        cantidadFactoring += 1;
-      } else if (mods.includes("CONFIRMING")) {
-        totalConfirming += saldo;
-        cantidadConfirming += 1;
-      } else if (mods.includes("CHEQUE")) {
-        totalCheque += saldo;
-        cantidadCheque += 1;
-      } else {
-        totalDeudaProveedor += saldo;
-        cantidadDeudaProveedor += 1;
-      }
+    if (mods.includes("NETEO_NC")) {
+      facNcCount += 1;
+      totalNeteoNC += monto;
+    } else if (mods.includes("FACTORING")) {
+      totalFactoring += (saldo > 0 ? saldo : monto);
+      cantidadFactoring += 1;
+    } else if (mods.includes("CONFIRMING")) {
+      totalConfirming += (saldo > 0 ? saldo : monto);
+      cantidadConfirming += 1;
+    } else if (
+      mods.includes("CHEQUE") ||
+      Boolean(item.total_cheques_emitidos && item.total_cheques_emitidos > 0) ||
+      Boolean(item.cheques && item.cheques.length > 0)
+    ) {
+      totalCheque += (item.total_cheques_emitidos || (saldo > 0 ? saldo : monto));
+      cantidadCheque += 1;
+    } else if (
+      !mods.includes("PAGADA") &&
+      !mods.includes("COMPRA_TC") &&
+      item.condicion_pago !== "CONTADO" &&
+      saldo > 0
+    ) {
+      totalDeudaProveedor += saldo;
+      cantidadDeudaProveedor += 1;
     }
   }
 
