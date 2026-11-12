@@ -726,8 +726,11 @@ export async function subirRespaldoFacturaVentaAction(
     }
   }
 
-  // 2. Almacenamiento local de respaldo (directorio public/uploads/respaldos)
+  // 2. Almacenamiento local de respaldo (solo fuera de Vercel)
   if (!urlPdf) {
+    if (process.env.VERCEL === "1") {
+      throw new Error("No se pudo subir el archivo de respaldo a Supabase Storage.");
+    }
     const uploadsDir = path.join(process.cwd(), "public", "uploads", "respaldos");
     if (!fs.existsSync(uploadsDir)) {
       fs.mkdirSync(uploadsDir, { recursive: true });

@@ -8,6 +8,22 @@ import { cookies } from "next/headers";
 
 const RETRY_BACKOFF_MS = [150, 400];
 const SUPABASE_ANYCAST_IPV4 = "104.18.38.10";
+const DEFAULT_SUPABASE_HOST = "yarmvjkhyovtyoecdpi.supabase.co";
+
+const SUPABASE_HOST = (() => {
+  try {
+    const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (rawUrl) {
+      const host = new URL(rawUrl).hostname;
+      if (host.endsWith(".supabase.co")) {
+        return host;
+      }
+    }
+  } catch {
+    // Fallback al host por defecto
+  }
+  return DEFAULT_SUPABASE_HOST;
+})();
 
 function replyLookup(
   address: string,
@@ -22,10 +38,11 @@ function replyLookup(
   }
 }
 
-// undici conserva automáticamente el hostname de la URL para TLS/SNI (servername)
-// y Host header, mientras lookup devuelve directamente la IP Anycast IPv4 sin usar getaddrinfo.
+// Cloudflare requiere el dominio original en el handshake TLS (servername / SNI)
+// y en la cabecera HTTP Host cuando se resuelve directamente hacia la IP Anycast 104.18.38.10.
 const supabaseAgent = new Agent({
   connect: {
+    servername: SUPABASE_HOST,
     lookup: (hostname, options, callback) => {
       if (hostname.endsWith(".supabase.co")) {
         replyLookup(SUPABASE_ANYCAST_IPV4, 4, options, callback);
@@ -50,27 +67,38 @@ const supabaseAgent = new Agent({
 
 /**
  * Fetch personalizado para Supabase en entorno Node.js / Vercel Serverless:
- * - Usa undici Agent con resolución estática IPv4 Anycast para *.supabase.co (0 consultas DNS),
- *   conservando el hostname original para TLS/SNI.
- * - Fuerza cache: 'no-store' para evitar respuestas cacheadas obsoletas.
- * - Fuerza Connection: 'close' para evitar reutilizar sockets keep-alive cerrados.
+ * - Usa undici Agent con resolución estática IPv4 Anycast para *.supabase.co (0 consultas DNS)
+ *   y servername TLS/SNI explícito.
+ * - Fuerza cabecera Host hacia el proyecto Supabase para evitar "Project not specified".
+ * - Fuerza cache: 'no-store' y Connection: 'close'.
  * - Reintenta hasta 3 veces con backoff escalonado (150ms y 400ms) ante fallos transitorios.
  */
 async function safeSupabaseFetch(
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
-  const headers = new Headers(init?.headers);
-  if (!headers.has("Connection")) {
-    headers.set("Connection", "close");
-  }
-
   const targetUrl =
     typeof input === "string"
       ? input
       : input instanceof URL
       ? input.toString()
       : input.url;
+
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Connection")) {
+    headers.set("Connection", "close");
+  }
+
+  let effectiveHost = SUPABASE_HOST;
+  try {
+    const parsedHost = new URL(targetUrl).hostname;
+    if (parsedHost.endsWith(".supabase.co")) {
+      effectiveHost = parsedHost;
+    }
+  } catch {
+    // Mantener SUPABASE_HOST
+  }
+  headers.set("Host", effectiveHost);
 
   const requestInit = {
     ...init,
@@ -138,15 +166,18 @@ export const createServerSupabaseClient = cache(async () => {
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    serviceRoleKey ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     "placeholder-key";
 
-  if (!cookieStore) {
+  // Si existe SUPABASE_SERVICE_ROLE_KEY o no hay contexto de cookies, usar cliente directo
+  // sin @supabase/ssr para evitar que cookies anónimas/expiradas activen restricciones RLS.
+  if (serviceRoleKey || !cookieStore) {
     return createSupabaseClient(url, key, {
       global: { fetch: safeSupabaseFetch },
-      auth: { persistSession: false },
+      auth: { persistSession: false, autoRefreshToken: false },
     }) as any;
   }
 

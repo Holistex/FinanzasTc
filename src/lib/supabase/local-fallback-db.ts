@@ -62,6 +62,7 @@ export interface LocalDatabaseSchema {
   litigios_cuotas_comparendo?: CuotaComparendo[];
 }
 
+const IS_READONLY_FS = process.env.VERCEL === "1";
 const DB_DIR = path.join(process.cwd(), ".data");
 const DB_FILE = path.join(DB_DIR, "finanzas-local-db.json");
 
@@ -900,6 +901,9 @@ const INITIAL_SEED: LocalDatabaseSchema = {
 };
 
 export function readLocalDb(): LocalDatabaseSchema {
+  if (IS_READONLY_FS) {
+    return structuredClone(INITIAL_SEED);
+  }
   try {
     if (!fs.existsSync(DB_DIR)) {
       fs.mkdirSync(DB_DIR, { recursive: true });
@@ -1048,6 +1052,9 @@ export function readLocalDb(): LocalDatabaseSchema {
 }
 
 export function writeLocalDb(data: LocalDatabaseSchema): void {
+  if (IS_READONLY_FS) {
+    return;
+  }
   try {
     if (!fs.existsSync(DB_DIR)) {
       fs.mkdirSync(DB_DIR, { recursive: true });

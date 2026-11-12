@@ -185,14 +185,19 @@ export async function upsertMantenedorOnAction(
         .select()
         .single();
 
-      if (!error && data) {
+      if (error) {
+        throw new Error(`Error al guardar en Supabase (mantenedor_on): ${error.message}`);
+      }
+
+      if (data) {
         record = {
           ...data,
           activo: data.activo !== false,
         } as MantenedorON;
       }
     } catch (err: any) {
-      console.warn(`[Supabase upsert mantenedor_on warning]: ${err?.message}`);
+      console.error(`[Supabase upsert mantenedor_on error]: ${err?.message}`);
+      throw err instanceof Error ? err : new Error(String(err));
     }
   }
 
@@ -237,9 +242,13 @@ export async function toggleMantenedorOnStatusAction(
       } else {
         query = query.eq("id", id);
       }
-      await query;
-    } catch {
-      // ignore
+      const { error } = await query;
+      if (error) {
+        throw new Error(`Error al actualizar estado en Supabase (mantenedor_on): ${error.message}`);
+      }
+    } catch (err: any) {
+      console.error(`[Supabase toggle mantenedor_on error]: ${err?.message}`);
+      throw err instanceof Error ? err : new Error(String(err));
     }
   }
 
@@ -268,9 +277,13 @@ export async function deleteMantenedorOnAction(id: string): Promise<boolean> {
       } else {
         query = query.eq("id", id);
       }
-      await query;
-    } catch {
-      // ignore
+      const { error } = await query;
+      if (error) {
+        throw new Error(`Error al eliminar en Supabase (mantenedor_on): ${error.message}`);
+      }
+    } catch (err: any) {
+      console.error(`[Supabase delete mantenedor_on error]: ${err?.message}`);
+      throw err instanceof Error ? err : new Error(String(err));
     }
   }
 
