@@ -288,7 +288,10 @@ export async function saveUsuarioAction(
           .select()
           .single();
 
-        if (!error && data) {
+        if (error) {
+          throw new Error(`Error al actualizar usuario en Supabase: ${error.message}`);
+        }
+        if (data) {
           revalidatePath("/configuracion/maestro-usuarios");
           return {
             ...(data as UsuarioSistema),
@@ -310,7 +313,10 @@ export async function saveUsuarioAction(
           .select()
           .single();
 
-        if (!error && data) {
+        if (error) {
+          throw new Error(`Error al crear usuario en Supabase: ${error.message}`);
+        }
+        if (data) {
           revalidatePath("/configuracion/maestro-usuarios");
           return {
             ...(data as UsuarioSistema),
@@ -318,8 +324,8 @@ export async function saveUsuarioAction(
           };
         }
       }
-    } catch {
-      // Fallback
+    } catch (err: any) {
+      throw err instanceof Error ? err : new Error(String(err));
     }
   }
 
@@ -372,12 +378,13 @@ export async function saveUsuarioAction(
  */
 export async function deleteUsuarioAction(id: string): Promise<{ success: boolean }> {
   if (isServerSupabaseConfigured()) {
-    try {
-      const supabase = await createServerSupabaseClient();
-      await supabase.from("usuarios").delete().eq("id", id);
-    } catch {
-      // Ignorar si tabla no existe
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase.from("usuarios").delete().eq("id", id);
+    if (error) {
+      throw new Error(`Error al eliminar usuario en Supabase: ${error.message}`);
     }
+    revalidatePath("/configuracion/maestro-usuarios");
+    return { success: true };
   }
 
   const db = readLocalDb();
