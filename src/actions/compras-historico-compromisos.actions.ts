@@ -46,10 +46,17 @@ export async function getHistoricoPagosComprasAction(params?: {
     rawPagos.push(...db.pagos_compras);
   }
 
-  // 2. Extraer pagos derivados de facturas saldadas ($0) en DB local
-  const facturasSaldadasLocal = (db.facturas_compras || []).filter(
-    (f) => (f.monto_saldo === 0 || f.estado === "PAGADA" || f.estado === "CHEQUE" || f.estado === "COMPRA_TC") && f.tipo_doc !== 61
-  );
+  // 2. Extraer pagos derivados de facturas saldadas en DB local (excluyendo cheques emitidos aún no cobrados)
+  const facturasSaldadasLocal = (db.facturas_compras || []).filter((f) => {
+    if (f.tipo_doc === 61) return false;
+    if (f.estado === "PAGADA" || f.estado === "COMPRA_TC") return true;
+    if (f.condicion_pago === "CONTADO" && f.monto_saldo === 0) return true;
+    if (f.estado === "CHEQUE") {
+      const chks = (db.cheques_compras || []).filter((c) => c.factura_id === f.id);
+      return chks.length > 0 && chks.every((c) => c.estado === "COBRADO");
+    }
+    return f.monto_saldo === 0 && f.estado !== "DEUDA_PROVEEDOR";
+  });
 
   const foliosRegistrados = new Set(rawPagos.map((p) => p.folio));
   const colabMap = new Map((db.mantenedor_colaboradores || []).map((c) => [c.id, c]));
@@ -167,8 +174,8 @@ export async function getHistoricoPagosComprasAction(params?: {
           const esSaldada =
             mods.includes("PAGADA") ||
             mods.includes("COMPRA_TC") ||
-            sFac.condicion_pago === "CONTADO" ||
-            saldo === 0;
+            (sFac.condicion_pago === "CONTADO" && saldo === 0) ||
+            (saldo === 0 && !mods.includes("CHEQUE") && !mods.includes("FACTORING") && !mods.includes("CONFIRMING"));
 
           if (
             esSaldada &&
@@ -475,8 +482,10 @@ export async function getCompromisosComprasAction(params?: {
     // 2.4 Asegurar que facturas con estado o modalidad CHEQUE tengan presencia si cheques_compras no las tenía
     const facturasChequeSaldadas = (db.facturas_compras || []).filter(
       (f) =>
-        f.estado === "CHEQUE" ||
-        ((f as unknown as Record<string, unknown>).modalidad_pago as string)?.toUpperCase() === "CHEQUE"
+        f.estado !== "PAGADA" &&
+        !((f as unknown as Record<string, unknown>).modalidad_pago as string)?.toUpperCase().includes("PAGADA") &&
+        (f.estado === "CHEQUE" ||
+          ((f as unknown as Record<string, unknown>).modalidad_pago as string)?.toUpperCase() === "CHEQUE")
     );
     for (const f of facturasChequeSaldadas) {
       if (!rawCompromisos.some((rc) => rc.referencia_doc.includes(String(f.folio)) || (f.numero_cheque && rc.referencia_doc.includes(f.numero_cheque)))) {
@@ -512,9 +521,10 @@ export async function getCompromisosComprasAction(params?: {
             ].map((v) => (v ? String(v).toUpperCase() : ""));
 
             const esCompromiso =
-              mods.includes("FACTORING") ||
-              mods.includes("CONFIRMING") ||
-              mods.includes("CHEQUE");
+              !mods.includes("PAGADA") &&
+              (mods.includes("FACTORING") ||
+                mods.includes("CONFIRMING") ||
+                mods.includes("CHEQUE"));
 
             if (esCompromiso && !rawCompromisos.some((rc) => rc.referencia_doc.includes(String(fol)))) {
               const mod: ModalidadCompromiso =

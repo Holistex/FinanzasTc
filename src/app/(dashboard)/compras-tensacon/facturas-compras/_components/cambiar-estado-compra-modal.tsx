@@ -39,6 +39,7 @@ import {
   netearFacturaCompraAction,
   registrarChequesCompraAction,
   eliminarChequeCompraAction,
+  prorrogarChequeCompraAction,
 } from "@/actions/facturas-compras.actions";
 import { formatCLP, formatRutDisplay, normalizeRut } from "@/lib/utils";
 
@@ -304,6 +305,22 @@ export function CambiarEstadoCompraModal({
         onClose();
       } else {
         setErrorMessage(res.error || "Error al eliminar el cheque.");
+      }
+    });
+  };
+
+  const handleProrrogarChequePrevio = (chequeId: string, nuevaFecha: string) => {
+    if (!nuevaFecha || !factura) return;
+    startTransition(async () => {
+      const res = await prorrogarChequeCompraAction({
+        facturaId: factura.id,
+        chequeId,
+        nuevaFechaVencimiento: nuevaFecha,
+      });
+      if (res.success) {
+        onSuccess();
+      } else {
+        setErrorMessage(res.error || "Error al prorrogar el cheque.");
       }
     });
   };
@@ -847,10 +864,10 @@ export function CambiarEstadoCompraModal({
                   {/* Feedback Modo A */}
                   <div className="pt-2 border-t border-slate-100 text-xs">
                     {montoChequeUnico === saldoActualFactura ? (
-                      <div className="flex items-center gap-1.5 text-emerald-800 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <div className="flex items-center gap-1.5 text-amber-900 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+                        <CheckCircle2 className="h-4 w-4 text-amber-600 shrink-0" />
                         <span>
-                          <strong>Factura Saldada 100%:</strong> Este cheque cubre el total del saldo pendiente (<strong>{formatCLP(montoChequeUnico)}</strong>).
+                          <strong>Cheque Emitido (Compromiso Activo):</strong> Este cheque cubre el total del saldo pendiente (<strong>{formatCLP(montoChequeUnico)}</strong>). El saldo permanecerá activo como compromiso financiero hasta que se confirme su cobro o pago manual.
                         </span>
                       </div>
                     ) : montoChequeUnico > 0 && montoChequeUnico < saldoActualFactura ? (
@@ -1080,7 +1097,7 @@ export function CambiarEstadoCompraModal({
                           <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-bold">
                             <th className="py-1 px-2">N° Cheque</th>
                             <th className="py-1 px-2">Banco</th>
-                            <th className="py-1 px-2">Vencimiento</th>
+                            <th className="py-1 px-2">Vencimiento / Prórroga</th>
                             <th className="py-1 px-2 text-right">Monto</th>
                             <th className="py-1 px-2 text-center">Acción</th>
                           </tr>
@@ -1092,7 +1109,19 @@ export function CambiarEstadoCompraModal({
                                 #{c.numero_cheque}
                               </td>
                               <td className="py-1.5 px-2 text-slate-600">{c.banco_emisor}</td>
-                              <td className="py-1.5 px-2 text-slate-600">{c.fecha_vencimiento}</td>
+                              <td className="py-1.5 px-2 text-slate-600">
+                                <input
+                                  type="date"
+                                  defaultValue={c.fecha_vencimiento}
+                                  onBlur={(e) => {
+                                    if (e.target.value && e.target.value !== c.fecha_vencimiento) {
+                                      handleProrrogarChequePrevio(c.id, e.target.value);
+                                    }
+                                  }}
+                                  className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-mono text-slate-800 shadow-xs focus:border-amber-500 focus:outline-none"
+                                  title="Editar fecha para prorrogar cheque"
+                                />
+                              </td>
                               <td className="py-1.5 px-2 text-right font-mono font-bold text-amber-800">
                                 {formatCLP(c.monto_cheque)}
                               </td>

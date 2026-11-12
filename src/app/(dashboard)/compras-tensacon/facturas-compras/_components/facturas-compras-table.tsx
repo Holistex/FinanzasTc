@@ -67,6 +67,10 @@ const RegistrarPagoCompraModal = dynamic(
   () => import("./registrar-pago-compra-modal").then((m) => m.RegistrarPagoCompraModal),
   { ssr: false }
 );
+const ProrrogarChequeModal = dynamic(
+  () => import("./prorrogar-cheque-modal").then((m) => m.ProrrogarChequeModal),
+  { ssr: false }
+);
 
 export type TabCompras = "CARTERA" | "CHEQUES" | "FACTORING" | "CONFIRMING" | "FAC_NC";
 export type SubTabFacNc = "TODOS" | "SOLO_NC" | "SOLO_FAC" | "HISTORIAL_NETEOS";
@@ -157,6 +161,7 @@ export function FacturasComprasTable({
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [selectedFacturaForState, setSelectedFacturaForState] = useState<FacturaCompra | null>(null);
   const [selectedFacturaForPago, setSelectedFacturaForPago] = useState<FacturaCompra | null>(null);
+  const [selectedFacturaForProrroga, setSelectedFacturaForProrroga] = useState<FacturaCompra | null>(null);
 
   // Recargar datos
   const handleRefresh = () => {
@@ -839,9 +844,16 @@ export function FacturasComprasTable({
                                 {formatDateCL(factura.fecha_docto)}
                               </div>
                               <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                                <span className="text-slate-400">Venc:</span>
-                                <span className="font-semibold text-slate-700">
-                                  {factura.fecha_vencimiento
+                                <span className={factura.estado === "CHEQUE" || activeTab === "CHEQUES" ? "text-amber-700 font-semibold" : "text-slate-400"}>
+                                  {factura.estado === "CHEQUE" || activeTab === "CHEQUES" ? "Cobro:" : "Venc:"}
+                                </span>
+                                <span className={cn(
+                                  "font-semibold",
+                                  factura.estado === "CHEQUE" || activeTab === "CHEQUES" ? "text-amber-900 font-mono font-bold" : "text-slate-700"
+                                )}>
+                                  {factura.estado === "CHEQUE" && factura.fecha_vencimiento_cheque
+                                    ? formatDateCL(factura.fecha_vencimiento_cheque)
+                                    : factura.fecha_vencimiento
                                     ? formatDateCL(factura.fecha_vencimiento)
                                     : "—"}
                                 </span>
@@ -1009,7 +1021,7 @@ export function FacturasComprasTable({
                           <div className="font-bold text-xs tracking-tight text-slate-900 font-mono">
                             {formatCLP(saldo)}
                           </div>
-                          {(tieneAjusteParcial || factura.estado === "CHEQUE" || factura.estado === "COMPRA_TC") && (
+                          {(tieneAjusteParcial && factura.estado !== "CHEQUE" && factura.estado !== "COMPRA_TC") && (
                             <div className="text-[10px] text-slate-400 line-through font-mono">
                               {formatCLP(factura.monto_total)}
                             </div>
@@ -1022,11 +1034,21 @@ export function FacturasComprasTable({
                             <button
                               onClick={() => setSelectedFacturaForPago(factura)}
                               className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-xs"
-                              title="Registrar pago directo o abono parcial"
+                              title="Registrar pago directo o confirmar cobro de cheque"
                             >
                               <Banknote className="h-3 w-3" />
                               <span>Pagar</span>
                             </button>
+                            {(activeTab === "CHEQUES" || factura.estado === "CHEQUE") && (
+                              <button
+                                onClick={() => setSelectedFacturaForProrroga(factura)}
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 transition-colors shadow-xs"
+                                title="Prorrogar o modificar fecha de vencimiento/cobro del cheque"
+                              >
+                                <CalendarClock className="h-3 w-3 text-amber-700" />
+                                <span>Prorrogar</span>
+                              </button>
+                            )}
                             <button
                               onClick={() => setSelectedFacturaForState(factura)}
                               className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:text-white bg-slate-100 hover:bg-[#E05A10] border border-slate-300 hover:border-[#E05A10] transition-all shadow-xs"
@@ -1338,6 +1360,16 @@ export function FacturasComprasTable({
           handleRefresh();
         }}
         factura={selectedFacturaForPago}
+      />
+
+      {/* Modal para Prórroga de Cheques */}
+      <ProrrogarChequeModal
+        isOpen={Boolean(selectedFacturaForProrroga)}
+        onClose={() => setSelectedFacturaForProrroga(null)}
+        onSuccess={() => {
+          handleRefresh();
+        }}
+        factura={selectedFacturaForProrroga}
       />
     </div>
   );

@@ -315,30 +315,38 @@ export async function getFacturasComprasAction(
       );
       fc.total_cheques_emitidos = totalCheques;
 
+      const chequesCobrados = chequesDeEstaFactura.filter((c) => c.estado === "COBRADO");
+      const totalChequesCobrados = chequesCobrados.reduce(
+        (sum, c) => sum + Number(c.monto_cheque || 0),
+        0
+      );
+
       if (
         fc.estado === "COMPRA_TC" ||
         fc.condicion_pago === "CONTADO" ||
-        fc.monto_saldo === 0 ||
-        fc.deuda_proveedor === 0
+        fc.estado === "PAGADA"
       ) {
         // Factura ya saldada ($0) por Compra TC, Contado o pago previo -> mantener saldo $ 0
         fc.monto_saldo = 0;
         fc.deuda_proveedor = 0;
         if (totalNeteado > 0 && fc.estado !== "COMPRA_TC") {
           fc.estado = "NETEO_NC";
-        } else if (totalCheques > 0 && fc.estado !== "COMPRA_TC") {
-          fc.estado = "CHEQUE";
+        }
+      } else if (fc.estado === "CHEQUE" || totalCheques > 0) {
+        // CICLO DE VIDA DE CHEQUES: Los cheques EMITIDOS mantienen el saldo de la factura ACTIVO
+        // (dinero aún no sale del banco). Sólo cheques efectivamente COBRADOS reducen el saldo.
+        const saldoCheque = Math.max(0, fc.monto_total - totalNeteado - totalChequesCobrados);
+        fc.monto_saldo = saldoCheque;
+        fc.deuda_proveedor = saldoCheque;
+        if (saldoCheque === 0) {
+          fc.estado = "PAGADA";
         }
       } else {
-        const saldoCalculado = Math.max(0, fc.monto_total - totalNeteado - totalCheques);
+        const saldoCalculado = Math.max(0, fc.monto_total - totalNeteado);
         fc.monto_saldo = saldoCalculado;
 
-        if (saldoCalculado === 0) {
-          if (totalNeteado > 0) {
-            fc.estado = "NETEO_NC";
-          } else if (totalCheques > 0) {
-            fc.estado = "CHEQUE";
-          }
+        if (saldoCalculado === 0 && totalNeteado > 0) {
+          fc.estado = "NETEO_NC";
         }
       }
     }
@@ -1221,8 +1229,9 @@ export async function registrarChequesCompraAction(
       };
     }
 
-    const nuevoSaldo = Math.max(0, saldoActual - sumaCheques);
-    const estaSaldadaConCheques = nuevoSaldo === 0;
+    // CICLO DE VIDA DE CHEQUE: Al emitir el cheque, el saldo se mantiene ACTIVO (compromiso vigente).
+    // NO se reduce a cero ni se inserta en pagos hasta que el cheque sea efectivamente cobrado/pagado.
+    const saldoActivo = saldoActual > 0 ? saldoActual : Number(factura.monto_total || 0);
 
     // Crear entidades ChequeCompra
     const nuevosCheques: ChequeCompra[] = input.cheques.map((c, idx) => ({
@@ -1253,13 +1262,11 @@ export async function registrarChequesCompraAction(
     const refBanco = input.cheques[0].bancoEmisor.trim();
     const refFechaVcto = input.cheques[0].fechaVencimiento;
 
-    db.facturas_compras[localIdx].monto_saldo = nuevoSaldo;
-    db.facturas_compras[localIdx].deuda_proveedor = estaSaldadaConCheques ? 0 : nuevoSaldo;
-    if (estaSaldadaConCheques) {
-      db.facturas_compras[localIdx].estado = "CHEQUE";
-      (db.facturas_compras[localIdx] as unknown as Record<string, unknown>).modalidad_pago = "CHEQUE";
-      (db.facturas_compras[localIdx] as unknown as Record<string, unknown>).modalidad = "CHEQUE";
-    }
+    db.facturas_compras[localIdx].monto_saldo = saldoActivo;
+    db.facturas_compras[localIdx].deuda_proveedor = saldoActivo;
+    db.facturas_compras[localIdx].estado = "CHEQUE";
+    (db.facturas_compras[localIdx] as unknown as Record<string, unknown>).modalidad_pago = "CHEQUE";
+    (db.facturas_compras[localIdx] as unknown as Record<string, unknown>).modalidad = "CHEQUE";
     db.facturas_compras[localIdx].numero_cheque = refNumCheque;
     db.facturas_compras[localIdx].banco_emisor = refBanco;
     db.facturas_compras[localIdx].fecha_vencimiento_cheque = refFechaVcto;
@@ -1289,16 +1296,12 @@ export async function registrarChequesCompraAction(
       }
 
       const updateData: Record<string, unknown> = {
-        monto_saldo: nuevoSaldo,
-        saldo_pendiente: nuevoSaldo,
-        deuda_proveedor: estaSaldadaConCheques ? 0 : nuevoSaldo,
-        estado: estaSaldadaConCheques ? "CHEQUE" : factura.estado,
-        modalidad_pago: estaSaldadaConCheques
-          ? "CHEQUE"
-          : (factura as unknown as Record<string, unknown>).modalidad_pago || factura.estado,
-        modalidad: estaSaldadaConCheques
-          ? "CHEQUE"
-          : (factura as unknown as Record<string, unknown>).modalidad || factura.estado,
+        monto_saldo: saldoActivo,
+        saldo_pendiente: saldoActivo,
+        deuda_proveedor: saldoActivo,
+        estado: "CHEQUE",
+        modalidad_pago: "CHEQUE",
+        modalidad: "CHEQUE",
         numero_cheque: refNumCheque,
         banco_emisor: refBanco,
         fecha_vencimiento_cheque: refFechaVcto,
@@ -1328,7 +1331,7 @@ export async function registrarChequesCompraAction(
 
     return {
       success: true,
-      nuevoSaldo,
+      nuevoSaldo: saldoActivo,
       totalChequesEmitidos: sumaCheques,
     };
   } catch (err: unknown) {
@@ -1409,6 +1412,103 @@ export async function eliminarChequeCompraAction(
     return { success: true };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Error al eliminar el cheque";
+    return { success: false, error: msg };
+  }
+}
+
+export interface ProrrogarChequeCompraParams {
+  facturaId: string;
+  chequeId?: string | null;
+  nuevaFechaVencimiento: string; // YYYY-MM-DD
+  observacion?: string | null;
+}
+
+/**
+ * Prorroga o modifica la fecha de vencimiento/cobro de un cheque emitido
+ * Actualiza cheques_compras y facturas_compras (fecha_vencimiento_cheque y fecha_vencimiento)
+ */
+export async function prorrogarChequeCompraAction(
+  params: ProrrogarChequeCompraParams
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { facturaId, chequeId, nuevaFechaVencimiento, observacion } = params;
+    if (!facturaId) throw new Error("El ID de la factura es obligatorio.");
+    if (!nuevaFechaVencimiento) throw new Error("La nueva fecha de vencimiento es obligatoria.");
+
+    const db = readLocalDb();
+    if (!db.facturas_compras) db.facturas_compras = [];
+    if (!db.cheques_compras) db.cheques_compras = [];
+
+    const nowIso = new Date().toISOString();
+
+    // 1. Actualizar cheques en Local DB
+    let chequesActualizados = 0;
+    db.cheques_compras.forEach((c) => {
+      if ((chequeId ? c.id === chequeId : c.factura_id === facturaId) && c.estado !== "COBRADO") {
+        c.fecha_vencimiento = nuevaFechaVencimiento;
+        if (observacion?.trim()) {
+          c.observacion = c.observacion
+            ? `${c.observacion} · Prórroga: ${observacion.trim()}`
+            : `Prórroga: ${observacion.trim()}`;
+        }
+        c.updated_at = nowIso;
+        chequesActualizados++;
+      }
+    });
+
+    // 2. Actualizar factura en Local DB
+    const fIdx = db.facturas_compras.findIndex((f) => f.id === facturaId);
+    if (fIdx !== -1) {
+      db.facturas_compras[fIdx].fecha_vencimiento_cheque = nuevaFechaVencimiento;
+      db.facturas_compras[fIdx].fecha_vencimiento = nuevaFechaVencimiento;
+      db.facturas_compras[fIdx].updated_at = nowIso;
+    }
+
+    writeLocalDb(db);
+
+    // 3. Persistir en Supabase si está disponible
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      try {
+        if (chequeId) {
+          await supabase
+            .from("cheques_compras")
+            .update({
+              fecha_vencimiento: nuevaFechaVencimiento,
+              updated_at: nowIso,
+            })
+            .eq("id", chequeId);
+        } else {
+          await supabase
+            .from("cheques_compras")
+            .update({
+              fecha_vencimiento: nuevaFechaVencimiento,
+              updated_at: nowIso,
+            })
+            .eq("factura_id", facturaId)
+            .neq("estado", "COBRADO");
+        }
+
+        await supabase
+          .from("facturas_compras")
+          .update({
+            fecha_vencimiento_cheque: nuevaFechaVencimiento,
+            fecha_vencimiento: nuevaFechaVencimiento,
+            updated_at: nowIso,
+          })
+          .eq("id", facturaId);
+      } catch (errSupa) {
+        console.warn("Advertencia al prorrogar cheque en Supabase:", errSupa);
+      }
+    }
+
+    revalidatePath("/compras-tensacon/facturas-compras");
+    revalidatePath("/compras-tensacon/compromisos");
+    revalidatePath("/compras-tensacon/historico-pagos");
+
+    return { success: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Error al prorrogar el cheque";
     return { success: false, error: msg };
   }
 }
@@ -1539,12 +1639,29 @@ export async function registrarPagoFacturaCompraAction(
 
     db.pagos_compras.unshift(nuevoPago);
 
+    // 2.1 Si la factura o el pago es de modalidad CHEQUE, marcar los cheques como COBRADO
+    const esChequePago =
+      modalidadPago === "CHEQUE" ||
+      targetFactura.estado === "CHEQUE" ||
+      (targetFactura as unknown as Record<string, unknown>).modalidad_pago === "CHEQUE";
+
+    if (esChequePago && db.cheques_compras) {
+      db.cheques_compras.forEach((c) => {
+        if (c.factura_id === targetFactura.id && c.estado !== "COBRADO") {
+          c.estado = "COBRADO";
+          c.updated_at = nowIso;
+        }
+      });
+    }
+
     // 3. Actualizar la factura en Local DB
     if (facturaIdx !== -1) {
       db.facturas_compras[facturaIdx].monto_saldo = nuevoSaldo;
       db.facturas_compras[facturaIdx].deuda_proveedor = estaSaldada ? 0 : nuevoSaldo;
       if (estaSaldada) {
         db.facturas_compras[facturaIdx].estado = "PAGADA";
+        (db.facturas_compras[facturaIdx] as unknown as Record<string, unknown>).modalidad = "PAGADA";
+        (db.facturas_compras[facturaIdx] as unknown as Record<string, unknown>).modalidad_pago = "PAGADA";
       }
       db.facturas_compras[facturaIdx].updated_at = nowIso;
     } else {
@@ -1552,6 +1669,8 @@ export async function registrarPagoFacturaCompraAction(
       targetFactura.deuda_proveedor = estaSaldada ? 0 : nuevoSaldo;
       if (estaSaldada) {
         targetFactura.estado = "PAGADA";
+        (targetFactura as unknown as Record<string, unknown>).modalidad = "PAGADA";
+        (targetFactura as unknown as Record<string, unknown>).modalidad_pago = "PAGADA";
       }
       targetFactura.updated_at = nowIso;
       db.facturas_compras.push(targetFactura);
@@ -1562,6 +1681,18 @@ export async function registrarPagoFacturaCompraAction(
     if (isServerSupabaseConfigured() && !targetFactura.id.startsWith("fc-local-")) {
       try {
         const supabase = await createServerSupabaseClient();
+
+        // 4.0 Actualizar cheques a COBRADO en Supabase si corresponde
+        if (esChequePago) {
+          try {
+            await supabase
+              .from("cheques_compras")
+              .update({ estado: "COBRADO", updated_at: nowIso })
+              .eq("factura_id", targetFactura.id);
+          } catch (chkErr) {
+            console.warn("Advertencia al marcar cheque como COBRADO en Supabase:", chkErr);
+          }
+        }
 
         // 4.1 Insertar pago en tabla pagos_facturas_compras o pagos_compras
         const pagoPayload = {
@@ -1595,6 +1726,7 @@ export async function registrarPagoFacturaCompraAction(
           deuda_proveedor: estaSaldada ? 0 : nuevoSaldo,
           estado: estaSaldada ? "PAGADA" : targetFactura.estado,
           modalidad_pago: estaSaldada ? "PAGADA" : (targetFactura as unknown as Record<string, unknown>).modalidad_pago || targetFactura.estado,
+          modalidad: estaSaldada ? "PAGADA" : (targetFactura as unknown as Record<string, unknown>).modalidad || targetFactura.estado,
           updated_at: nowIso,
         };
 
