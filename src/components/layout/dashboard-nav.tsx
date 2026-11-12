@@ -63,7 +63,7 @@ const SidebarTopLink = React.memo(function SidebarTopLink({
   return (
     <Link
       href={href}
-      prefetch={true}
+      prefetch={false}
       onMouseEnter={handlePrefetch}
       onTouchStart={handlePrefetch}
       className={cn(
@@ -118,7 +118,7 @@ const SidebarSubLink = React.memo(function SidebarSubLink({
   return (
     <Link
       href={href}
-      prefetch={true}
+      prefetch={false}
       onMouseEnter={handlePrefetch}
       onTouchStart={handlePrefetch}
       className={cn(

@@ -1,12 +1,21 @@
+import dns from "node:dns";
+import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
+// Prioriza IPv4 para evitar fallos DNS / sockets en Node.js y Vercel Serverless
+dns.setDefaultResultOrder("ipv4first");
+
+const RETRY_BACKOFF_MS = [150, 400];
+
 /**
  * Fetch personalizado para Supabase en entorno Node.js / Vercel Serverless:
  * - Fuerza cache: 'no-store' para evitar respuestas cacheadas obsoletas.
- * - Fuerza Connection: 'close' para evitar reutilizar sockets keep-alive cerrados (TypeError: fetch failed).
- * - Reintenta una vez ante fallos transitorios de red o socket cerrado.
+ * - Fuerza Connection: 'close' para evitar reutilizar sockets keep-alive cerrados.
+ * - Ante getaddrinfo ENOTFOUND o fallos transitorios de red/socket, realiza
+ *   lookup IPv4 explícito con dns.promises.lookup y reintenta hasta 3 veces
+ *   con backoff escalonado (150ms y 400ms).
  */
 async function safeSupabaseFetch(
   input: RequestInfo | URL,
@@ -23,30 +32,51 @@ async function safeSupabaseFetch(
     cache: "no-store",
   };
 
+  const targetUrl =
+    typeof input === "string"
+      ? input
+      : input instanceof URL
+      ? input.toString()
+      : input.url;
+
   let lastError: unknown;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt <= RETRY_BACKOFF_MS.length; attempt++) {
     try {
       return await fetch(input, requestInit);
     } catch (err) {
       lastError = err;
+      const causeCode = (err as any)?.cause?.code;
       const msg = err instanceof Error ? err.message.toLowerCase() : "";
+      const isDnsNotFound = causeCode === "ENOTFOUND" || msg.includes("enotfound");
       const isTransient =
+        isDnsNotFound ||
         err instanceof TypeError ||
         msg.includes("fetch failed") ||
         msg.includes("econnreset") ||
         msg.includes("socket") ||
         msg.includes("etimedout");
 
-      if (!isTransient || attempt === 1) {
+      const hasMoreAttempts = attempt < RETRY_BACKOFF_MS.length;
+      if (!isTransient || !hasMoreAttempts) {
         console.error("[safeSupabaseFetch] Error al ejecutar fetch hacia Supabase:", {
-          url: typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url,
+          url: targetUrl,
           attempt: attempt + 1,
           cause: (err as any)?.cause,
           errorDetail: JSON.stringify(err, Object.getOwnPropertyNames(err)),
         });
         throw err;
       }
-      await new Promise((resolve) => setTimeout(resolve, 80));
+
+      if (isDnsNotFound) {
+        try {
+          const { hostname } = new URL(targetUrl);
+          await dns.promises.lookup(hostname, { family: 4 });
+        } catch {
+          // Si el warm-up DNS falla, continuar con el backoff antes del reintento
+        }
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, RETRY_BACKOFF_MS[attempt]));
     }
   }
 
@@ -66,7 +96,10 @@ export function isServerSupabaseConfigured(): boolean {
   );
 }
 
-export async function createServerSupabaseClient() {
+/**
+ * Retorna una única instancia reutilizable de Supabase por petición HTTP (vía React cache).
+ */
+export const createServerSupabaseClient = cache(async () => {
   let cookieStore: any = null;
   try {
     cookieStore = await cookies();
@@ -110,4 +143,4 @@ export async function createServerSupabaseClient() {
       },
     }
   );
-}
+});
