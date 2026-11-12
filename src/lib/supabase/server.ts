@@ -38,6 +38,12 @@ async function safeSupabaseFetch(
         msg.includes("etimedout");
 
       if (!isTransient || attempt === 1) {
+        console.error("[safeSupabaseFetch] Error al ejecutar fetch hacia Supabase:", {
+          url: typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url,
+          attempt: attempt + 1,
+          cause: (err as any)?.cause,
+          errorDetail: JSON.stringify(err, Object.getOwnPropertyNames(err)),
+        });
         throw err;
       }
       await new Promise((resolve) => setTimeout(resolve, 80));
