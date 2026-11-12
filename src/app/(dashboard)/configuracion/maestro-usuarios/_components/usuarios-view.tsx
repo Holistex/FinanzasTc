@@ -271,7 +271,8 @@ export function UsuariosView({ initialUsuarios, perfiles }: UsuariosViewProps) {
 
       {/* Tabla Maestro Usuarios (Densidad Stripe/Linear) */}
       <div className="bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden w-full">
-        <table className="w-full table-auto text-left border-collapse">
+        <div className="w-full overflow-x-auto">
+          <table className="min-w-[750px] lg:min-w-full table-auto text-left border-collapse">
           <thead>
             <tr className="bg-[#0F172A] text-slate-200 text-[10px] font-semibold uppercase tracking-wider border-b border-[#1E293B]">
               <th className="py-2.5 px-3">Nombre Completo</th>
@@ -400,12 +401,13 @@ export function UsuariosView({ initialUsuarios, perfiles }: UsuariosViewProps) {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Modal Crear / Editar Usuario */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-[95vw] sm:w-full max-w-md max-h-[90vh] overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             {/* Cabecera del Modal */}
             <div className="flex items-center justify-between border-b border-slate-100 bg-[#0F172A] px-5 py-3.5 text-white">
               <div className="flex items-center gap-2">

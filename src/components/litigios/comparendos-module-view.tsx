@@ -525,7 +525,7 @@ export function ComparendosModuleView({
       {/* 5. Tabla de Comparendos (Orden estricto de 9 columnas según especificación) */}
       <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="min-w-[850px] lg:min-w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
                 {/* 1 */}
@@ -784,7 +784,7 @@ export function ComparendosModuleView({
       {/* ===================================================================== */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-xl rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="w-[95vw] sm:w-full max-w-xl rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             {/* Header Modal */}
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 bg-slate-50">
               <div className="flex items-center gap-2">

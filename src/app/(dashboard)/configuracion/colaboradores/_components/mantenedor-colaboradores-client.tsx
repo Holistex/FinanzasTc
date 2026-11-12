@@ -428,7 +428,7 @@ export function MantenedorColaboradoresClient({
       {/* 4. TABLA DE COLABORADORES (CABECERA AZUL MARINO #0B1528 Y FILAS BLANCAS) */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="min-w-[750px] lg:min-w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#0B1528] text-slate-200 text-[11px] font-bold uppercase tracking-wider border-b border-[#1E293B]">
                 <th className="py-3 px-4 w-40">RUT</th>
@@ -534,7 +534,7 @@ export function MantenedorColaboradoresClient({
       {/* MODAL 1: CREACIÓN / EDICIÓN MANUAL DE COLABORADOR */}
       {isFormModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="w-[95vw] sm:w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-4">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#0F172A] text-[#E05A10]">
@@ -660,7 +660,7 @@ export function MantenedorColaboradoresClient({
       {/* MODAL 2: IMPORTACIÓN EXCEL Y RESUMEN DE SINCRONIZACIÓN POST-CARGA */}
       {isImportModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="w-[95vw] sm:w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-200 pb-4">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0F172A] text-orange-400">

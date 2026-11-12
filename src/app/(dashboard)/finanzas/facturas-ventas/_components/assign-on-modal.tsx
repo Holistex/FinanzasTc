@@ -91,7 +91,7 @@ export function AssignOnModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="relative w-full max-w-lg rounded-xl border border-slate-700 bg-[#0F172A] p-6 text-slate-100 shadow-2xl">
+      <div className="relative w-[95vw] sm:w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-slate-700 bg-[#0F172A] p-4 sm:p-6 text-slate-100 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div className="flex items-center gap-2.5">

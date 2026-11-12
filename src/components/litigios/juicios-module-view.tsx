@@ -722,7 +722,7 @@ export function JuiciosModuleView({
       {/* 5. Tabla de Causas / Juicios (7 Columnas de Alta Densidad y Alto Contraste) */}
       <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="min-w-[850px] lg:min-w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
                 <th className="py-3 px-3.5 whitespace-nowrap">RIT - RUC</th>
@@ -895,7 +895,7 @@ export function JuiciosModuleView({
       {/* 6. MODAL 1: EDITAR / CREAR CAUSA + BITÁCORA CORRELATIVA (Estilo Claro Ejecutivo) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="w-[95vw] sm:w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 bg-slate-50">
               <div className="flex items-center gap-2">
@@ -1122,7 +1122,7 @@ export function JuiciosModuleView({
                   </div>
                 ) : (
                   <div className="rounded-lg border border-slate-200 bg-white overflow-hidden shadow-xs">
-                    <table className="w-full text-left text-xs border-collapse">
+                    <table className="min-w-[750px] lg:min-w-full text-left text-xs border-collapse">
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-semibold">
                           <th className="px-3 py-2 w-28 whitespace-nowrap">CORRELATIVO</th>
@@ -1196,7 +1196,7 @@ export function JuiciosModuleView({
       {/* 7. MODAL 2: BITÁCORA DEDICADA DE AUDIENCIAS (Historial y Registro Rápido) */}
       {isBitacoraModalOpen && bitacoraJuicio && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="w-[95vw] sm:w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 bg-slate-50">
               <div className="flex items-center gap-2.5">

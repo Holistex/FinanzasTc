@@ -406,7 +406,7 @@ export function DeudaProveedoresClient({ initialData }: DeudaProveedoresClientPr
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
+          <table className="min-w-[750px] lg:min-w-full text-xs text-left">
             <thead className="bg-slate-100/90 text-slate-600 font-semibold border-b border-slate-200 uppercase text-[10px] tracking-wider">
               <tr>
                 <th className="py-2.5 px-4">Mes de Vencimiento</th>
@@ -523,7 +523,7 @@ export function DeudaProveedoresClient({ initialData }: DeudaProveedoresClientPr
       {/* 6. MODAL MULTIPROPÓSITO DE DETALLE DE FACTURAS (POR MES O POR ESTRATO AGING) */}
       {modalData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-[95vw] sm:w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
             {/* Cabecera del Modal */}
             <div className="p-4 border-b border-slate-200 bg-slate-900 text-white flex items-center justify-between">
               <div>
@@ -585,7 +585,7 @@ export function DeudaProveedoresClient({ initialData }: DeudaProveedoresClientPr
 
             {/* Contenido / Tabla del Modal */}
             <div className="overflow-y-auto p-4 flex-1">
-              <table className="w-full text-xs text-left">
+              <table className="min-w-[750px] lg:min-w-full text-xs text-left">
                 <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-semibold border-b border-slate-200">
                   <tr>
                     <th className="py-2 px-3">Folio</th>

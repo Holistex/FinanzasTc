@@ -395,7 +395,7 @@ export function MantenedoresTabsClient({
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <table className="w-full text-left text-xs">
+            <table className="min-w-[650px] lg:min-w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-[#F8FAFC] font-bold text-slate-600 text-[10px] uppercase tracking-wider">
                   <th className="py-2.5 px-3">RUT Factoring</th>
@@ -492,7 +492,7 @@ export function MantenedoresTabsClient({
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <table className="w-full text-left text-xs">
+            <table className="min-w-[650px] lg:min-w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-[#F8FAFC] font-bold text-slate-600 text-[10px] uppercase tracking-wider">
                   <th className="py-2.5 px-3">RUT Proveedor</th>
@@ -581,7 +581,7 @@ export function MantenedoresTabsClient({
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <table className="w-full text-left text-xs">
+            <table className="min-w-[650px] lg:min-w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-[#F8FAFC] font-bold text-slate-600 text-[10px] uppercase tracking-wider">
                   <th className="py-2.5 px-3">RUT Confirming</th>
@@ -655,7 +655,7 @@ export function MantenedoresTabsClient({
       ===================================================================== */}
       {isClienteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-[2px] p-4">
-          <div className="bg-white border border-slate-200 rounded-lg shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="bg-white border border-slate-200 rounded-lg shadow-2xl w-[95vw] sm:w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="px-5 py-3.5 bg-[#0F172A] text-white flex items-center justify-between border-b border-[#1E293B]">
               <h3 className="text-xs font-semibold">
                 {editingCliente
@@ -783,7 +783,7 @@ export function MantenedoresTabsClient({
       ===================================================================== */}
       {isProveedorModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-[2px] p-4">
-          <div className="bg-white border border-slate-200 rounded-lg shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="bg-white border border-slate-200 rounded-lg shadow-2xl w-[95vw] sm:w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="px-5 py-3.5 bg-[#0F172A] text-white flex items-center justify-between border-b border-[#1E293B]">
               <h3 className="text-xs font-semibold">
                 {editingProveedor
@@ -876,7 +876,7 @@ export function MantenedoresTabsClient({
       ===================================================================== */}
       {isConfirmingModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-[2px] p-4">
-          <div className="bg-white border border-slate-200 rounded-lg shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="bg-white border border-slate-200 rounded-lg shadow-2xl w-[95vw] sm:w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="px-5 py-3.5 bg-[#0F172A] text-white flex items-center justify-between border-b border-[#1E293B]">
               <h3 className="text-xs font-semibold">
                 {editingConfirming

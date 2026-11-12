@@ -754,7 +754,7 @@ export function FacturasComprasTable({
       {activeTab !== "FAC_NC" && (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+            <table className="min-w-[850px] lg:min-w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                   <th className="py-3 px-4">TIPO DTE</th>
@@ -1088,7 +1088,7 @@ export function FacturasComprasTable({
           {subTabFacNc !== "HISTORIAL_NETEOS" ? (
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
+                <table className="min-w-[850px] lg:min-w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                       <th className="py-3 px-4">TIPO DTE</th>
@@ -1269,7 +1269,7 @@ export function FacturasComprasTable({
             /* Subvista: Historial de Neteos */
             <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
+                <table className="min-w-[850px] lg:min-w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-600">
                       <th className="py-3 px-4">FECHA OPERACIÓN</th>

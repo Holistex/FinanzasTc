@@ -303,8 +303,8 @@ export function FacturasVentasTable({
   return (
     <div className="space-y-3">
       {/* Compact Header & Action Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-base font-bold tracking-tight text-[#0F172A]">
             VENTAS TENSACON
           </h1>
@@ -333,7 +333,7 @@ export function FacturasVentasTable({
       </div>
 
       {/* Compact KPI Strip with Tensacon Accent Lines */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
         <div className="bg-white border border-slate-200 border-l-4 border-l-slate-700 rounded-md px-3 py-2 shadow-sm flex items-center justify-between">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
@@ -672,9 +672,10 @@ export function FacturasVentasTable({
         </div>
       </div>
 
-      {/* High-Density Financial Table (Zero Horizontal Scroll) */}
+      {/* High-Density Financial Table (Scroll horizontal en móvil, ancho completo en escritorio) */}
       <div className="bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden">
-        <table className="w-full table-auto text-left border-collapse">
+        <div className="w-full overflow-x-auto">
+          <table className="min-w-[850px] lg:min-w-full table-auto text-left border-collapse">
           <thead>
             <tr className="bg-[#0F172A] text-slate-200 text-[10px] font-semibold uppercase tracking-wider border-b border-[#1E293B]">
               <th className="py-2 px-3 w-[135px]">Folio / Documento</th>
@@ -1115,7 +1116,8 @@ export function FacturasVentasTable({
               })
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
 
         {/* Compact Server-Side Pagination Footer */}
         <div className="px-3 py-2 bg-[#F8FAFC] border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">

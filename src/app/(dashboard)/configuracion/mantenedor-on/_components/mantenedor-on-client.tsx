@@ -300,7 +300,7 @@ export function MantenedorOnClient({ initialData }: MantenedorOnClientProps) {
       {/* Tabla Corporativa de Registros (Sin Mandante) */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/90 overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="min-w-[650px] lg:min-w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-800 bg-slate-900 text-xs font-semibold tracking-wider text-slate-400 uppercase">
                 <th className="py-3 px-4 w-32">CÓDIGO ON</th>
@@ -402,7 +402,7 @@ export function MantenedorOnClient({ initialData }: MantenedorOnClientProps) {
       {/* Modal Crear / Editar (Sin Campo Mandante) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="relative w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+          <div className="relative w-[95vw] sm:w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-4">
               <div className="flex items-center gap-2">

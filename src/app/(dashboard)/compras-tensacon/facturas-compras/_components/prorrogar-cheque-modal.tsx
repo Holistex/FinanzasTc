@@ -91,7 +91,7 @@ export function ProrrogarChequeModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xs animate-in fade-in duration-150">
       <div
-        className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden flex flex-col"
+        className="relative w-[95vw] sm:w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl border border-slate-100 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Encabezado */}

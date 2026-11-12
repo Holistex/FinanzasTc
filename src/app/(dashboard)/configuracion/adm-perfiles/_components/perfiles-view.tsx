@@ -313,7 +313,7 @@ export function PerfilesView({ initialPerfiles }: PerfilesViewProps) {
 
         {/* Tabla de Perfiles */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="min-w-[750px] lg:min-w-full text-left text-xs">
             <thead className="border-b border-slate-200 bg-slate-50 text-slate-600 text-[11px] uppercase font-semibold">
               <tr>
                 <th className="py-3 px-4 w-[190px]">Perfil</th>
@@ -438,7 +438,7 @@ export function PerfilesView({ initialPerfiles }: PerfilesViewProps) {
       {/* ========================================================================= */}
       {modalAbierto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="w-[95vw] sm:w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             {/* Header del Modal */}
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 bg-slate-50">
               <div className="flex items-center gap-3">
@@ -676,7 +676,7 @@ export function PerfilesView({ initialPerfiles }: PerfilesViewProps) {
       {/* ========================================================================= */}
       {perfilAEliminar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4">
+          <div className="w-[95vw] sm:w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100 text-red-600">
                 <AlertTriangle className="h-5 w-5" />

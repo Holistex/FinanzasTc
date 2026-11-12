@@ -171,7 +171,7 @@ export function CsvImportDropzoneModal({
 
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-[2px] p-4">
-          <div className="bg-white border border-slate-200 rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="bg-white border border-slate-200 rounded-lg shadow-2xl w-[95vw] sm:w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
             {/* Modal Header */}
             <div className="px-6 py-4 bg-[#0F172A] text-white flex items-center justify-between border-b border-[#1E293B]">
               <div className="flex items-center gap-3">

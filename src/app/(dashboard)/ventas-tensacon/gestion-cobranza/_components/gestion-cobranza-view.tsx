@@ -338,7 +338,7 @@ export function GestionCobranzaView({ initialData }: GestionCobranzaViewProps) {
 
       {/* 3. Navigation Tabs */}
       <div className="border-b border-slate-200 bg-white rounded-t-lg px-2 pt-2 shadow-sm">
-        <div className="flex flex-wrap gap-1">
+        <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
           <button
             type="button"
             onClick={() => setActiveTab("CARTERA")}
@@ -505,7 +505,7 @@ export function GestionCobranzaView({ initialData }: GestionCobranzaViewProps) {
       {activeTab === "CARTERA" && (
         <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="min-w-[850px] lg:min-w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600">
                   <th className="py-2.5 px-3 w-10 text-center">
@@ -675,7 +675,7 @@ export function GestionCobranzaView({ initialData }: GestionCobranzaViewProps) {
       {activeTab === "COBRANZAS" && (
         <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
+            <table className="min-w-[850px] lg:min-w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600">
                   <th className="py-2.5 px-3 w-8"></th>
@@ -1016,7 +1016,7 @@ export function GestionCobranzaView({ initialData }: GestionCobranzaViewProps) {
                   {/* Semana Accordion Content */}
                   {isWeekOpen && (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
+                      <table className="min-w-[850px] lg:min-w-full text-left text-xs border-collapse">
                         <thead>
                           <tr className="border-b border-slate-200 bg-slate-50/50 text-[10px] font-bold uppercase tracking-wider text-slate-600">
                             <th className="py-2 px-3">Fecha y Hora</th>

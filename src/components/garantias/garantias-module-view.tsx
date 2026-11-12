@@ -662,7 +662,7 @@ export function GarantiasModuleView({
       </div>
 
       {/* 2. KPI Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {/* Total Documentos */}
         <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
@@ -859,7 +859,7 @@ export function GarantiasModuleView({
       {/* 5. Tabla de Garantías (12 Columnas Estrictas) */}
       <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="min-w-[850px] lg:min-w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
                 <th className="py-3 px-3.5 whitespace-nowrap">N° FOLIO</th>
@@ -1100,7 +1100,7 @@ export function GarantiasModuleView({
       {/* 6. Modal de Creación / Edición y Renovación */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150 overflow-y-auto">
-          <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden my-8">
+          <div className="w-[95vw] sm:w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-2xl border border-slate-200 my-8">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/60">
               <div className="flex items-center gap-2.5">
                 <div className="h-8 w-8 rounded bg-orange-100 text-[#E05A10] flex items-center justify-center">
@@ -1556,7 +1556,7 @@ export function GarantiasModuleView({
       {/* 7. Modal / Drawer: Bitácora de Gestiones del Documento */}
       {isGestionesModalOpen && selectedDocForGestiones && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150 overflow-y-auto">
-          <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden my-8 flex flex-col max-h-[90vh]">
+          <div className="w-[95vw] sm:w-full max-w-2xl bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden my-8 flex flex-col max-h-[90vh]">
             {/* A. Cabecera Informativa */}
             <div className="px-6 py-4 border-b border-slate-200 bg-slate-900 text-white">
               <div className="flex items-start justify-between gap-4">

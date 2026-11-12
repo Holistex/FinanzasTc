@@ -556,7 +556,7 @@ export function PagosTesoreriaClient({
       {/* 4. TABLA PRINCIPAL: MATRIZ ANALÍTICA PIVOT TABLE */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="min-w-[850px] lg:min-w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#0B1528] text-slate-200 text-[11px] font-bold uppercase tracking-wider border-b border-[#1E293B]">
                 {/* Columna 1: Clasificación (Fijada a la izquierda con ancho cómodo) */}

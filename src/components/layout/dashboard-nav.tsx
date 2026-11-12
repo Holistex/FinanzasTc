@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -31,6 +31,8 @@ import {
   LineChart,
   UserCheck,
   Banknote,
+  Menu,
+  X,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -151,6 +153,12 @@ export function DashboardSidebar({
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  // Cerrar el drawer móvil automáticamente al navegar a cualquier ruta
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [pathname]);
 
   const nombreDisplay = userSession?.nombre || "Cedrix Vargas";
   const inicial = (nombreDisplay.trim()[0] || "C").toUpperCase();
@@ -295,8 +303,8 @@ export function DashboardSidebar({
   const isPerfilesActive = pathname.startsWith("/configuracion/adm-perfiles");
   const isColaboradoresActive = pathname.startsWith("/configuracion/colaboradores");
 
-  return (
-    <aside className="w-60 shrink-0 border-r border-slate-800 bg-[#0F172A] text-slate-100 flex flex-col justify-between min-h-screen select-none">
+  const sidebarContent = (
+    <>
       <div>
         {/* Brand Header: FINANZAS CORE - TENSACON */}
         <Link
@@ -878,6 +886,63 @@ export function DashboardSidebar({
           </button>
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Barra superior móvil (< 1024px) */}
+      <header className="flex lg:hidden items-center justify-between px-4 py-3 bg-[#0B1528] text-white sticky top-0 z-40 border-b border-slate-800 w-full shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            type="button"
+            onClick={() => setIsMobileOpen(true)}
+            className="p-1.5 rounded-lg text-slate-200 hover:bg-slate-800 hover:text-white transition-colors shrink-0"
+            aria-label="Abrir menú de navegación"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <Link href="/bienvenida" className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-orange-600 flex items-center justify-center text-white shadow-sm shrink-0">
+              <Building2 className="w-4 h-4" />
+            </div>
+            <span className="text-xs font-extrabold tracking-wide uppercase truncate">
+              FINANZAS CORE <span className="text-orange-500">· TENSACON</span>
+            </span>
+          </Link>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="h-7 w-7 rounded-full bg-[#1E293B] border border-slate-700 flex items-center justify-center font-bold text-xs text-slate-200">
+            {inicial}
+          </div>
+        </div>
+      </header>
+
+      {/* Drawer lateral móvil (< 1024px) */}
+      {isMobileOpen && (
+        <div className="fixed inset-0 z-50 flex lg:hidden">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+            onClick={() => setIsMobileOpen(false)}
+          />
+          <aside className="relative z-10 w-64 max-w-[85vw] bg-[#0F172A] text-slate-100 flex flex-col justify-between h-full overflow-y-auto shadow-2xl border-r border-slate-800 select-none">
+            <button
+              type="button"
+              onClick={() => setIsMobileOpen(false)}
+              className="absolute top-3.5 right-3 z-20 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              aria-label="Cerrar menú"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            {sidebarContent}
+          </aside>
+        </div>
+      )}
+
+      {/* Sidebar fijo en escritorio (lg: en adelante) */}
+      <aside className="hidden lg:flex w-60 shrink-0 border-r border-slate-800 bg-[#0F172A] text-slate-100 flex-col justify-between min-h-screen select-none">
+        {sidebarContent}
+      </aside>
+    </>
   );
 }

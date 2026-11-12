@@ -321,7 +321,7 @@ export function MandantesCompaniasClient({
           {/* Tabla de Mandantes */}
           <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="min-w-[700px] lg:min-w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
                     <th className="py-3 px-4">RUT</th>
@@ -441,7 +441,7 @@ export function MandantesCompaniasClient({
           {/* Tabla de Compañías */}
           <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="min-w-[700px] lg:min-w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
                     <th className="py-3 px-4">RUT</th>
@@ -538,7 +538,7 @@ export function MandantesCompaniasClient({
       {/* MODAL MANDANTE (CREAR / EDITAR) */}
       {isMandanteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-lg bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
+          <div className="w-[95vw] sm:w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-2xl border border-slate-200">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/60">
               <div className="flex items-center gap-2.5">
                 <div className="h-8 w-8 rounded bg-orange-100 text-[#E05A10] flex items-center justify-center">
@@ -684,7 +684,7 @@ export function MandantesCompaniasClient({
       {/* MODAL COMPAÑÍA (CREAR / EDITAR) */}
       {isCompaniaModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-lg bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
+          <div className="w-[95vw] sm:w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-2xl border border-slate-200">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/60">
               <div className="flex items-center gap-2.5">
                 <div className="h-8 w-8 rounded bg-orange-100 text-[#E05A10] flex items-center justify-center">

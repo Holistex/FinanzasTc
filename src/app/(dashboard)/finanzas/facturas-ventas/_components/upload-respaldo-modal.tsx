@@ -135,7 +135,7 @@ export function UploadRespaldoModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden flex flex-col">
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-[95vw] sm:w-full max-w-lg max-h-[90vh] overflow-y-auto flex flex-col">
         {/* Cabecera del Modal */}
         <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">

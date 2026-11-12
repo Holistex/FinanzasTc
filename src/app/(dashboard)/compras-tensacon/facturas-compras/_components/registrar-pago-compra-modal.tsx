@@ -140,7 +140,7 @@ export function RegistrarPagoCompraModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-200">
-      <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden my-6">
+      <div className="w-[95vw] sm:w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl my-6">
         {/* Encabezado Modal */}
         <div className="flex items-center justify-between border-b border-slate-100 bg-[#0B1528] px-6 py-4 text-white">
           <div className="flex items-center gap-3">

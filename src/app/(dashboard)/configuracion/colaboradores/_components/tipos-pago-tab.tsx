@@ -243,7 +243,7 @@ export function TiposPagoTab({ initialTiposPago }: TiposPagoTabProps) {
       {/* Tabla de Tipos de Pago */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="min-w-[650px] lg:min-w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#0B1528] text-slate-200 text-[11px] font-bold uppercase tracking-wider border-b border-[#1E293B]">
                 <th className="py-3 px-4">NOMBRE TIPO DE PAGO</th>
@@ -339,7 +339,7 @@ export function TiposPagoTab({ initialTiposPago }: TiposPagoTabProps) {
       {/* Modal Crear / Editar Tipo de Pago */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+          <div className="w-[95vw] sm:w-full max-w-md max-h-[90vh] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 bg-[#0B1528] px-5 py-4 text-white">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E05A10] text-white">

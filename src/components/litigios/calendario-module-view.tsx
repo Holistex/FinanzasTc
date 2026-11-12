@@ -664,7 +664,7 @@ export function CalendarioModuleView({
         /* ================= VISTA 2: LISTA CRONOLÓGICA (AGENDA) ================= */
         <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+            <table className="min-w-[850px] lg:min-w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                   <th className="py-3 px-3.5">FECHA PROGRAMADA</th>
@@ -794,7 +794,7 @@ export function CalendarioModuleView({
       {/* 5. MODAL DETALLE DE EVENTO AL HACER CLIC */}
       {selectedEvent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-lg w-full overflow-hidden animate-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-lg w-[95vw] sm:w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-150">
             {/* Header del Modal */}
             <div className="px-5 py-4 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between">
               <div className="flex items-center gap-2.5">

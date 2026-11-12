@@ -16,14 +16,14 @@ export default async function DashboardLayout({
   const session = await getServerUserSession();
 
   return (
-    <div className="flex min-h-screen bg-[#F8FAFC] text-[#0F172A] overflow-x-hidden">
+    <div className="flex flex-col lg:flex-row min-h-screen bg-[#F8FAFC] text-[#0F172A] overflow-x-hidden">
       <DashboardSidebar
         isSupabaseLive={isSupabaseLive}
         userSession={session}
       />
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 w-full">
         {/* Main Content Area: Sin encabezado redundante para maximizar la superficie útil */}
-        <main className="flex-1 p-5 max-w-[1650px] w-full mx-auto min-w-0">
+        <main className="flex-1 px-3 py-4 sm:px-6 lg:p-5 max-w-[1650px] w-full mx-auto min-w-0 overflow-x-hidden">
           {children}
         </main>
       </div>

@@ -210,7 +210,7 @@ export function CobranzaPorClienteTab({
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
       {/* 1. Tarjetas de Resumen KPI Cartera Crítica */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* KPI 1: Facturas Críticas */}
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
           <div className="flex items-center justify-between text-slate-500 mb-1">
@@ -419,7 +419,7 @@ export function CobranzaPorClienteTab({
       {/* 3. Tabla "Cobranza por Cliente" */}
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="min-w-[850px] lg:min-w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600">
                 <th className="py-2.5 px-3">Folio / DTE</th>

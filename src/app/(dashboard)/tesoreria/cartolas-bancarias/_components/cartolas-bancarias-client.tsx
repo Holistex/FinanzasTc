@@ -737,7 +737,7 @@ export function CartolasBancariasClient({
       {/* 5. TABLA UNIFICADA DE CARTOLAS BANCARIAS */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="min-w-[850px] lg:min-w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#0B1528] text-slate-200 text-[11px] font-bold uppercase tracking-wider border-b border-[#1E293B]">
                 {/* Checkbox Maestro (Solo en PENDIENTES o siempre activo) */}
@@ -1038,7 +1038,7 @@ export function CartolasBancariasClient({
       {/* 6. MODAL DE IMPORTACIÓN DE SALDOS BANCARIOS */}
       {isImportModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 backdrop-blur-xs p-4">
-          <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+          <div className="w-[95vw] sm:w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl">
             {/* Cabecera Modal */}
             <div className="flex items-center justify-between border-b border-slate-200 bg-[#0B1528] px-5 py-4 text-white">
               <div className="flex items-center gap-2.5">

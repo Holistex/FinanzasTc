@@ -351,7 +351,8 @@ export function FactoringClientesView({
 
         {/* Tabla Maestra Anidada a 100% Width */}
         <div className="bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden w-full">
-          <table className="w-full table-auto text-left border-collapse">
+          <div className="w-full overflow-x-auto">
+            <table className="min-w-[850px] lg:min-w-full table-auto text-left border-collapse">
             <thead>
               <tr className="bg-[#0F172A] text-slate-200 text-[10px] font-semibold uppercase tracking-wider border-b border-[#1E293B]">
                 <th className="py-2.5 px-3 w-[46px] text-center">#</th>
@@ -513,7 +514,8 @@ export function FactoringClientesView({
                                 </div>
                               ) : (
                                 <div className="rounded border border-slate-200 bg-white overflow-hidden shadow-sm">
-                                  <table className="w-full table-auto text-left border-collapse">
+                                  <div className="w-full overflow-x-auto">
+                                    <table className="min-w-[750px] lg:min-w-full table-auto text-left border-collapse">
                                     <thead>
                                         <tr className="bg-[#1E293B] text-slate-200 text-[10px] font-semibold uppercase tracking-wider">
                                           <th className="py-1.5 px-3 w-[130px]">
@@ -703,6 +705,7 @@ export function FactoringClientesView({
                                       </tbody>
                                     </table>
                                   </div>
+                                  </div>
                                 )}
                               </div>
                             </td>
@@ -715,6 +718,7 @@ export function FactoringClientesView({
               </tbody>
             </table>
           </div>
+        </div>
         </div>
 
         {/* Modal para Re-cesión o retorno a Directo Cliente */}

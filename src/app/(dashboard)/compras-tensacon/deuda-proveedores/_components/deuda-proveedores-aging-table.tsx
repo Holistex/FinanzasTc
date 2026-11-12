@@ -85,7 +85,7 @@ export function DeudaProveedoresAgingTable({
 
       {/* Contenido de la Tabla */}
       <div className="overflow-x-auto">
-        <table className="w-full text-xs text-left">
+        <table className="min-w-[650px] lg:min-w-full text-xs text-left">
           <thead className="bg-slate-100/90 text-slate-600 font-semibold border-b border-slate-200 uppercase text-[10px] tracking-wider">
             <tr>
               <th className="py-2.5 px-4">Tramo de Vencimiento</th>
