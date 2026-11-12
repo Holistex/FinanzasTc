@@ -576,8 +576,9 @@ export async function cambiarEstadoCompraAction(input: {
 
     const existingLocal = db.facturas_compras.find((x) => x.id === input.id);
 
-    const payload: Partial<FacturaCompra> = {
+    const payload: Partial<FacturaCompra> & { modalidad_pago?: string } = {
       estado: input.estado,
+      modalidad_pago: input.estado,
       updated_at: new Date().toISOString(),
     };
 
@@ -1309,8 +1310,8 @@ export async function registrarPagoFacturaCompraAction(
       try {
         const supabase = await createServerSupabaseClient();
 
-        // 4.1 Insertar pago en tabla pagos_compras o pagos_facturas_compras
-        await supabase.from("pagos_compras").insert({
+        // 4.1 Insertar pago en tabla pagos_facturas_compras o pagos_compras
+        const pagoPayload = {
           id: nuevoPago.id,
           factura_id: targetFactura.id,
           rut_proveedor: targetFactura.rut_proveedor,
@@ -1323,18 +1324,43 @@ export async function registrarPagoFacturaCompraAction(
           observacion: glosaFinal,
           comprobante_ref: numeroComprobante?.trim() || `PAGO-${targetFactura.folio}`,
           created_at: nowIso,
-        });
+        };
 
-        // 4.2 Actualizar factura
-        await supabase
+        const { error: errPagosFac } = await supabase
+          .from("pagos_facturas_compras")
+          .insert(pagoPayload);
+
+        if (errPagosFac) {
+          // Intentar en pagos_compras si pagos_facturas_compras no existe o arrojó error
+          await supabase.from("pagos_compras").insert(pagoPayload);
+        }
+
+        // 4.2 Actualizar factura en Supabase (sincronizando monto_saldo, saldo_pendiente, estado y modalidad_pago)
+        const updateFacturaPayload: Record<string, unknown> = {
+          monto_saldo: nuevoSaldo,
+          saldo_pendiente: nuevoSaldo,
+          deuda_proveedor: estaSaldada ? 0 : nuevoSaldo,
+          estado: estaSaldada ? "PAGADA" : targetFactura.estado,
+          modalidad_pago: estaSaldada ? "PAGADA" : (targetFactura as unknown as Record<string, unknown>).modalidad_pago || targetFactura.estado,
+          updated_at: nowIso,
+        };
+
+        const { error: updateErr } = await supabase
           .from("facturas_compras")
-          .update({
-            monto_saldo: nuevoSaldo,
-            deuda_proveedor: estaSaldada ? 0 : nuevoSaldo,
-            estado: estaSaldada ? "PAGADA" : targetFactura.estado,
-            updated_at: nowIso,
-          })
+          .update(updateFacturaPayload)
           .eq("id", targetFactura.id);
+
+        if (updateErr) {
+          // Fallback con columnas estándar mínimas
+          await supabase
+            .from("facturas_compras")
+            .update({
+              monto_saldo: nuevoSaldo,
+              estado: estaSaldada ? "PAGADA" : targetFactura.estado,
+              updated_at: nowIso,
+            })
+            .eq("id", targetFactura.id);
+        }
       } catch (supaErr) {
         console.error("Error al actualizar pago en Supabase:", supaErr);
       }

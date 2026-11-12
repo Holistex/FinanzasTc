@@ -185,40 +185,49 @@ export function FacturasComprasTable({
     });
   }, [data]);
 
-  // 2. Facturas con Cheques (DTE 33/34 en estado CHEQUE o con abonos de cheques emitidos)
+  // 2. Facturas con Cheques (DTE 33/34 en modalidad o estado CHEQUE o con abonos de cheques emitidos)
   const facturasCheques = useMemo(() => {
     return data.filter((f) => {
       const saldo = Number(
         f.monto_saldo !== undefined && f.monto_saldo !== null ? f.monto_saldo : f.monto_total
       );
+      const esCheque =
+        f.estado === "CHEQUE" ||
+        ((f as any).modalidad_pago && String((f as any).modalidad_pago).toUpperCase() === "CHEQUE");
       return (
         f.tipo_doc !== 61 &&
         f.estado !== "PAGADA" &&
         saldo > 0 &&
-        (f.estado === "CHEQUE" ||
+        (esCheque ||
           (f.cheques && f.cheques.length > 0) ||
           (f.total_cheques_emitidos && f.total_cheques_emitidos > 0))
       );
     });
   }, [data]);
 
-  // 3. Facturas en Factoring (DTE 33/34 en estado FACTORING)
+  // 3. Facturas en Factoring (DTE 33/34 en modalidad o estado FACTORING)
   const facturasFactoring = useMemo(() => {
     return data.filter((f) => {
       const saldo = Number(
         f.monto_saldo !== undefined && f.monto_saldo !== null ? f.monto_saldo : f.monto_total
       );
-      return f.tipo_doc !== 61 && f.estado === "FACTORING" && saldo > 0;
+      const esFactoring =
+        f.estado === "FACTORING" ||
+        ((f as any).modalidad_pago && String((f as any).modalidad_pago).toUpperCase() === "FACTORING");
+      return f.tipo_doc !== 61 && esFactoring && saldo > 0;
     });
   }, [data]);
 
-  // 4. Facturas en Confirming (DTE 33/34 en estado CONFIRMING)
+  // 4. Facturas en Confirming (DTE 33/34 en modalidad o estado CONFIRMING)
   const facturasConfirming = useMemo(() => {
     return data.filter((f) => {
       const saldo = Number(
         f.monto_saldo !== undefined && f.monto_saldo !== null ? f.monto_saldo : f.monto_total
       );
-      return f.tipo_doc !== 61 && f.estado === "CONFIRMING" && saldo > 0;
+      const esConfirming =
+        f.estado === "CONFIRMING" ||
+        ((f as any).modalidad_pago && String((f as any).modalidad_pago).toUpperCase() === "CONFIRMING");
+      return f.tipo_doc !== 61 && esConfirming && saldo > 0;
     });
   }, [data]);
 

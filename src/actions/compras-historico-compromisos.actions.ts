@@ -41,20 +41,20 @@ export async function getHistoricoPagosComprasAction(params?: {
   const db = readLocalDb();
   let rawPagos: PagoCompraHistorico[] = [];
 
-  // 1. Obtener pagos directos registrados
+  // 1. Obtener pagos directos registrados localmente
   if (db.pagos_compras && db.pagos_compras.length > 0) {
     rawPagos.push(...db.pagos_compras);
   }
 
-  // 2. Extraer pagos derivados de facturas saldadas ($0)
-  const facturasSaldadas = (db.facturas_compras || []).filter(
-    (f) => (f.monto_saldo === 0 || f.estado === "CHEQUE" || f.estado === "COMPRA_TC") && f.tipo_doc !== 61
+  // 2. Extraer pagos derivados de facturas saldadas ($0) en DB local
+  const facturasSaldadasLocal = (db.facturas_compras || []).filter(
+    (f) => (f.monto_saldo === 0 || f.estado === "PAGADA" || f.estado === "CHEQUE" || f.estado === "COMPRA_TC") && f.tipo_doc !== 61
   );
 
   const foliosRegistrados = new Set(rawPagos.map((p) => p.folio));
   const colabMap = new Map((db.mantenedor_colaboradores || []).map((c) => [c.id, c]));
 
-  for (const fc of facturasSaldadas) {
+  for (const fc of facturasSaldadasLocal) {
     if (!foliosRegistrados.has(fc.folio)) {
       let mod: ModalidadPagoCompra = "DIRECTO";
       if (fc.estado === "CHEQUE") mod = "CHEQUE";
@@ -104,17 +104,89 @@ export async function getHistoricoPagosComprasAction(params?: {
     }
   }
 
-  // Si Supabase está configurado, intentar consultar vista/tabla pagos_compras
+  // 3. Si Supabase está configurado, consultar pagos_facturas_compras / pagos_compras y facturas_compras saldadas
   if (isServerSupabaseConfigured()) {
     try {
       const supabase = await createServerSupabaseClient();
+
+      // 3.1 Consultar pagos_facturas_compras
+      const { data: supaPagosFac } = await supabase
+        .from("pagos_facturas_compras")
+        .select("*")
+        .order("fecha_real_pago", { ascending: false });
+
+      if (supaPagosFac && supaPagosFac.length > 0) {
+        for (const p of supaPagosFac as PagoCompraHistorico[]) {
+          if (!foliosRegistrados.has(p.folio)) {
+            rawPagos.unshift(p);
+            foliosRegistrados.add(p.folio);
+          }
+        }
+      }
+
+      // 3.2 Consultar pagos_compras
       const { data: supaPagos } = await supabase
         .from("pagos_compras")
         .select("*")
         .order("fecha_real_pago", { ascending: false });
 
       if (supaPagos && supaPagos.length > 0) {
-        rawPagos = supaPagos as PagoCompraHistorico[];
+        for (const p of supaPagos as PagoCompraHistorico[]) {
+          if (!foliosRegistrados.has(p.folio)) {
+            rawPagos.unshift(p);
+            foliosRegistrados.add(p.folio);
+          }
+        }
+      }
+
+      // 3.3 Consultar facturas saldadas en Supabase
+      const { data: supaFacsSaldadas } = await supabase
+        .from("facturas_compras")
+        .select("*")
+        .or("estado.eq.PAGADA,monto_saldo.eq.0,condicion_pago.eq.CONTADO,estado.eq.COMPRA_TC")
+        .neq("tipo_doc", 61);
+
+      if (supaFacsSaldadas && supaFacsSaldadas.length > 0) {
+        for (const sFac of supaFacsSaldadas) {
+          const folioNum = Number(sFac.folio || 0);
+          if (folioNum > 0 && !foliosRegistrados.has(folioNum)) {
+            let mod: ModalidadPagoCompra = "DIRECTO";
+            const est = String(sFac.estado || "").toUpperCase();
+            if (est === "CHEQUE") mod = "CHEQUE";
+            else if (est === "FACTORING") mod = "FACTORING";
+            else if (est === "CONFIRMING") mod = "CONFIRMING";
+            else if (est === "NETEO_NC") mod = "NETEO_NC";
+            else if (est === "COMPRA_TC") mod = "COMPRA_TC";
+
+            rawPagos.push({
+              id: `pago-supa-${sFac.id}`,
+              factura_id: String(sFac.id),
+              rut_proveedor: String(sFac.rut_proveedor || ""),
+              razon_social: String(sFac.razon_social || ""),
+              folio: folioNum,
+              tipo_doc: Number(sFac.tipo_doc || 33),
+              modalidad_pago: mod,
+              monto_pagado: Number(sFac.monto_total || 0),
+              fecha_real_pago: sFac.fecha_vencimiento_cheque || (sFac.updated_at ? String(sFac.updated_at).slice(0, 10) : sFac.fecha_vencimiento || sFac.fecha_docto || new Date().toISOString().slice(0, 10)),
+              observacion: est === "COMPRA_TC"
+                ? "Compra TC — Rendición de Trabajador"
+                : sFac.condicion_pago === "CONTADO"
+                ? "Fondo por Rendir / Compra al Contado"
+                : sFac.numero_cheque
+                ? `Cheque #${sFac.numero_cheque}`
+                : "Factura saldada en Tesorería",
+              comprobante_ref: est === "COMPRA_TC"
+                ? `TC-${folioNum}`
+                : sFac.condicion_pago === "CONTADO"
+                ? `CONTADO-${folioNum}`
+                : sFac.numero_cheque
+                ? `CHK-${sFac.numero_cheque}`
+                : `FAC-${folioNum}`,
+              created_at: String(sFac.created_at || new Date().toISOString()),
+            });
+            foliosRegistrados.add(folioNum);
+          }
+        }
       }
     } catch {
       // Usar fallback local
@@ -315,7 +387,10 @@ export async function getCompromisosComprasAction(params?: {
 
     // 2.2 Facturas en Factoring
     const facturasFactoring = (db.facturas_compras || []).filter(
-      (f) => f.estado === "FACTORING" && f.monto_total > 0
+      (f) =>
+        (f.estado === "FACTORING" ||
+          ((f as unknown as Record<string, unknown>).modalidad_pago as string)?.toUpperCase() === "FACTORING") &&
+        f.monto_total > 0
     );
     for (const f of facturasFactoring) {
       rawCompromisos.push({
@@ -332,7 +407,10 @@ export async function getCompromisosComprasAction(params?: {
 
     // 2.3 Facturas en Confirming
     const facturasConfirming = (db.facturas_compras || []).filter(
-      (f) => f.estado === "CONFIRMING" && f.monto_total > 0
+      (f) =>
+        (f.estado === "CONFIRMING" ||
+          ((f as unknown as Record<string, unknown>).modalidad_pago as string)?.toUpperCase() === "CONFIRMING") &&
+        f.monto_total > 0
     );
     for (const f of facturasConfirming) {
       rawCompromisos.push({
@@ -347,9 +425,11 @@ export async function getCompromisosComprasAction(params?: {
       });
     }
 
-    // 2.4 Asegurar que facturas con estado CHEQUE tengan presencia si cheques_compras no las tenía
+    // 2.4 Asegurar que facturas con estado o modalidad CHEQUE tengan presencia si cheques_compras no las tenía
     const facturasChequeSaldadas = (db.facturas_compras || []).filter(
-      (f) => f.estado === "CHEQUE"
+      (f) =>
+        f.estado === "CHEQUE" ||
+        ((f as unknown as Record<string, unknown>).modalidad_pago as string)?.toUpperCase() === "CHEQUE"
     );
     for (const f of facturasChequeSaldadas) {
       if (!rawCompromisos.some((rc) => rc.referencia_doc.includes(String(f.folio)) || (f.numero_cheque && rc.referencia_doc.includes(f.numero_cheque)))) {
@@ -363,6 +443,46 @@ export async function getCompromisosComprasAction(params?: {
           monto: Number(f.monto_total),
           created_at: f.created_at,
         });
+      }
+    }
+
+    // 2.5 Enriquecer con facturas en modalidades especiales desde Supabase si la vista no estaba disponible
+    if (isServerSupabaseConfigured()) {
+      try {
+        const supabase = await createServerSupabaseClient();
+        const { data: supaFacs } = await supabase
+          .from("facturas_compras")
+          .select("*")
+          .or("estado.in.(FACTORING,CONFIRMING,CHEQUE),modalidad_pago.in.(FACTORING,CONFIRMING,CHEQUE)");
+
+        if (supaFacs && supaFacs.length > 0) {
+          for (const sf of supaFacs) {
+            const fol = Number(sf.folio || 0);
+            if (!rawCompromisos.some((rc) => rc.referencia_doc.includes(String(fol)))) {
+              const est = String(sf.estado || "").toUpperCase();
+              const modPago = String(sf.modalidad_pago || "").toUpperCase();
+              const mod: ModalidadCompromiso =
+                est === "CHEQUE" || modPago === "CHEQUE"
+                  ? "CHEQUE"
+                  : est === "CONFIRMING" || modPago === "CONFIRMING"
+                  ? "CONFIRMING"
+                  : "FACTORING";
+
+              rawCompromisos.push({
+                id: `comp-supa-${sf.id}`,
+                modalidad: mod,
+                rut_proveedor: String(sf.rut_proveedor || ""),
+                razon_social: String(sf.razon_social || ""),
+                referencia_doc: sf.numero_cheque ? `Cheque #${sf.numero_cheque}` : `FAC #${fol}`,
+                fecha_vencimiento: toDateOnlyString(sf.fecha_vencimiento_cheque || sf.fecha_vencimiento || "2026-10-30"),
+                monto: Number(sf.monto_total || 0),
+                created_at: String(sf.created_at || ""),
+              });
+            }
+          }
+        }
+      } catch {
+        // Fallback local completado
       }
     }
   }
