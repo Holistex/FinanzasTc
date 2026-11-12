@@ -5,6 +5,7 @@ import { getServerUserSession } from "@/lib/auth/session";
 import { MantenedorColaboradoresClient } from "./_components/mantenedor-colaboradores-client";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function MantenedorColaboradoresPage() {
   const [colaboradores, tiposPago, session] = await Promise.all([

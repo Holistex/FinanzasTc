@@ -4,6 +4,7 @@ import { getHistoricoPagosComprasAction } from "@/actions/compras-historico-comp
 import { HistoricoPagosTable } from "./_components/historico-pagos-table";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function HistoricoPagosPage() {
   const { data, kpis } = await getHistoricoPagosComprasAction();

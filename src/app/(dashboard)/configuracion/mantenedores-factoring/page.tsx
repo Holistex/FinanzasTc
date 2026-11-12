@@ -12,6 +12,7 @@ import {
 import { MantenedoresTabsClient } from "../../mantenedores/_components/mantenedores-tabs-client";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 export const preferredRegion = "yul1";
 
 export default async function MantenedoresFactoringConfigPage() {

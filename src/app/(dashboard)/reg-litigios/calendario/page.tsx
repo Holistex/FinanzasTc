@@ -3,6 +3,7 @@ import { CalendarioModuleView } from "@/components/litigios/calendario-module-vi
 import { getServerUserSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function RegLitigiosCalendarioPage() {
   const [, { items, kpis }] = await Promise.all([

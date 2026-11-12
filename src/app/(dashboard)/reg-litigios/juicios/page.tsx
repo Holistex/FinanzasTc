@@ -9,6 +9,7 @@ import { getServerUserSession } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function RegLitigiosJuiciosPage() {
   const [session, { items, kpis }] = await Promise.all([

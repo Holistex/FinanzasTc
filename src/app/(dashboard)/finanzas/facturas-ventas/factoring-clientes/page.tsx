@@ -9,6 +9,7 @@ import { EXCLUDED_DTE_TYPES } from "@/services/sii-csv-parser";
 import { FactoringClientesView } from "../_components/factoring-clientes-view";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 export const preferredRegion = "yul1";
 
 export default async function FactoringClientesSubmodulePage() {

@@ -5,6 +5,7 @@ import { getServerUserSession } from "@/lib/auth/session";
 import { FacturasComprasTable } from "./_components/facturas-compras-table";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function FacturasComprasPage() {
   const [comprasData, userSession] = await Promise.all([

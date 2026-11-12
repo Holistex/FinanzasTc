@@ -43,7 +43,19 @@ export async function getPerfilesAction(): Promise<PerfilUsuario[]> {
           .order("created_at", { ascending: true });
 
         if (!error && data && data.length > 0) {
-          return (data as Array<Record<string, unknown>>).map(mapPerfilRow);
+          return (data as Array<Record<string, unknown>>).map((row) => ({
+            id: String(row.id),
+            nombre_perfil: String(row.nombre_perfil || row.tipo_perfil || row.nombre || ""),
+            descripcion:
+              row.descripcion !== null && row.descripcion !== undefined
+                ? String(row.descripcion)
+                : null,
+            permisos: buildNormalizedPermisosMatrix(
+              (row.permisos as Record<string, string>) || {}
+            ),
+            created_at: String(row.created_at || new Date().toISOString()),
+            updated_at: row.updated_at ? String(row.updated_at) : undefined,
+          }));
         }
       }
     } catch {
@@ -86,6 +98,7 @@ export async function savePerfilAction(
             .from(tableName)
             .update({
               nombre_perfil: nombreLimpio,
+              tipo_perfil: nombreLimpio,
               descripcion: payload.descripcion?.trim() || null,
               permisos: permisosNormalizados,
               updated_at: nowIso,
@@ -104,6 +117,7 @@ export async function savePerfilAction(
             .from(tableName)
             .insert({
               nombre_perfil: nombreLimpio,
+              tipo_perfil: nombreLimpio,
               descripcion: payload.descripcion?.trim() || null,
               permisos: permisosNormalizados,
             })
@@ -202,19 +216,26 @@ export async function getUsuariosAction(): Promise<UsuarioSistema[]> {
   if (isServerSupabaseConfigured()) {
     try {
       const supabase = await createServerSupabaseClient();
-      const { data, error } = await supabase
-        .from("usuarios")
+      let res = await supabase
+        .from("usuarios_sistema")
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (!error && data && data.length > 0) {
-        return (data as Array<Record<string, unknown>>).map((u) => {
+      if (res.error || !res.data || res.data.length === 0) {
+        res = await supabase
+          .from("usuarios")
+          .select("*")
+          .order("created_at", { ascending: false });
+      }
+
+      if (!res.error && res.data && res.data.length > 0) {
+        return (res.data as Array<Record<string, unknown>>).map((u) => {
           const perfilId = String(u.perfil_id || u.perfil || "");
           return {
             id: String(u.id),
             nombre: String(u.nombre || ""),
             usuario: String(u.usuario || ""),
-            contrasena: String(u.contrasena || ""),
+            contrasena: String(u.password_text || u.contrasena || ""),
             correo: String(u.correo || u.email || ""),
             perfil_id: perfilId,
             perfil_nombre: perfilMap.get(perfilId) || String(u.perfil || "Sin Perfil"),
@@ -271,57 +292,55 @@ export async function saveUsuarioAction(
   if (isServerSupabaseConfigured()) {
     try {
       const supabase = await createServerSupabaseClient();
-      if (payload.id) {
-        const { data, error } = await supabase
-          .from("usuarios")
-          .update({
-            nombre,
-            usuario: username,
-            contrasena,
-            correo,
-            perfil_id,
-            perfil: perfilNombre,
-            estado,
-            updated_at: nowIso,
-          })
-          .eq("id", payload.id)
-          .select()
-          .single();
+      for (const tableName of ["usuarios_sistema", "usuarios"] as const) {
+        if (payload.id) {
+          const { data, error } = await supabase
+            .from(tableName)
+            .update({
+              nombre,
+              usuario: username,
+              password_text: contrasena,
+              contrasena,
+              correo,
+              perfil_id,
+              perfil: perfilNombre,
+              estado,
+              updated_at: nowIso,
+            })
+            .eq("id", payload.id)
+            .select()
+            .single();
 
-        if (error) {
-          throw new Error(`Error al actualizar usuario en Supabase: ${error.message}`);
-        }
-        if (data) {
-          revalidatePath("/configuracion/maestro-usuarios");
-          return {
-            ...(data as UsuarioSistema),
-            perfil_nombre: perfilNombre,
-          };
-        }
-      } else {
-        const { data, error } = await supabase
-          .from("usuarios")
-          .insert({
-            nombre,
-            usuario: username,
-            contrasena,
-            correo,
-            perfil_id,
-            perfil: perfilNombre,
-            estado,
-          })
-          .select()
-          .single();
+          if (!error && data) {
+            revalidatePath("/configuracion/maestro-usuarios");
+            return {
+              ...(data as UsuarioSistema),
+              perfil_nombre: perfilNombre,
+            };
+          }
+        } else {
+          const { data, error } = await supabase
+            .from(tableName)
+            .insert({
+              nombre,
+              usuario: username,
+              password_text: contrasena,
+              contrasena,
+              correo,
+              perfil_id,
+              perfil: perfilNombre,
+              estado,
+            })
+            .select()
+            .single();
 
-        if (error) {
-          throw new Error(`Error al crear usuario en Supabase: ${error.message}`);
-        }
-        if (data) {
-          revalidatePath("/configuracion/maestro-usuarios");
-          return {
-            ...(data as UsuarioSistema),
-            perfil_nombre: perfilNombre,
-          };
+          if (!error && data) {
+            revalidatePath("/configuracion/maestro-usuarios");
+            return {
+              ...(data as UsuarioSistema),
+              perfil_nombre: perfilNombre,
+            };
+          }
         }
       }
     } catch (err: any) {
@@ -379,9 +398,8 @@ export async function saveUsuarioAction(
 export async function deleteUsuarioAction(id: string): Promise<{ success: boolean }> {
   if (isServerSupabaseConfigured()) {
     const supabase = await createServerSupabaseClient();
-    const { error } = await supabase.from("usuarios").delete().eq("id", id);
-    if (error) {
-      throw new Error(`Error al eliminar usuario en Supabase: ${error.message}`);
+    for (const tableName of ["usuarios_sistema", "usuarios"] as const) {
+      await supabase.from(tableName).delete().eq("id", id);
     }
     revalidatePath("/configuracion/maestro-usuarios");
     return { success: true };

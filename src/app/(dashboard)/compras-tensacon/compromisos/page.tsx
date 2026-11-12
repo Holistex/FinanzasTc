@@ -4,6 +4,7 @@ import { getCompromisosComprasAction } from "@/actions/compras-historico-comprom
 import { CompromisosTable } from "./_components/compromisos-table";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function CompromisosPage() {
   const { data, semanasDisponibles, kpis } = await getCompromisosComprasAction();

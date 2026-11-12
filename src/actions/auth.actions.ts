@@ -53,22 +53,22 @@ export async function loginUserAction(
     try {
       const supabase = await createServerSupabaseClient();
 
-      // Probar en tabla 'usuarios_sistema'
+      // 1. Probar en tabla 'usuarios_sistema'
       let res = await supabase
         .from("usuarios_sistema")
         .select("*")
         .or(`usuario.ilike.${cleanUsername},correo.ilike.${cleanUsername}`)
-        .eq("contrasena", cleanPassword)
+        .or(`password_text.eq.${cleanPassword},contrasena.eq.${cleanPassword}`)
         .eq("estado", "Activo")
         .maybeSingle();
 
-      // Si no existe la tabla o no hay match, probar en tabla 'usuarios'
+      // Si no hay match con password_text/contrasena en usuarios_sistema, probar con 'usuarios'
       if (res.error || !res.data) {
         res = await supabase
           .from("usuarios")
           .select("*")
           .or(`usuario.ilike.${cleanUsername},correo.ilike.${cleanUsername}`)
-          .eq("contrasena", cleanPassword)
+          .or(`password_text.eq.${cleanPassword},contrasena.eq.${cleanPassword}`)
           .eq("estado", "Activo")
           .maybeSingle();
       }

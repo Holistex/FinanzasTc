@@ -20,6 +20,7 @@ import { getServerUserSession } from "@/lib/auth/session";
 import { FacturasVentasTable } from "./_components/facturas-ventas-table";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 export const preferredRegion = "yul1";
 
 async function loadInitialFacturasVentasPageData(): Promise<{
