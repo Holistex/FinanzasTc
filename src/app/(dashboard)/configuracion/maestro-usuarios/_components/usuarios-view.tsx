@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useEffect } from "react";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import {
   Search,
   Plus,
@@ -38,6 +43,11 @@ export function UsuariosView({
   const [usuarios, setUsuarios] = useState<UsuarioSistema[]>(initialUsuarios);
   const [searchQuery, setSearchQuery] = useState("");
   const [perfilFilter, setPerfilFilter] = useState("TODOS");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, perfilFilter]);
   const [isPending, startTransition] = useTransition();
 
   // Control de visibilidad global de contraseñas (por defecto visualizando texto plano según requerimiento)
@@ -304,7 +314,7 @@ export function UsuariosView({
                 </td>
               </tr>
             ) : (
-              filteredUsuarios.map((user) => {
+              paginateArray(filteredUsuarios, currentPage, GLOBAL_PAGE_SIZE).map((user) => {
                 const isPasswordVisible = visiblePasswords[user.id] ?? true;
 
                 return (
@@ -415,6 +425,12 @@ export function UsuariosView({
           </tbody>
         </table>
         </div>
+        <TablePagination
+          currentPage={currentPage}
+          totalItems={filteredUsuarios.length}
+          pageSize={GLOBAL_PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* Modal Crear / Editar Usuario */}

@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState, useTransition, useMemo } from "react";
+import React, { useState, useTransition, useMemo, useEffect } from "react";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import {
   Search,
   Filter,
@@ -161,6 +166,11 @@ export function FacturasComprasTable({
   // Filtros
   const [search, setSearch] = useState("");
   const [tipoDocFilter, setTipoDocFilter] = useState<"TODOS" | "33" | "61">("TODOS");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, subTabFacNc, search, tipoDocFilter]);
 
   // Modales
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -790,7 +800,7 @@ export function FacturasComprasTable({
                     </td>
                   </tr>
                 ) : (
-                  filteredCurrentTab.map((factura) => {
+                  paginateArray(filteredCurrentTab, currentPage, GLOBAL_PAGE_SIZE).map((factura) => {
                     const docInfo = getTipoDocLabel(factura.tipo_doc);
                     const saldo = factura.monto_saldo !== undefined ? factura.monto_saldo : factura.monto_total;
                     const totalNeteado = (factura.neteos || []).reduce((sum, n) => sum + Number(n.monto_neteado || 0), 0);
@@ -1081,7 +1091,7 @@ export function FacturasComprasTable({
           {/* Footer de la Pestaña Activa */}
           <div className="flex flex-col gap-2 border-t border-slate-200 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between text-xs text-slate-600">
             <div>
-              Mostrando <span className="font-bold text-slate-800">{filteredCurrentTab.length}</span> de{" "}
+              Total filtrado: <span className="font-bold text-slate-800">{filteredCurrentTab.length}</span> de{" "}
               <span className="font-bold text-slate-800">{currentTabFacturas.length}</span> facturas en {getTabName(activeTab)}
             </div>
             <div className="flex items-center gap-2">
@@ -1089,6 +1099,12 @@ export function FacturasComprasTable({
               <span className="font-bold text-slate-900 text-sm font-mono">{formatCLP(subtotalInfo.total)}</span>
             </div>
           </div>
+          <TablePagination
+            currentPage={currentPage}
+            totalItems={filteredCurrentTab.length}
+            pageSize={GLOBAL_PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
 
@@ -1124,7 +1140,7 @@ export function FacturasComprasTable({
                         </td>
                       </tr>
                     ) : (
-                      filteredFacNc.map((doc) => {
+                      paginateArray(filteredFacNc, currentPage, GLOBAL_PAGE_SIZE).map((doc) => {
                         const docInfo = getTipoDocLabel(doc.tipo_doc);
                         const isNC = doc.tipo_doc === 61;
                         const saldoNC = doc.saldo_restante_nc !== undefined ? doc.saldo_restante_nc : doc.monto_total;
@@ -1274,13 +1290,19 @@ export function FacturasComprasTable({
               {/* Footer FAC/NC */}
               <div className="flex flex-col gap-2 border-t border-slate-200 bg-slate-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between text-xs text-slate-600">
                 <div>
-                  Mostrando <span className="font-bold text-slate-800">{filteredFacNc.length}</span> documentos en FAC / NC
+                  Total filtrado: <span className="font-bold text-slate-800">{filteredFacNc.length}</span> documentos en FAC / NC
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-slate-500">Monto Subtotal:</span>
                   <span className="font-bold text-slate-900 text-sm font-mono">{formatCLP(subtotalInfo.total)}</span>
                 </div>
               </div>
+              <TablePagination
+                currentPage={currentPage}
+                totalItems={filteredFacNc.length}
+                pageSize={GLOBAL_PAGE_SIZE}
+                onPageChange={setCurrentPage}
+              />
             </div>
           ) : (
             /* Subvista: Historial de Neteos */
@@ -1309,7 +1331,7 @@ export function FacturasComprasTable({
                         </td>
                       </tr>
                     ) : (
-                      filteredNeteos.map((neteo) => (
+                      paginateArray(filteredNeteos, currentPage, GLOBAL_PAGE_SIZE).map((neteo) => (
                         <tr key={neteo.id} className="hover:bg-slate-50 transition-colors">
                           <td className="py-3 px-4 whitespace-nowrap text-slate-600">
                             {formatDateCL(neteo.created_at)}
@@ -1340,6 +1362,12 @@ export function FacturasComprasTable({
                   </tbody>
                 </table>
               </div>
+              <TablePagination
+                currentPage={currentPage}
+                totalItems={filteredNeteos.length}
+                pageSize={GLOBAL_PAGE_SIZE}
+                onPageChange={setCurrentPage}
+              />
             </div>
           )}
         </div>

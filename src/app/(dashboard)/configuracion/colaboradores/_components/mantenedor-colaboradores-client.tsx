@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState, useTransition, useRef } from "react";
+import React, { useState, useTransition, useRef, useEffect } from "react";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import {
   UserCheck,
   Users,
@@ -47,6 +52,11 @@ export function MantenedorColaboradoresClient({
   const [data, setData] = useState<MantenedorColaborador[]>(initialData);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVO" | "INACTIVO">("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeMainTab, searchTerm, statusFilter]);
   const [isPending, startTransition] = useTransition();
 
   // Modal de Creación / Edición Manual
@@ -456,7 +466,7 @@ export function MantenedorColaboradoresClient({
                   </td>
                 </tr>
               ) : (
-                filteredData.map((item) => {
+                paginateArray(filteredData, currentPage, GLOBAL_PAGE_SIZE).map((item) => {
                   const isActivo = item.activo !== false;
                   return (
                     <tr
@@ -537,6 +547,12 @@ export function MantenedorColaboradoresClient({
             </tbody>
           </table>
         </div>
+        <TablePagination
+          currentPage={currentPage}
+          totalItems={filteredData.length}
+          pageSize={GLOBAL_PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* MODAL 1: CREACIÓN / EDICIÓN MANUAL DE COLABORADOR */}

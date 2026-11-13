@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import {
   Search,
   RefreshCw,
@@ -35,6 +40,11 @@ export function HistoricoPagosTable({
   const [selectedModalidad, setSelectedModalidad] = useState<string>("TODAS");
   const [sortField, setSortField] = useState<"fecha_real_pago" | "monto_pagado" | "folio">("fecha_real_pago");
   const [sortAsc, setSortAsc] = useState<boolean>(false);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, fechaDesde, fechaHasta, selectedModalidad, sortField, sortAsc]);
 
   // Filtrado
   const filteredData = useMemo(() => {
@@ -418,7 +428,7 @@ export function HistoricoPagosTable({
                   </td>
                 </tr>
               ) : (
-                filteredData.map((pago) => {
+                paginateArray(filteredData, currentPage, GLOBAL_PAGE_SIZE).map((pago) => {
                   return (
                     <tr
                       key={pago.id}
@@ -488,6 +498,12 @@ export function HistoricoPagosTable({
             </tbody>
           </table>
         </div>
+        <TablePagination
+          currentPage={currentPage}
+          totalItems={filteredData.length}
+          pageSize={GLOBAL_PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
       </div>
     </div>
   );

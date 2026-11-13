@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState, useTransition, useMemo } from "react";
+import React, { useState, useTransition, useMemo, useEffect } from "react";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import {
   Briefcase,
   Plus,
@@ -88,6 +93,11 @@ export function ComparendosModuleView({
   const [causalFilter, setCausalFilter] = useState("TODAS");
   const [asistenciaFilter, setAsistenciaFilter] = useState<"TODAS" | "SI" | "NO">("TODAS");
   const [reservaFilter, setReservaFilter] = useState<"TODAS" | "SI" | "NO">("TODAS");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery, causalFilter, asistenciaFilter, reservaFilter]);
 
   const [isPending, startTransition] = useTransition();
 
@@ -565,7 +575,7 @@ export function ComparendosModuleView({
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((item) => {
+                paginateArray(filteredItems, currentPage, GLOBAL_PAGE_SIZE).map((item) => {
                   const isSaldado = item.estado === "PAGADO";
                   const isAcuerdoPago = item.estado === "ACUERDO_EN_PAGO";
                   const cuotas = item.cuotas || [];
@@ -768,15 +778,12 @@ export function ComparendosModuleView({
           </table>
         </div>
 
-        {/* Footer de la Tabla */}
-        <div className="px-4 py-2.5 border-t border-slate-200 bg-slate-50/70 flex items-center justify-between text-xs text-slate-500 font-medium">
-          <span>
-            Mostrando {filteredItems.length} de {items.length} comparendos
-          </span>
-          <span className="text-[11px] text-slate-400">
-            Reg. Litigios · Tensacon ERP
-          </span>
-        </div>
+        <TablePagination
+          currentPage={currentPage}
+          totalItems={filteredItems.length}
+          pageSize={GLOBAL_PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* ===================================================================== */}

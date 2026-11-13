@@ -118,7 +118,7 @@ async function loadInitialFacturasVentasPageData(): Promise<{
   return {
     initialFacturas: buildFacturasVentasResponse(rawFacturas, pagosMap, {
       page: 1,
-      pageSize: 15,
+      pageSize: 30,
     }),
     factoringClientes: [...localDb.empresa_factoring_cliente].sort((a, b) =>
       b.created_at.localeCompare(a.created_at)

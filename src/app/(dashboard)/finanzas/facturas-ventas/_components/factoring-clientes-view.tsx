@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useMemo, useState, useTransition } from "react";
+import React, { useMemo, useState, useTransition, useEffect } from "react";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import {
   ChevronDown,
   ChevronRight,
@@ -61,6 +66,11 @@ export function FactoringClientesView({
   const [isPending, startTransition] = useTransition();
   const [searchQuery, setSearchQuery] = useState("");
   const [showEmptyEntities, setShowEmptyEntities] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, showEmptyEntities]);
   const [facturaToReassign, setFacturaToReassign] =
     useState<FacturaVenta | null>(null);
   const [facturaToPay, setFacturaToPay] = useState<FacturaVenta | null>(null);
@@ -213,6 +223,11 @@ export function FactoringClientesView({
       })
       .filter((g): g is FactoringGroupSummary => g !== null);
   }, [groups, searchQuery]);
+
+  const paginatedGroups = useMemo(
+    () => paginateArray(filteredGroups, currentPage, GLOBAL_PAGE_SIZE),
+    [filteredGroups, currentPage]
+  );
 
   const expandAll = () => {
     const next: Record<string, boolean> = {};
@@ -385,7 +400,7 @@ export function FactoringClientesView({
                   </td>
                 </tr>
               ) : (
-                filteredGroups.map((group, idx) => {
+                paginatedGroups.map((group, idx) => {
                   const isExpanded = Boolean(expandedIds[group.factoringId]);
                   const isTopRank = idx === 0 && group.montoTotalCedido > 0;
 
@@ -730,6 +745,12 @@ export function FactoringClientesView({
               </tbody>
             </table>
           </div>
+          <TablePagination
+            currentPage={currentPage}
+            totalItems={filteredGroups.length}
+            pageSize={GLOBAL_PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
         </div>
         </div>
 

@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useMemo, useState, useTransition } from "react";
+import React, { useMemo, useState, useTransition, useEffect } from "react";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -57,6 +62,11 @@ export function PerfilesView({
   const [perfiles, setPerfiles] = useState<PerfilUsuario[]>(initialPerfiles);
   const [cargando, setCargando] = useState(false);
   const [filtro, setFiltro] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filtro]);
   const [toast, setToast] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -330,7 +340,7 @@ export function PerfilesView({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {perfilesFiltrados.map((p) => {
+              {paginateArray(perfilesFiltrados, currentPage, GLOBAL_PAGE_SIZE).map((p) => {
                 const nombre = p.nombre_perfil || "PERFIL";
                 const esAdmin = nombre === "ADMINISTRADOR";
 
@@ -443,6 +453,12 @@ export function PerfilesView({
             </tbody>
           </table>
         </div>
+        <TablePagination
+          currentPage={currentPage}
+          totalItems={perfilesFiltrados.length}
+          pageSize={GLOBAL_PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* ========================================================================= */}

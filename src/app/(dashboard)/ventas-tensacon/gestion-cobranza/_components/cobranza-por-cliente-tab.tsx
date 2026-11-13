@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import {
   Search,
   FileDown,
@@ -41,6 +46,11 @@ export function CobranzaPorClienteTab({
   const [selectedClienteRut, setSelectedClienteRut] = useState<string>("TODOS");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterEstado, setFilterEstado] = useState<"TODOS" | "VENCIDA" | "PROXIMA">("TODOS");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedClienteRut, filterEstado, searchQuery]);
 
   // 1. Filtrar solo facturas impagas críticas (Días para Vencimiento <= 10 días)
   const facturasCriticas = useMemo(() => {
@@ -451,7 +461,7 @@ export function CobranzaPorClienteTab({
                   </td>
                 </tr>
               ) : (
-                facturasFiltradas.map((f) => {
+                paginateArray(facturasFiltradas, currentPage, GLOBAL_PAGE_SIZE).map((f) => {
                   const isVencida = f.estadoVencimiento === "FACTURA_VENCIDA";
 
                   return (
@@ -567,6 +577,12 @@ export function CobranzaPorClienteTab({
             </tbody>
           </table>
         </div>
+        <TablePagination
+          currentPage={currentPage}
+          totalItems={facturasFiltradas.length}
+          pageSize={GLOBAL_PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
       </div>
     </div>
   );

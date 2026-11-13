@@ -85,8 +85,8 @@ export function FacturasVentasTable({
 
   // Caché dinámico de TanStack Query para render instantáneo (<1ms) y revalidación en segundo plano
   const { data: cachedResponse } = useQuery({
-    queryKey: QUERY_KEYS.facturasVentas(1, 15),
-    queryFn: () => getFacturasVentasAction({ page: 1, pageSize: 15 }),
+    queryKey: QUERY_KEYS.facturasVentas(1, 30),
+    queryFn: () => getFacturasVentasAction({ page: 1, pageSize: 30 }),
     initialData: initialResponse,
     staleTime: 5 * 60 * 1000,
   });
@@ -109,7 +109,7 @@ export function FacturasVentasTable({
     useState<FacturasVentasFilterParams["gestionPago"]>("TODOS");
   const [tipoDoc, setTipoDoc] =
     useState<FacturasVentasFilterParams["tipoDoc"]>("TODOS");
-  const [pageSize, setPageSize] = useState<number>(15);
+  const [pageSize, setPageSize] = useState<number>(30);
   const [selectedOnFilter, setSelectedOnFilter] = useState<string>("TODAS");
 
   // Lista única y ordenada de ONs asociadas exclusivamente a facturas con deuda pendiente
@@ -1175,9 +1175,8 @@ export function FacturasVentasTable({
                 }}
                 className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-xs font-mono"
               >
-                <option value={10}>10</option>
                 <option value={15}>15</option>
-                <option value={25}>25</option>
+                <option value={30}>30</option>
                 <option value={50}>50</option>
               </select>
             </div>

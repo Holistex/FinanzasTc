@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useEffect } from "react";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import {
   Briefcase,
   Building2,
@@ -46,6 +51,11 @@ export function MandantesCompaniasClient({
 
   const [searchMandantes, setSearchMandantes] = useState("");
   const [searchCompanias, setSearchCompanias] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchMandantes, searchCompanias]);
   const [isPending, startTransition] = useTransition();
 
   // Modal Mandante state
@@ -345,7 +355,7 @@ export function MandantesCompaniasClient({
                       </td>
                     </tr>
                   ) : (
-                    mandantes.map((m) => (
+                    paginateArray(mandantes, currentPage, GLOBAL_PAGE_SIZE).map((m) => (
                       <tr key={m.id} className="hover:bg-slate-50/60 transition-colors">
                         <td className="py-3 px-4 font-mono font-bold text-slate-800 whitespace-nowrap">
                           {formatRutDisplay(m.rut || m.rut_mandante || "")}
@@ -421,6 +431,12 @@ export function MandantesCompaniasClient({
                 </tbody>
               </table>
             </div>
+            <TablePagination
+              currentPage={currentPage}
+              totalItems={mandantes.length}
+              pageSize={GLOBAL_PAGE_SIZE}
+              onPageChange={setCurrentPage}
+            />
           </div>
         </div>
       )}
@@ -471,7 +487,7 @@ export function MandantesCompaniasClient({
                       </td>
                     </tr>
                   ) : (
-                    companias.map((c) => (
+                    paginateArray(companias, currentPage, GLOBAL_PAGE_SIZE).map((c) => (
                       <tr key={c.id} className="hover:bg-slate-50/60 transition-colors">
                         <td className="py-3 px-4 font-mono font-bold text-slate-800 whitespace-nowrap">
                           {formatRutDisplay(c.rut || c.rut_compania || "")}
@@ -547,6 +563,12 @@ export function MandantesCompaniasClient({
                 </tbody>
               </table>
             </div>
+            <TablePagination
+              currentPage={currentPage}
+              totalItems={companias.length}
+              pageSize={GLOBAL_PAGE_SIZE}
+              onPageChange={setCurrentPage}
+            />
           </div>
         </div>
       )}

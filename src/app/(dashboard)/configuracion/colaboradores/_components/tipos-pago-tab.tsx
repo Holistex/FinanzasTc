@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import {
   Search,
   Pencil,
@@ -25,6 +30,11 @@ export function TiposPagoTab({ initialTiposPago }: TiposPagoTabProps) {
   const [tipos, setTipos] = useState<MantenedorTipoPago[]>(initialTiposPago);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVO" | "INACTIVO">("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
 
   // Modal de Creación / Edición
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -269,7 +279,7 @@ export function TiposPagoTab({ initialTiposPago }: TiposPagoTabProps) {
                   </td>
                 </tr>
               ) : (
-                filteredTipos.map((item) => {
+                paginateArray(filteredTipos, currentPage, GLOBAL_PAGE_SIZE).map((item) => {
                   const isActivo = item.activo !== false;
                   return (
                     <tr
@@ -334,6 +344,12 @@ export function TiposPagoTab({ initialTiposPago }: TiposPagoTabProps) {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          currentPage={currentPage}
+          totalItems={filteredTipos.length}
+          pageSize={GLOBAL_PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* Modal Crear / Editar Tipo de Pago */}

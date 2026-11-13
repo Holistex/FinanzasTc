@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import {
   Search,
   Filter,
@@ -48,6 +53,11 @@ export function CompromisosTable({
   const [selectedModalidad, setSelectedModalidad] = useState<string>("TODAS");
   const [searchTerm, setSearchTerm] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedSemanaId, selectedModalidad, searchTerm]);
 
   // Encontrar el objeto de semana seleccionado
   const selectedSemanaObj = useMemo(() => {
@@ -422,7 +432,7 @@ export function CompromisosTable({
                   </td>
                 </tr>
               ) : (
-                filteredData.map((item) => {
+                paginateArray(filteredData, currentPage, GLOBAL_PAGE_SIZE).map((item) => {
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                       {/* MODALIDAD */}
@@ -472,6 +482,12 @@ export function CompromisosTable({
             </tbody>
           </table>
         </div>
+        <TablePagination
+          currentPage={currentPage}
+          totalItems={filteredData.length}
+          pageSize={GLOBAL_PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
       </div>
     </div>
   );

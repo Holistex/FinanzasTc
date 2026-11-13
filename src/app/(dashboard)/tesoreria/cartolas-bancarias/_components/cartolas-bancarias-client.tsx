@@ -40,6 +40,7 @@ import {
   vaciarTesoreriaAction,
 } from "@/actions/tesoreria.actions";
 import { cn, formatCLP, formatDateCL } from "@/lib/utils";
+import { GLOBAL_PAGE_SIZE, TablePagination } from "@/components/ui/TablePagination";
 
 interface CartolasBancariasClientProps {
   initialData: CartolasTesoreriaResponse;
@@ -49,7 +50,7 @@ interface CartolasBancariasClientProps {
 
 type ActiveTab = "PENDIENTES" | "CLASIFICADOS" | "ABONOS";
 
-const ITEMS_PER_PAGE = 30;
+const ITEMS_PER_PAGE = GLOBAL_PAGE_SIZE;
 
 export function CartolasBancariasClient({
   initialData,
@@ -1154,53 +1155,13 @@ export function CartolasBancariasClient({
         </div>
 
         {/* Paginación y Footer Resumen */}
+        <TablePagination
+          currentPage={safePage}
+          totalItems={filteredLineas.length}
+          pageSize={ITEMS_PER_PAGE}
+          onPageChange={setCurrentPage}
+        />
         <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/80 px-4 py-3 text-xs text-slate-600">
-          {filteredLineas.length > 0 && (
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2.5 border-b border-slate-200/80">
-              <div>
-                Mostrando{" "}
-                <span className="font-bold text-slate-900">
-                  {(safePage - 1) * ITEMS_PER_PAGE + 1}
-                </span>
-                –
-                <span className="font-bold text-slate-900">
-                  {Math.min(safePage * ITEMS_PER_PAGE, filteredLineas.length)}
-                </span>{" "}
-                de{" "}
-                <span className="font-bold text-slate-900">
-                  {filteredLineas.length}
-                </span>{" "}
-                registros (Página{" "}
-                <span className="font-bold text-slate-900">{safePage}</span> de{" "}
-                <span className="font-bold text-slate-900">{totalPages}</span>)
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={safePage <= 1}
-                  className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  ← Anterior
-                </button>
-                <span className="px-2 py-1 font-mono font-bold text-slate-700">
-                  {safePage} / {totalPages}
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCurrentPage((p) => Math.min(totalPages, p + 1))
-                  }
-                  disabled={safePage >= totalPages}
-                  className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  Siguiente →
-                </button>
-              </div>
-            </div>
-          )}
-
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
               Total en pestaña{" "}

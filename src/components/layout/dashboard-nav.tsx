@@ -305,15 +305,14 @@ export function DashboardSidebar({
 
   const sidebarContent = (
     <>
-      <div>
-        {/* Brand Header: FINANZAS CORE - TENSACON */}
-        <Link
-          href="/bienvenida"
-          prefetch={true}
-          onMouseEnter={() => router.prefetch("/bienvenida")}
-          className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-800 bg-[#0F172A] hover:bg-[#1E293B]/40 transition-colors"
-          title="Ir a Inicio / Bienvenida"
-        >
+      {/* 1. Header fijo arriba (FINANZAS CORE - TENSACON) */}
+      <Link
+        href="/bienvenida"
+        prefetch={true}
+        onMouseEnter={() => router.prefetch("/bienvenida")}
+        className="shrink-0 flex items-center gap-3 px-4 py-3.5 border-b border-slate-800 bg-[#0F172A] hover:bg-[#1E293B]/40 transition-colors"
+        title="Ir a Inicio / Bienvenida"
+      >
           {/* Ícono de la Plataforma */}
           <div className="w-9 h-9 rounded-xl bg-orange-600 flex items-center justify-center text-white shadow-md flex-shrink-0">
             <Building2 className="w-5 h-5" />
@@ -330,8 +329,8 @@ export function DashboardSidebar({
           </div>
         </Link>
 
-        {/* Navigation Links */}
-        <nav className="p-3 space-y-4">
+        {/* 2. Menú de navegación con scroll propio independiente */}
+        <nav className="flex-1 overflow-y-auto p-3 space-y-4">
           {/* Enlace Inicio / Bienvenida */}
           <div>
             <SidebarTopLink
@@ -846,10 +845,9 @@ export function DashboardSidebar({
             </div>
           )}
         </nav>
-      </div>
 
-      {/* User Profile Card Footer (IMG 1) */}
-      <div className="p-3 border-t border-slate-800 bg-[#0B1120]">
+      {/* 3. Footer fijo abajo (Usuario + Perfil + Logout siempre visible) */}
+      <div className="shrink-0 p-3 border-t border-slate-800 bg-[#0B1120]">
         <div className="flex items-center justify-between gap-2">
           {/* Avatar & User Details */}
           <div className="flex items-center gap-2.5 min-w-0">
@@ -925,7 +923,7 @@ export function DashboardSidebar({
             className="fixed inset-0 bg-black/60 backdrop-blur-xs"
             onClick={() => setIsMobileOpen(false)}
           />
-          <aside className="relative z-10 w-64 max-w-[85vw] bg-[#0F172A] text-slate-100 flex flex-col justify-between h-full overflow-y-auto shadow-2xl border-r border-slate-800 select-none">
+          <aside className="relative z-10 w-64 max-w-[85vw] bg-[#0F172A] text-slate-100 flex flex-col h-full overflow-hidden shadow-2xl border-r border-slate-800 select-none">
             <button
               type="button"
               onClick={() => setIsMobileOpen(false)}
@@ -939,8 +937,8 @@ export function DashboardSidebar({
         </div>
       )}
 
-      {/* Sidebar fijo en escritorio (lg: en adelante) */}
-      <aside className="hidden lg:flex w-60 shrink-0 border-r border-slate-800 bg-[#0F172A] text-slate-100 flex-col justify-between min-h-screen select-none">
+      {/* Sidebar fijo e independiente en escritorio (lg: en adelante) */}
+      <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 lg:left-0 lg:h-screen border-r border-slate-800 bg-[#0F172A] text-slate-100 select-none z-30">
         {sidebarContent}
       </aside>
     </>

@@ -1,6 +1,11 @@
 "use client";
 
 import React, { useState, useTransition, useEffect } from "react";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import { useRouter } from "next/navigation";
 import {
   FolderKanban,
@@ -42,6 +47,11 @@ export function MantenedorOnClient({
   }, [initialData]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVO" | "INACTIVO">("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
   const [isPending, startTransition] = useTransition();
 
   // Modal State
@@ -370,7 +380,7 @@ export function MantenedorOnClient({
                   </td>
                 </tr>
               ) : (
-                filteredData.map((item) => (
+                paginateArray(filteredData, currentPage, GLOBAL_PAGE_SIZE).map((item) => (
                   <tr
                     key={item.id}
                     className="hover:bg-slate-900/60 border-b border-slate-800/60 transition-colors group"
@@ -475,6 +485,13 @@ export function MantenedorOnClient({
             </tbody>
           </table>
         </div>
+        <TablePagination
+          currentPage={currentPage}
+          totalItems={filteredData.length}
+          pageSize={GLOBAL_PAGE_SIZE}
+          onPageChange={setCurrentPage}
+          dark
+        />
       </div>
 
       {/* Modal Crear / Editar (Sin Campo Mandante) */}

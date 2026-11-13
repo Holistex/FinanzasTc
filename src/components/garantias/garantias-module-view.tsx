@@ -2,6 +2,11 @@
 
 import React, { useState, useTransition, useMemo, useEffect } from "react";
 import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
+import {
   Landmark,
   Shield,
   Plus,
@@ -176,6 +181,11 @@ export function GarantiasModuleView({
   const [estadoFilter, setEstadoFilter] = useState<EstadoGarantia | "TODOS">("TODOS");
   const [mandanteFilter, setMandanteFilter] = useState<string>("TODOS");
   const [companiaFilter, setCompaniaFilter] = useState<string>("TODOS");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery, estadoFilter, mandanteFilter, companiaFilter]);
 
   const [isPending, startTransition] = useTransition();
 
@@ -899,7 +909,7 @@ export function GarantiasModuleView({
                   </td>
                 </tr>
               ) : (
-                tabFilteredItems.map((item) => {
+                paginateArray(tabFilteredItems, currentPage, GLOBAL_PAGE_SIZE).map((item) => {
                   const dias = item.dias_restantes ?? 0;
                   const contrafianzaTexto =
                     item.contrafianza_compania || item.contrafianza || null;
@@ -1095,6 +1105,12 @@ export function GarantiasModuleView({
             </tbody>
           </table>
         </div>
+        <TablePagination
+          currentPage={currentPage}
+          totalItems={tabFilteredItems.length}
+          pageSize={GLOBAL_PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* 6. Modal de Creación / Edición y Renovación */}

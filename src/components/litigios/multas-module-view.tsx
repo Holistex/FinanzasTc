@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState, useTransition, useMemo } from "react";
+import React, { useState, useTransition, useMemo, useEffect } from "react";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import {
   FileWarning,
   Plus,
@@ -78,6 +83,11 @@ export function MultasModuleView({
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [procedenciaFilter, setProcedenciaFilter] = useState<string>("TODAS");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery, procedenciaFilter]);
 
   const [isPending, startTransition] = useTransition();
 
@@ -484,7 +494,7 @@ export function MultasModuleView({
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((item) => {
+                paginateArray(filteredItems, currentPage, GLOBAL_PAGE_SIZE).map((item) => {
                   const isPagada = item.estado === "PAGADA";
 
                   return (
@@ -599,11 +609,12 @@ export function MultasModuleView({
           </table>
         </div>
 
-        {/* Footer con conteo visible */}
-        <div className="px-4 py-2.5 border-t border-slate-200 bg-slate-50/70 flex items-center justify-between text-xs text-slate-500 font-medium">
-          <span>Mostrando {filteredItems.length} de {items.length} multas</span>
-          <span className="text-[11px] text-slate-400">Reg. Litigios · Tensacon ERP</span>
-        </div>
+        <TablePagination
+          currentPage={currentPage}
+          totalItems={filteredItems.length}
+          pageSize={GLOBAL_PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* 6. Modal Formulario (Crear / Editar Multa - Estilo Claro Ejecutivo) */}

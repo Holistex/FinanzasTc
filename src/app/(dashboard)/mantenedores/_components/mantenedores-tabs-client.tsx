@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useEffect } from "react";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import {
   Building2,
   Plus,
@@ -58,6 +63,11 @@ export function MantenedoresTabsClient({
   const [searchClientes, setSearchClientes] = useState("");
   const [searchProveedores, setSearchProveedores] = useState("");
   const [searchConfirming, setSearchConfirming] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchClientes, searchProveedores, searchConfirming]);
   const [isPending, startTransition] = useTransition();
 
   // Modal Cliente state
@@ -418,7 +428,7 @@ export function MantenedoresTabsClient({
                     </td>
                   </tr>
                 ) : (
-                  clientes.map((c) => (
+                  paginateArray(clientes, currentPage, GLOBAL_PAGE_SIZE).map((c) => (
                     <tr key={c.id} className="hover:bg-[#F8FAFC] transition-colors">
                       <td className="py-2.5 px-3 font-mono font-medium text-slate-800">
                         {formatRutDisplay(c.rut_cliente)}
@@ -470,6 +480,12 @@ export function MantenedoresTabsClient({
                 )}
               </tbody>
             </table>
+            <TablePagination
+              currentPage={currentPage}
+              totalItems={clientes.length}
+              pageSize={GLOBAL_PAGE_SIZE}
+              onPageChange={setCurrentPage}
+            />
           </div>
         </div>
       )}
@@ -521,7 +537,7 @@ export function MantenedoresTabsClient({
                     </td>
                   </tr>
                 ) : (
-                  proveedores.map((p) => (
+                  paginateArray(proveedores, currentPage, GLOBAL_PAGE_SIZE).map((p) => (
                     <tr key={p.id} className="hover:bg-[#F8FAFC] transition-colors">
                       <td className="py-2.5 px-3 font-mono font-medium text-slate-800">
                         {formatRutDisplay(p.rut_proveedor)}
@@ -567,6 +583,12 @@ export function MantenedoresTabsClient({
                 )}
               </tbody>
             </table>
+            <TablePagination
+              currentPage={currentPage}
+              totalItems={proveedores.length}
+              pageSize={GLOBAL_PAGE_SIZE}
+              onPageChange={setCurrentPage}
+            />
           </div>
         </div>
       )}
@@ -620,7 +642,7 @@ export function MantenedoresTabsClient({
                     </td>
                   </tr>
                 ) : (
-                  confirmingList.map((c) => (
+                  paginateArray(confirmingList, currentPage, GLOBAL_PAGE_SIZE).map((c) => (
                     <tr key={c.id} className="hover:bg-[#F8FAFC] transition-colors">
                       <td className="py-2.5 px-3 font-mono font-medium text-slate-800">
                         {formatRutDisplay(c.rut_confirming)}
@@ -672,6 +694,12 @@ export function MantenedoresTabsClient({
                 )}
               </tbody>
             </table>
+            <TablePagination
+              currentPage={currentPage}
+              totalItems={confirmingList.length}
+              pageSize={GLOBAL_PAGE_SIZE}
+              onPageChange={setCurrentPage}
+            />
           </div>
         </div>
       )}

@@ -46,6 +46,11 @@ import {
   getCarteraCobranzaAction,
   ResumenSemanaCobranza,
 } from "@/actions/gestion-cobranza.actions";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import { RegistrarGestionModal } from "./registrar-gestion-modal";
 import { RegistrarGestionLoteModal } from "./registrar-gestion-lote-modal";
 import { CobranzaPorClienteTab } from "./cobranza-por-cliente-tab";
@@ -106,6 +111,11 @@ export function GestionCobranzaView({
 
   // Buscador de folio para Tab 3: Gestión por Semana
   const [folioFilterSemana, setFolioFilterSemana] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery, filterGestionPago, filterEstadoGestion, folioFilterSemana]);
 
   // Conteo de facturas críticas (Días Vencimiento <= 10) para el badge de Tab 4
   const countCarteraCritica = useMemo(() => {
@@ -208,6 +218,11 @@ export function GestionCobranzaView({
       return true;
     });
   }, [data.facturas, searchQuery, filterGestionPago, filterEstadoGestion]);
+
+  const paginatedFacturas = useMemo(
+    () => paginateArray(filteredFacturas, currentPage, GLOBAL_PAGE_SIZE),
+    [filteredFacturas, currentPage]
+  );
 
   // Selección múltiple de facturas para gestión en lote
   const selectedFacturasList = useMemo(() => {
@@ -552,7 +567,7 @@ export function GestionCobranzaView({
                     </td>
                   </tr>
                 ) : (
-                  filteredFacturas.map((row) => {
+                  paginatedFacturas.map((row) => {
                     const dueInfo = calculateDueDateInfo(row.fecha_docto);
                     const saldo = Number(row.deuda_cliente ?? row.monto_neto_saldo ?? row.monto_total);
                     const isSelected = selectedFacturaIds.includes(row.id);
@@ -693,6 +708,12 @@ export function GestionCobranzaView({
               </tbody>
             </table>
           </div>
+          <TablePagination
+            currentPage={currentPage}
+            totalItems={filteredFacturas.length}
+            pageSize={GLOBAL_PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
 
@@ -720,7 +741,7 @@ export function GestionCobranzaView({
                     </td>
                   </tr>
                 ) : (
-                  filteredFacturas.map((row) => {
+                  paginatedFacturas.map((row) => {
                     const saldo = Number(row.deuda_cliente ?? row.monto_neto_saldo ?? row.monto_total);
                     const gestiones = row.gestiones_cobranza || [];
                     const ultima = gestiones[0] || null;
@@ -928,6 +949,12 @@ export function GestionCobranzaView({
               </tbody>
             </table>
           </div>
+          <TablePagination
+            currentPage={currentPage}
+            totalItems={filteredFacturas.length}
+            pageSize={GLOBAL_PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
 
@@ -987,7 +1014,7 @@ export function GestionCobranzaView({
                 : "No hay interacciones de cobranza registradas en el sistema."}
             </div>
           ) : (
-            semanasFiltradas.map((semana) => {
+            paginateArray(semanasFiltradas, currentPage, GLOBAL_PAGE_SIZE).map((semana) => {
               const isWeekOpen =
                 Boolean(expandedWeeks[semana.semanaKey]) ||
                 Boolean(folioFilterSemana.trim());
@@ -1172,6 +1199,13 @@ export function GestionCobranzaView({
               );
             })
           )}
+          <TablePagination
+            currentPage={currentPage}
+            totalItems={semanasFiltradas.length}
+            pageSize={GLOBAL_PAGE_SIZE}
+            onPageChange={setCurrentPage}
+            className="rounded-lg border border-slate-200 shadow-sm"
+          />
         </div>
       )}
 

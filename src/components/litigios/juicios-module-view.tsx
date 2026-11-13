@@ -1,6 +1,11 @@
 "use client";
 
-import React, { useState, useTransition, useMemo } from "react";
+import React, { useState, useTransition, useMemo, useEffect } from "react";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import {
   Gavel,
   Plus,
@@ -90,6 +95,11 @@ export function JuiciosModuleView({
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [materiaFilter, setMateriaFilter] = useState<string>("TODAS");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery, materiaFilter]);
 
   const [isPending, startTransition] = useTransition();
 
@@ -747,7 +757,7 @@ export function JuiciosModuleView({
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((item) => {
+                paginateArray(filteredItems, currentPage, GLOBAL_PAGE_SIZE).map((item) => {
                   const isConcluido = item.estado === "CONCLUIDO" || item.estado === "PAGADA";
                   const montoClp = item.cuantia_clp !== undefined ? item.cuantia_clp : item.cuantia;
                   const audList = item.audiencias || [];
@@ -885,11 +895,12 @@ export function JuiciosModuleView({
           </table>
         </div>
 
-        {/* Footer con conteo visible */}
-        <div className="px-4 py-2.5 border-t border-slate-200 bg-slate-50/70 flex items-center justify-between text-xs text-slate-500 font-medium">
-          <span>Mostrando {filteredItems.length} de {items.length} causas</span>
-          <span className="text-[11px] text-slate-400">Reg. Litigios · Tensacon ERP</span>
-        </div>
+        <TablePagination
+          currentPage={currentPage}
+          totalItems={filteredItems.length}
+          pageSize={GLOBAL_PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* 6. MODAL 1: EDITAR / CREAR CAUSA + BITÁCORA CORRELATIVA (Estilo Claro Ejecutivo) */}
