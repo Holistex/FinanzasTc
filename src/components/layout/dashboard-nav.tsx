@@ -69,7 +69,7 @@ const SidebarTopLink = React.memo(function SidebarTopLink({
       onMouseEnter={handlePrefetch}
       onTouchStart={handlePrefetch}
       className={cn(
-        "group flex items-center justify-between rounded-md px-2.5 py-2 text-xs font-semibold transition-all",
+        "group flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-semibold transition-all",
         isActive
           ? "bg-[#E05A10] text-white shadow-sm"
           : "text-slate-300 hover:bg-[#1E293B]/60 hover:text-white"
@@ -124,10 +124,10 @@ const SidebarSubLink = React.memo(function SidebarSubLink({
       onMouseEnter={handlePrefetch}
       onTouchStart={handlePrefetch}
       className={cn(
-        "flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs transition-all",
+        "flex items-center justify-between rounded-md px-2 py-1 text-[11.5px] leading-snug transition-all",
         isActive
           ? "bg-[#E05A10]/15 text-white font-semibold border-l-2 border-[#E05A10]"
-          : "text-slate-400 hover:bg-[#1E293B]/50 hover:text-slate-200"
+          : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-100"
       )}
     >
       <span className="flex items-center gap-2 truncate">
@@ -310,27 +310,27 @@ export function DashboardSidebar({
         href="/bienvenida"
         prefetch={true}
         onMouseEnter={() => router.prefetch("/bienvenida")}
-        className="shrink-0 flex items-center gap-3 px-4 py-3.5 border-b border-slate-800 bg-[#0F172A] hover:bg-[#1E293B]/40 transition-colors"
+        className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-slate-800/80 bg-[#0B1528] hover:bg-slate-900/60 transition-colors"
         title="Ir a Inicio / Bienvenida"
       >
           {/* Ícono de la Plataforma */}
-          <div className="w-9 h-9 rounded-xl bg-orange-600 flex items-center justify-center text-white shadow-md flex-shrink-0">
-            <Building2 className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-lg bg-[#E05A10] flex items-center justify-center text-white shadow-md shadow-orange-950/40 flex-shrink-0">
+            <Building2 className="w-4 h-4" />
           </div>
 
           {/* Títulos de Marca */}
           <div className="flex flex-col justify-center leading-tight">
-            <span className="text-sm font-extrabold text-white tracking-wide uppercase">
+            <span className="text-xs font-extrabold text-white tracking-wider uppercase">
               FINANZAS CORE
             </span>
-            <span className="text-[11px] font-bold text-orange-500 tracking-wider uppercase mt-0.5">
+            <span className="text-[10px] font-bold text-[#E05A10] tracking-widest uppercase mt-0.5">
               TENSACON
             </span>
           </div>
         </Link>
 
-        {/* 2. Menú de navegación con scroll propio independiente */}
-        <nav className="flex-1 overflow-y-auto p-3 space-y-4">
+        {/* 2. Menú de navegación con scroll propio ultrafino */}
+        <nav className="flex-1 overflow-y-auto sidebar-scroll px-2.5 py-2.5 space-y-1.5">
           {/* Enlace Inicio / Bienvenida */}
           <div>
             <SidebarTopLink
@@ -351,7 +351,7 @@ export function DashboardSidebar({
                 type="button"
                 onClick={() => setIsFacturasMenuOpen((prev) => !prev)}
                 className={cn(
-                  "w-full group flex items-center justify-between rounded-md px-2.5 py-2 text-xs font-medium transition-all text-left",
+                  "w-full group flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-medium transition-all text-left",
                   isFacturasSectionActive
                     ? "bg-[#1E293B] text-white shadow-sm ring-1 ring-slate-700"
                     : "text-slate-300 hover:bg-[#1E293B]/60 hover:text-white"
@@ -384,7 +384,7 @@ export function DashboardSidebar({
 
               {/* Submenú Anidado: 1. Facturas de Ventas | 2. Factoring Clientes | 3. Gestión de Cobranza */}
               {isFacturasMenuOpen && (
-                <div className="ml-4 pl-2.5 border-l border-slate-700/80 space-y-1 pt-0.5">
+                <div className="ml-3.5 pl-2.5 border-l border-slate-800 space-y-0.5 pt-0.5">
                   {canFacturasVentas && (
                     <SidebarSubLink
                       href="/finanzas/facturas-ventas"
@@ -429,7 +429,7 @@ export function DashboardSidebar({
                 type="button"
                 onClick={() => setIsComprasMenuOpen((prev) => !prev)}
                 className={cn(
-                  "w-full group flex items-center justify-between rounded-md px-2.5 py-2 text-xs font-medium transition-all text-left mt-2",
+                  "w-full group flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-medium transition-all text-left",
                   isComprasSectionActive
                     ? "bg-[#1E293B] text-white shadow-sm ring-1 ring-slate-700"
                     : "text-slate-300 hover:bg-[#1E293B]/60 hover:text-white"
@@ -462,7 +462,7 @@ export function DashboardSidebar({
 
               {/* Submenú Anidado COMPRAS: 1. Facturas de Compras, 2. Histórico Pagos, 3. Compromisos */}
               {isComprasMenuOpen && (
-                <div className="ml-4 pl-2.5 border-l border-slate-700/80 space-y-1 pt-0.5">
+                <div className="ml-3.5 pl-2.5 border-l border-slate-800 space-y-0.5 pt-0.5">
                   {canFacturasCompras && (
                     <SidebarSubLink
                       href="/compras-tensacon/facturas-compras"
@@ -518,7 +518,7 @@ export function DashboardSidebar({
                 type="button"
                 onClick={() => setIsTesoreriaMenuOpen((prev) => !prev)}
                 className={cn(
-                  "w-full group flex items-center justify-between rounded-md px-2.5 py-2 text-xs font-medium transition-all text-left mt-2",
+                  "w-full group flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-medium transition-all text-left",
                   isTesoreriaSectionActive
                     ? "bg-[#1E293B] text-white shadow-sm ring-1 ring-slate-700"
                     : "text-slate-300 hover:bg-[#1E293B]/60 hover:text-white"
@@ -550,7 +550,7 @@ export function DashboardSidebar({
               </button>
 
               {isTesoreriaMenuOpen && (
-                <div className="ml-4 pl-2.5 border-l border-slate-700/80 space-y-1 pt-0.5">
+                <div className="ml-3.5 pl-2.5 border-l border-slate-800 space-y-0.5 pt-0.5">
                   {canTesoreriaSaldos && (
                     <SidebarSubLink
                       href="/tesoreria/cartolas-bancarias"
@@ -583,7 +583,7 @@ export function DashboardSidebar({
                 type="button"
                 onClick={() => setIsGarantiasMenuOpen((prev) => !prev)}
                 className={cn(
-                  "w-full group flex items-center justify-between rounded-md px-2.5 py-2 text-xs font-medium transition-all text-left mt-2",
+                  "w-full group flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-medium transition-all text-left",
                   isGarantiasSectionActive
                     ? "bg-[#1E293B] text-white shadow-sm ring-1 ring-slate-700"
                     : "text-slate-300 hover:bg-[#1E293B]/60 hover:text-white"
@@ -616,7 +616,7 @@ export function DashboardSidebar({
 
               {/* Submenú Anidado GARANTÍAS: 1. Boletas de Garantía, 2. Pólizas de Garantía */}
               {isGarantiasMenuOpen && (
-                <div className="ml-4 pl-2.5 border-l border-slate-700/80 space-y-1 pt-0.5">
+                <div className="ml-3.5 pl-2.5 border-l border-slate-800 space-y-0.5 pt-0.5">
                   {canBoletasGarantia && (
                     <SidebarSubLink
                       href="/gestion-garantias/boletas-garantias"
@@ -651,7 +651,7 @@ export function DashboardSidebar({
                 type="button"
                 onClick={() => setIsLitigiosMenuOpen((prev) => !prev)}
                 className={cn(
-                  "w-full group flex items-center justify-between rounded-md px-2.5 py-2 text-xs font-medium transition-all text-left mt-2",
+                  "w-full group flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-medium transition-all text-left",
                   isLitigiosSectionActive
                     ? "bg-[#1E293B] text-white shadow-sm ring-1 ring-slate-700"
                     : "text-slate-300 hover:bg-[#1E293B]/60 hover:text-white"
@@ -684,7 +684,7 @@ export function DashboardSidebar({
 
               {/* Submenú Anidado REG. LITIGIOS: 1. Multas, 2. Comparendos, 3. Juicios */}
               {isLitigiosMenuOpen && (
-                <div className="ml-4 pl-2.5 border-l border-slate-700/80 space-y-1 pt-0.5">
+                <div className="ml-3.5 pl-2.5 border-l border-slate-800 space-y-0.5 pt-0.5">
                   {canMultas && (
                     <SidebarSubLink
                       href="/reg-litigios/multas"
@@ -741,7 +741,7 @@ export function DashboardSidebar({
                 type="button"
                 onClick={() => setIsConfiguracionMenuOpen((prev) => !prev)}
                 className={cn(
-                  "w-full group flex items-center justify-between rounded-md px-2.5 py-2 text-xs font-medium transition-all text-left mt-2",
+                  "w-full group flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-medium transition-all text-left",
                   isConfiguracionSectionActive
                     ? "bg-[#1E293B] text-white shadow-sm ring-1 ring-slate-700"
                     : "text-slate-300 hover:bg-[#1E293B]/60 hover:text-white"
@@ -774,7 +774,7 @@ export function DashboardSidebar({
 
               {/* Submenú Anidado CONFIGURACIÓN */}
               {isConfiguracionMenuOpen && (
-                <div className="ml-4 pl-2.5 border-l border-slate-700/80 space-y-1 pt-0.5">
+                <div className="ml-3.5 pl-2.5 border-l border-slate-800 space-y-0.5 pt-0.5">
                   {canMantenedorOn && (
                     <SidebarSubLink
                       href="/configuracion/mantenedor-on"
@@ -846,13 +846,13 @@ export function DashboardSidebar({
           )}
         </nav>
 
-      {/* 3. Footer fijo abajo (Usuario + Perfil + Logout siempre visible) */}
-      <div className="shrink-0 p-3 border-t border-slate-800 bg-[#0B1120]">
-        <div className="flex items-center justify-between gap-2">
+      {/* 3. Footer fijo abajo (Tarjeta de Usuario + Perfil + Logout siempre visible) */}
+      <div className="shrink-0 p-2.5 border-t border-slate-800/80 bg-[#08101E]">
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-slate-900/75 border border-slate-800/90 px-2.5 py-2 shadow-inner">
           {/* Avatar & User Details */}
           <div className="flex items-center gap-2.5 min-w-0">
             {/* Avatar Circle */}
-            <div className="h-9 w-9 rounded-full bg-[#1E293B] border border-slate-700/80 flex items-center justify-center font-bold text-sm text-slate-200 shrink-0 shadow-inner">
+            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-600/70 flex items-center justify-center font-bold text-xs text-white shrink-0 shadow-sm">
               {inicial}
             </div>
 
@@ -865,7 +865,7 @@ export function DashboardSidebar({
                 {nombreDisplay}
               </div>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_6px_#34d399]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0 shadow-[0_0_6px_#34d399]" />
                 <span className="text-[10px] font-bold tracking-wider text-emerald-400 uppercase truncate">
                   {perfilDisplay}
                 </span>
@@ -878,7 +878,7 @@ export function DashboardSidebar({
             type="button"
             onClick={handleLogout}
             title="Cerrar Sesión"
-            className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-[#1E293B] transition-colors shrink-0"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/25 transition-all shrink-0"
           >
             <LogOut className="h-4 w-4" />
           </button>
@@ -923,7 +923,7 @@ export function DashboardSidebar({
             className="fixed inset-0 bg-black/60 backdrop-blur-xs"
             onClick={() => setIsMobileOpen(false)}
           />
-          <aside className="relative z-10 w-64 max-w-[85vw] bg-[#0F172A] text-slate-100 flex flex-col h-full overflow-hidden shadow-2xl border-r border-slate-800 select-none">
+          <aside className="relative z-10 w-64 max-w-[85vw] bg-[#0B1528] text-slate-100 flex flex-col h-full overflow-hidden shadow-2xl border-r border-slate-800/80 select-none">
             <button
               type="button"
               onClick={() => setIsMobileOpen(false)}
@@ -938,7 +938,7 @@ export function DashboardSidebar({
       )}
 
       {/* Sidebar fijo e independiente en escritorio (lg: en adelante) */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 lg:left-0 lg:h-screen border-r border-slate-800 bg-[#0F172A] text-slate-100 select-none z-30">
+      <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 lg:left-0 lg:h-screen border-r border-slate-800/80 bg-[#0B1528] text-slate-100 select-none z-30">
         {sidebarContent}
       </aside>
     </>
