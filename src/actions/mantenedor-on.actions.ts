@@ -27,6 +27,7 @@ export async function getMantenedorOnAction(
   const localList = [...(localDb.mantenedor_on || [])];
 
   let supaList: MantenedorON[] = [];
+  let supaFetchedOk = false;
 
   if (isServerSupabaseConfigured()) {
     try {
@@ -52,6 +53,7 @@ export async function getMantenedorOnAction(
       const { data, error } = await query;
       if (!error && data) {
         supaList = data as MantenedorON[];
+        supaFetchedOk = true;
       } else if (error) {
         console.warn(`[getMantenedorOnAction Supabase error]: ${error.message}`);
       }
@@ -60,28 +62,27 @@ export async function getMantenedorOnAction(
     }
   }
 
-  // Combinación inteligente de registros (Local + Supabase)
-  // Garantiza que los registros no se pierdan por discrepancias de caché o políticas RLS en Supabase
+  // Si Supabase respondió correctamente, usarlo como fuente de verdad para evitar
+  // que registros eliminados reaparezcan desde local-fallback-db.json
   const mapByCode = new Map<string, MantenedorON>();
 
-  // 1. Agregar registros locales
-  for (const item of localList) {
-    if (item.codigo_on) {
-      mapByCode.set(item.codigo_on, {
-        ...item,
-        // Si el valor es null o undefined, considerarlo activo por defecto
-        activo: item.activo !== false,
-      });
+  if (!supaFetchedOk) {
+    for (const item of localList) {
+      if (item.codigo_on) {
+        mapByCode.set(item.codigo_on, {
+          ...item,
+          activo: item.activo !== false,
+        });
+      }
     }
-  }
-
-  // 2. Agregar o sobreescribir con registros de Supabase si existen
-  for (const item of supaList) {
-    if (item.codigo_on) {
-      mapByCode.set(item.codigo_on, {
-        ...item,
-        activo: item.activo !== false,
-      });
+  } else {
+    for (const item of supaList) {
+      if (item.codigo_on) {
+        mapByCode.set(item.codigo_on, {
+          ...item,
+          activo: item.activo !== false,
+        });
+      }
     }
   }
 
@@ -282,48 +283,79 @@ export async function toggleMantenedorOnStatusAction(
 }
 
 export async function deleteMantenedorOnAction(
-  id: string
+  idOrCodigo: string,
+  codigoOn?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const valorLimpio = String(idOrCodigo).trim();
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        valorLimpio
+      );
+
     const db = readLocalDb();
     let itemToDelete: MantenedorON | undefined;
 
     if (db.mantenedor_on) {
-      itemToDelete = db.mantenedor_on.find((o) => o.id === id);
-      db.mantenedor_on = db.mantenedor_on.filter((o) => o.id !== id);
+      itemToDelete = db.mantenedor_on.find(
+        (o) =>
+          o.id === valorLimpio ||
+          (codigoOn ? o.codigo_on === String(codigoOn).trim() : false)
+      );
+      db.mantenedor_on = db.mantenedor_on.filter(
+        (o) =>
+          o.id !== valorLimpio &&
+          (!codigoOn || o.codigo_on !== String(codigoOn).trim())
+      );
       writeLocalDb(db);
     }
 
     if (isServerSupabaseConfigured()) {
       const supabase = await createServerSupabaseClient();
 
-      // Resolver codigo_on si no estaba en localDb
-      let codigoOn = itemToDelete?.codigo_on;
-      if (!codigoOn) {
+      // Resolver codigo_on limpio
+      let codigoLimpio = codigoOn
+        ? String(codigoOn).trim()
+        : itemToDelete?.codigo_on ||
+          (isUuid ? "" : valorLimpio.replace(/^on-/i, "").split("-")[0]);
+
+      if (!codigoLimpio && isUuid) {
         const { data: rowOn } = await supabase
           .from("mantenedor_on")
           .select("codigo_on")
-          .eq("id", id)
+          .eq("id", valorLimpio)
           .maybeSingle();
         if (rowOn?.codigo_on) {
-          codigoOn = String(rowOn.codigo_on);
+          codigoLimpio = String(rowOn.codigo_on).trim();
         }
       }
 
-      // Limpiar referencias en facturas_ventas para evitar bloqueos por integridad referencial
-      if (codigoOn) {
+      // 1. Liberar referencias en facturas_ventas si existieran
+      if (codigoLimpio) {
         await supabase
           .from("facturas_ventas")
           .update({ on_proyecto: null })
-          .eq("on_proyecto", codigoOn);
+          .eq("on_proyecto", codigoLimpio);
       }
 
-      const { error } = await supabase
-        .from("mantenedor_on")
-        .delete()
-        .eq("id", id);
+      // 2. Eliminar de mantenedor_on buscando coincidencia exacta por id o codigo_on
+      let deleteQuery = supabase.from("mantenedor_on").delete();
+      if (isUuid && codigoLimpio) {
+        deleteQuery = deleteQuery.or(
+          `id.eq.${valorLimpio},codigo_on.eq.${codigoLimpio}`
+        );
+      } else if (isUuid) {
+        deleteQuery = deleteQuery.eq("id", valorLimpio);
+      } else if (codigoLimpio) {
+        deleteQuery = deleteQuery.eq("codigo_on", codigoLimpio);
+      } else {
+        deleteQuery = deleteQuery.eq("id", valorLimpio);
+      }
+
+      const { error } = await deleteQuery;
 
       if (error) {
+        console.error("[MantenedorON] Error eliminando:", error.message);
         return { success: false, error: error.message };
       }
     }

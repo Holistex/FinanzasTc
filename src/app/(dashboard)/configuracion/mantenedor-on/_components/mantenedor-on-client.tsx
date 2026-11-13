@@ -114,12 +114,12 @@ export function MantenedorOnClient({ initialData }: MantenedorOnClientProps) {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, codigoOn?: string) => {
     if (!confirm("¿Está seguro de que desea eliminar este código ON?")) return;
     setActionError(null);
     setDeletingId(id);
     try {
-      const res = await deleteMantenedorOnAction(id);
+      const res = await deleteMantenedorOnAction(id, codigoOn);
       if (!res.success) {
         setActionError(res.error || "Error al eliminar el código ON.");
         return;
@@ -425,7 +425,7 @@ export function MantenedorOnClient({ initialData }: MantenedorOnClientProps) {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDelete(item.id)}
+                          onClick={() => handleDelete(item.id, item.codigo_on)}
                           disabled={deletingId === item.id}
                           className="p-1.5 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-50"
                           title="Eliminar ON"
