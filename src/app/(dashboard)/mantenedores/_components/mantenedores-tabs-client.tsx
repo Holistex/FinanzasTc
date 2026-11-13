@@ -6,6 +6,7 @@ import {
   GLOBAL_PAGE_SIZE,
   paginateArray,
 } from "@/components/ui/TablePagination";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import {
   Building2,
   Plus,
@@ -310,74 +311,32 @@ export function MantenedoresTabsClient({
         </div>
       </div>
 
-      {/* Tabs Navigation Component (Sin el prefijo "Pestaña X:") */}
-      <div className="border-b border-slate-200 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab("CLIENTES")}
-          className={cn(
-            "px-4 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 -mb-px",
-            activeTab === "CLIENTES"
-              ? "border-[#E05A10] text-[#0F172A] bg-white rounded-t-md"
-              : "border-transparent text-slate-500 hover:text-[#0F172A]"
-          )}
-        >
-          <Landmark
-            className={cn(
-              "h-3.5 w-3.5",
-              activeTab === "CLIENTES" ? "text-[#E05A10]" : "text-slate-400"
-            )}
-          />
-          Empresa Factoring Cliente
-          <span className="ml-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-mono text-[#E05A10] border border-orange-200">
-            {clientes.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("PROVEEDORES")}
-          className={cn(
-            "px-4 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 -mb-px",
-            activeTab === "PROVEEDORES"
-              ? "border-[#E05A10] text-[#0F172A] bg-white rounded-t-md"
-              : "border-transparent text-slate-500 hover:text-[#0F172A]"
-          )}
-        >
-          <Building2
-            className={cn(
-              "h-3.5 w-3.5",
-              activeTab === "PROVEEDORES" ? "text-[#E05A10]" : "text-slate-400"
-            )}
-          />
-          Empresa Factoring Proveedores
-          <span className="ml-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-mono text-[#E05A10] border border-orange-200">
-            {proveedores.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("CONFIRMING")}
-          className={cn(
-            "px-4 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 -mb-px",
-            activeTab === "CONFIRMING"
-              ? "border-[#E05A10] text-[#0F172A] bg-white rounded-t-md"
-              : "border-transparent text-slate-500 hover:text-[#0F172A]"
-          )}
-        >
-          <ShieldCheck
-            className={cn(
-              "h-3.5 w-3.5",
-              activeTab === "CONFIRMING" ? "text-[#E05A10]" : "text-slate-400"
-            )}
-          />
-          Empresa Confirming
-          <span className="ml-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-mono text-[#E05A10] border border-orange-200">
-            {confirmingList.length}
-          </span>
-        </button>
-      </div>
+      {/* Tabs Navigation Component */}
+      <SegmentedTabs
+        ariaLabel="Vistas de mantenedores"
+        activeTab={activeTab}
+        onChange={setActiveTab}
+        tabs={[
+          {
+            id: "CLIENTES",
+            label: "Empresa Factoring Cliente",
+            icon: Landmark,
+            count: clientes.length,
+          },
+          {
+            id: "PROVEEDORES",
+            label: "Empresa Factoring Proveedores",
+            icon: Building2,
+            count: proveedores.length,
+          },
+          {
+            id: "CONFIRMING",
+            label: "Empresa Confirming",
+            icon: ShieldCheck,
+            count: confirmingList.length,
+          },
+        ]}
+      />
 
       {/* =====================================================================
           PESTAÑA 1: EMPRESA FACTORING CLIENTE

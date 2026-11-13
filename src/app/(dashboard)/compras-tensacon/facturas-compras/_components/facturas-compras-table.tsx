@@ -6,6 +6,7 @@ import {
   GLOBAL_PAGE_SIZE,
   paginateArray,
 } from "@/components/ui/TablePagination";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import {
   Search,
   Filter,
@@ -478,148 +479,57 @@ export function FacturasComprasTable({
       </div>
 
       {/* 2. Pestañas de Navegación del Módulo (5 Pestañas) */}
-      <div className="flex items-center justify-between border-b border-slate-200 overflow-x-auto">
-        <div className="flex items-center gap-1 sm:gap-2">
-          {/* Pestaña 1: Facturas Pendientes / Cartera */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("CARTERA")}
-            className={cn(
-              "px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 -mb-px whitespace-nowrap",
-              activeTab === "CARTERA"
-                ? "border-[#E05A10] text-[#0F172A] bg-white rounded-t-lg shadow-xs"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            )}
-          >
-            <Building2 className={cn("h-4 w-4", activeTab === "CARTERA" ? "text-[#E05A10]" : "text-slate-400")} />
-            <span>Facturas Pendientes / Cartera</span>
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[10px] font-mono border",
-                activeTab === "CARTERA"
-                  ? "bg-orange-50 text-[#E05A10] border-orange-200 font-bold"
-                  : "bg-slate-100 text-slate-600 border-slate-200"
-              )}
-            >
-              {facturasCartera.length}
-            </span>
-          </button>
-
-          {/* Pestaña 2: Cheques */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("CHEQUES")}
-            className={cn(
-              "px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 -mb-px whitespace-nowrap",
-              activeTab === "CHEQUES"
-                ? "border-amber-600 text-[#0F172A] bg-white rounded-t-lg shadow-xs"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            )}
-          >
-            <Banknote className={cn("h-4 w-4", activeTab === "CHEQUES" ? "text-amber-600" : "text-slate-400")} />
-            <span>Cheques</span>
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[10px] font-mono border",
-                activeTab === "CHEQUES"
-                  ? "bg-amber-50 text-amber-800 border-amber-200 font-bold"
-                  : "bg-slate-100 text-slate-600 border-slate-200"
-              )}
-            >
-              {facturasCheques.length}
-            </span>
-          </button>
-
-          {/* Pestaña 3: Factoring */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("FACTORING")}
-            className={cn(
-              "px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 -mb-px whitespace-nowrap",
-              activeTab === "FACTORING"
-                ? "border-purple-600 text-[#0F172A] bg-white rounded-t-lg shadow-xs"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            )}
-          >
-            <Layers className={cn("h-4 w-4", activeTab === "FACTORING" ? "text-purple-600" : "text-slate-400")} />
-            <span>Factoring</span>
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[10px] font-mono border",
-                activeTab === "FACTORING"
-                  ? "bg-purple-50 text-purple-700 border-purple-200 font-bold"
-                  : "bg-slate-100 text-slate-600 border-slate-200"
-              )}
-            >
-              {facturasFactoring.length}
-            </span>
-          </button>
-
-          {/* Pestaña 4: Confirming */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("CONFIRMING")}
-            className={cn(
-              "px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 -mb-px whitespace-nowrap",
-              activeTab === "CONFIRMING"
-                ? "border-emerald-600 text-[#0F172A] bg-white rounded-t-lg shadow-xs"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            )}
-          >
-            <CreditCard className={cn("h-4 w-4", activeTab === "CONFIRMING" ? "text-emerald-600" : "text-slate-400")} />
-            <span>Confirming</span>
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[10px] font-mono border",
-                activeTab === "CONFIRMING"
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-bold"
-                  : "bg-slate-100 text-slate-600 border-slate-200"
-              )}
-            >
-              {facturasConfirming.length}
-            </span>
-          </button>
-
-          {/* Pestaña 5: FAC/NC (Al final) */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("FAC_NC")}
-            className={cn(
-              "px-3.5 py-2.5 text-xs font-semibold border-b-2 transition-all flex items-center gap-1.5 -mb-px whitespace-nowrap",
-              activeTab === "FAC_NC"
-                ? "border-rose-600 text-[#0F172A] bg-white rounded-t-lg shadow-xs"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            )}
-          >
-            <FileDiff className={cn("h-4 w-4", activeTab === "FAC_NC" ? "text-rose-600" : "text-slate-400")} />
-            <span>FAC/NC</span>
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[10px] font-mono border",
-                activeTab === "FAC_NC"
-                  ? "bg-rose-50 text-rose-700 border-rose-200 font-bold"
-                  : "bg-slate-100 text-slate-600 border-slate-200"
-              )}
-            >
-              {facturasFacNc.length}
-            </span>
-          </button>
-        </div>
-
-        {/* Acciones del encabezado: Exclusivas para ADMINISTRADOR */}
-        {(userSession?.esAdmin || userSession?.perfil?.toUpperCase() === "ADMINISTRADOR") && (
-          <div className="flex items-center gap-2 pb-1 shrink-0 ml-2">
-            <button
-              onClick={() => setIsImportModalOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-[#E05A10] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#c94f0e] transition-all whitespace-nowrap"
-              title="Importar archivo CSV del Registro de Compras SII"
+      <SegmentedTabs
+        ariaLabel="Vistas de facturas de compras"
+        activeTab={activeTab}
+        onChange={setActiveTab}
+        tabs={[
+          {
+            id: "CARTERA",
+            label: "Facturas Pendientes / Cartera",
+            icon: Building2,
+            count: facturasCartera.length,
+          },
+          {
+            id: "CHEQUES",
+            label: "Cheques",
+            icon: Banknote,
+            count: facturasCheques.length,
+          },
+          {
+            id: "FACTORING",
+            label: "Factoring",
+            icon: Layers,
+            count: facturasFactoring.length,
+          },
+          {
+            id: "CONFIRMING",
+            label: "Confirming",
+            icon: CreditCard,
+            count: facturasConfirming.length,
+          },
+          {
+            id: "FAC_NC",
+            label: "FAC/NC",
+            icon: FileDiff,
+            count: facturasFacNc.length,
+          },
+        ]}
+        rightSlot={
+          (userSession?.esAdmin || userSession?.perfil?.toUpperCase() === "ADMINISTRADOR") ? (
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setIsImportModalOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg bg-[#E05A10] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#c94f0e] transition-all whitespace-nowrap"
+                title="Importar archivo CSV del Registro de Compras SII"
             >
               <UploadCloud className="h-3.5 w-3.5" />
               <span>Importar CSV SII</span>
             </button>
           </div>
-        )}
-      </div>
+          ) : undefined
+        }
+      />
 
       {/* 3. Barra de Herramientas y Filtros */}
       <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm sm:flex-row sm:items-center sm:justify-between">

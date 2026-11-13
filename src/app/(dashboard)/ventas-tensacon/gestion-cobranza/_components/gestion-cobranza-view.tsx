@@ -2,6 +2,7 @@
 
 import React, { useState, useTransition, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import {
   Search,
   Filter,
@@ -367,106 +368,37 @@ export function GestionCobranzaView({
       </div>
 
       {/* 3. Navigation Tabs */}
-      <div className="border-b border-slate-200 bg-white rounded-t-lg px-2 pt-2 shadow-sm">
-        <div className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
-          <button
-            type="button"
-            onClick={() => setActiveTab("CARTERA")}
-            className={cn(
-              "flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-t-md border-b-2 transition-all",
-              activeTab === "CARTERA"
-                ? "border-[#E05A10] text-[#E05A10] bg-orange-50/50"
-                : "border-transparent text-slate-600 hover:text-slate-800 hover:bg-slate-50"
-            )}
-          >
-            <Receipt className="h-3.5 w-3.5" />
-            <span>Facturas Pendientes / Cartera</span>
-            <span
-              className={cn(
-                "rounded-full px-1.5 py-0.2 text-[10px] font-mono",
-                activeTab === "CARTERA"
-                  ? "bg-[#E05A10] text-white"
-                  : "bg-slate-200 text-slate-700"
-              )}
-            >
-              {data.cantidadTotal}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("COBRANZAS")}
-            className={cn(
-              "flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-t-md border-b-2 transition-all",
-              activeTab === "COBRANZAS"
-                ? "border-[#E05A10] text-[#E05A10] bg-orange-50/50"
-                : "border-transparent text-slate-600 hover:text-slate-800 hover:bg-slate-50"
-            )}
-          >
-            <PhoneCall className="h-3.5 w-3.5" />
-            <span>Cobranzas / Historial</span>
-            <span
-              className={cn(
-                "rounded-full px-1.5 py-0.2 text-[10px] font-mono",
-                activeTab === "COBRANZAS"
-                  ? "bg-[#E05A10] text-white"
-                  : "bg-slate-200 text-slate-700"
-              )}
-            >
-              {data.cantidadConGestion} / {data.cantidadTotal}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("SEMANAL")}
-            className={cn(
-              "flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-t-md border-b-2 transition-all",
-              activeTab === "SEMANAL"
-                ? "border-[#E05A10] text-[#E05A10] bg-orange-50/50"
-                : "border-transparent text-slate-600 hover:text-slate-800 hover:bg-slate-50"
-            )}
-          >
-            <CalendarDays className="h-3.5 w-3.5" />
-            <span>Gestión por Semana</span>
-            <span
-              className={cn(
-                "rounded-full px-1.5 py-0.2 text-[10px] font-mono",
-                activeTab === "SEMANAL"
-                  ? "bg-[#E05A10] text-white"
-                  : "bg-slate-200 text-slate-700"
-              )}
-            >
-              {data.resumenSemanas.length} Semanas
-            </span>
-          </button>
-
-          {/* Pestaña 4: Cobranza por Cliente */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("POR_CLIENTE")}
-            className={cn(
-              "flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-t-md border-b-2 transition-all",
-              activeTab === "POR_CLIENTE"
-                ? "border-[#E05A10] text-[#E05A10] bg-orange-50/50"
-                : "border-transparent text-slate-600 hover:text-slate-800 hover:bg-slate-50"
-            )}
-          >
-            <Building2 className="h-3.5 w-3.5" />
-            <span>Cobranza por Cliente</span>
-            <span
-              className={cn(
-                "rounded-full px-1.5 py-0.2 text-[10px] font-mono",
-                activeTab === "POR_CLIENTE"
-                  ? "bg-[#E05A10] text-white"
-                  : "bg-slate-200 text-slate-700"
-              )}
-            >
-              {countCarteraCritica} Críticas
-            </span>
-          </button>
-        </div>
-      </div>
+      <SegmentedTabs
+        ariaLabel="Vistas de gestión de cobranza"
+        activeTab={activeTab}
+        onChange={setActiveTab}
+        tabs={[
+          {
+            id: "CARTERA",
+            label: "Facturas Pendientes / Cartera",
+            icon: Receipt,
+            count: data.cantidadTotal,
+          },
+          {
+            id: "COBRANZAS",
+            label: "Cobranzas / Historial",
+            icon: PhoneCall,
+            count: `${data.cantidadConGestion} / ${data.cantidadTotal}`,
+          },
+          {
+            id: "SEMANAL",
+            label: "Gestión por Semana",
+            icon: CalendarDays,
+            count: `${data.resumenSemanas.length} Semanas`,
+          },
+          {
+            id: "POR_CLIENTE",
+            label: "Cobranza por Cliente",
+            icon: Building2,
+            count: `${countCarteraCritica} Críticas`,
+          },
+        ]}
+      />
 
       {/* 4. Filters Bar (Visible for Tab 1 & Tab 2) */}
       {activeTab !== "SEMANAL" && activeTab !== "POR_CLIENTE" && (

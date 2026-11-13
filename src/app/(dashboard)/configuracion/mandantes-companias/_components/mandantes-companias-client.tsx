@@ -6,6 +6,7 @@ import {
   GLOBAL_PAGE_SIZE,
   paginateArray,
 } from "@/components/ui/TablePagination";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import {
   Briefcase,
   Building2,
@@ -275,39 +276,25 @@ export function MandantesCompaniasClient({
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 space-x-2">
-        <button
-          onClick={() => setActiveTab("MANDANTES")}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors",
-            activeTab === "MANDANTES"
-              ? "border-[#E05A10] text-[#E05A10] bg-orange-50/50"
-              : "border-transparent text-slate-500 hover:text-slate-800"
-          )}
-        >
-          <Building2 className="h-4 w-4" />
-          Mandantes / Clientes de Obra
-          <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 border border-slate-200 font-mono">
-            {mandantes.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab("COMPANIAS")}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors",
-            activeTab === "COMPANIAS"
-              ? "border-[#E05A10] text-[#E05A10] bg-orange-50/50"
-              : "border-transparent text-slate-500 hover:text-slate-800"
-          )}
-        >
-          <ShieldCheck className="h-4 w-4" />
-          Compañías Aseguradoras / Bancos Emisores
-          <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700 border border-slate-200 font-mono">
-            {companias.length}
-          </span>
-        </button>
-      </div>
+      <SegmentedTabs
+        ariaLabel="Vistas de mandantes y compañías"
+        activeTab={activeTab}
+        onChange={setActiveTab}
+        tabs={[
+          {
+            id: "MANDANTES",
+            label: "Mandantes / Clientes de Obra",
+            icon: Building2,
+            count: mandantes.length,
+          },
+          {
+            id: "COMPANIAS",
+            label: "Compañías Aseguradoras / Bancos Emisores",
+            icon: ShieldCheck,
+            count: companias.length,
+          },
+        ]}
+      />
 
       {/* TAB 1: MANDANTES */}
       {activeTab === "MANDANTES" && (

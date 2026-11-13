@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useRef, useTransition, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import {
   Landmark,
   FileSpreadsheet,
@@ -672,91 +673,35 @@ export function CartolasBancariasClient({
       </div>
 
       {/* 3. PESTAÑAS DE NAVEGACIÓN SUPERIOR (TABS CON CONTADORES EN TIEMPO REAL) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
-        <div className="inline-flex items-center gap-1.5 bg-white p-1.5 rounded-xl border border-slate-200 shadow-xs overflow-x-auto max-w-full">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("PENDIENTES");
-              setSelectedRowIds([]);
-            }}
-            className={cn(
-              "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
-              activeTab === "PENDIENTES"
-                ? "bg-[#E05A10] text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-            )}
-          >
-            <Clock className="h-3.5 w-3.5" />
-            <span>Líneas por clasificar</span>
-            <span
-              className={cn(
-                "px-2 py-0.5 rounded-full text-[11px] font-mono font-extrabold",
-                activeTab === "PENDIENTES"
-                  ? "bg-white/20 text-white"
-                  : "bg-amber-50 text-amber-700 border border-amber-200"
-              )}
-            >
-              {lineasPorClasificar.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("CLASIFICADOS");
-              setSelectedRowIds([]);
-            }}
-            className={cn(
-              "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
-              activeTab === "CLASIFICADOS"
-                ? "bg-[#0B1528] text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-            )}
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            <span>Movimientos Clasificados</span>
-            <span
-              className={cn(
-                "px-2 py-0.5 rounded-full text-[11px] font-mono font-extrabold",
-                activeTab === "CLASIFICADOS"
-                  ? "bg-emerald-500/25 text-emerald-300"
-                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-              )}
-            >
-              {movimientosClasificados.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("ABONOS");
-              setSelectedRowIds([]);
-            }}
-            className={cn(
-              "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
-              activeTab === "ABONOS"
-                ? "bg-emerald-600 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-            )}
-          >
-            <ArrowUpRight className="h-3.5 w-3.5" />
-            <span>Abonos</span>
-            <span
-              className={cn(
-                "px-2 py-0.5 rounded-full text-[11px] font-mono font-extrabold",
-                activeTab === "ABONOS"
-                  ? "bg-white/20 text-white"
-                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-              )}
-            >
-              {abonosLineas.length}
-            </span>
-          </button>
-        </div>
-
-        <div className="text-xs text-slate-500">
+      <SegmentedTabs
+        ariaLabel="Vistas de cartolas bancarias"
+        activeTab={activeTab}
+        onChange={(tab) => {
+          setActiveTab(tab);
+          setSelectedRowIds([]);
+        }}
+        tabs={[
+          {
+            id: "PENDIENTES",
+            label: "Líneas por clasificar",
+            icon: Clock,
+            count: lineasPorClasificar.length,
+          },
+          {
+            id: "CLASIFICADOS",
+            label: "Movimientos Clasificados",
+            icon: CheckCircle2,
+            count: movimientosClasificados.length,
+          },
+          {
+            id: "ABONOS",
+            label: "Abonos",
+            icon: ArrowUpRight,
+            count: abonosLineas.length,
+          },
+        ]}
+        rightSlot={
+          <div className="text-xs text-slate-500">
           {activeTab === "PENDIENTES" ? (
             <span>
               Al asignar un <strong>Tipo de Movimiento</strong>, la línea se guarda y pasa automáticamente a{" "}
@@ -772,8 +717,9 @@ export function CartolasBancariasClient({
               Ingresos y depósitos bancarios separados automáticamente para control de abonos.
             </span>
           )}
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       {/* 4. BARRA DE FILTROS SUPERIORES */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">

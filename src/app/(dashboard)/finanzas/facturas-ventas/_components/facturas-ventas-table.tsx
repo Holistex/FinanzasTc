@@ -2,6 +2,7 @@
 
 import React, { useState, useTransition, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import {
   Search,
   Filter,
@@ -621,146 +622,45 @@ export function FacturasVentasTable({
           Pestaña 2: Facturas Pagadas (deuda_cliente == $0 con registros reales en pagos_facturas)
           Pestaña 3: FAC / NC (DTE 61 + Facturas DTE 33 saldadas a $0 por Nota de Crédito sin flujo de caja)
       ===================================================================== */}
-      <div className="border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {/* Pestaña 1: Facturas Pendientes / Deuda */}
-          <button
-            type="button"
-            onClick={() => handleSwitchTab("PENDIENTES")}
-            className={cn(
-              "px-3.5 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 -mb-px",
-              activeViewTab === "PENDIENTES"
-                ? "border-[#E05A10] text-[#0F172A] bg-white rounded-t-md shadow-sm"
-                : "border-transparent text-slate-500 hover:text-[#0F172A]"
-            )}
-          >
-            <Clock
-              className={cn(
-                "h-3.5 w-3.5",
-                activeViewTab === "PENDIENTES"
-                  ? "text-[#E05A10]"
-                  : "text-slate-400"
-              )}
-            />
-            Facturas Pendientes / Deuda
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[10px] font-mono border",
-                activeViewTab === "PENDIENTES"
-                  ? "bg-orange-50 text-[#E05A10] border-orange-200"
-                  : "bg-[#F1F5F9] text-slate-600 border-slate-200"
-              )}
-            >
-              {response.pendientesCount}
+      <SegmentedTabs
+        ariaLabel="Vistas de agrupación"
+        activeTab={activeViewTab}
+        onChange={handleSwitchTab}
+        tabs={[
+          {
+            id: "PENDIENTES",
+            label: "Facturas Pendientes / Deuda",
+            icon: Clock,
+            count: response.pendientesCount,
+          },
+          {
+            id: "PAGADAS",
+            label: "Facturas Pagadas",
+            icon: CheckCircle2,
+            count: response.pagadasCount,
+          },
+          {
+            id: "FAC_NC",
+            label: "FAC / NC",
+            icon: FileDiff,
+            count: response.facNcCount ?? 0,
+          },
+          {
+            id: "RESUMEN",
+            label: "Resumen",
+            icon: BarChart3,
+            count: resumenFacturas !== null ? resumenClientes.length : undefined,
+          },
+        ]}
+        rightSlot={
+          (isPending || isLoadingResumen) ? (
+            <span className="inline-flex items-center gap-1 text-xs text-[#E05A10] font-medium pr-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Sincronizando...
             </span>
-          </button>
-
-          {/* Pestaña 2: Facturas Pagadas (Ingreso Real de Tesorería) */}
-          <button
-            type="button"
-            onClick={() => handleSwitchTab("PAGADAS")}
-            className={cn(
-              "px-3.5 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 -mb-px",
-              activeViewTab === "PAGADAS"
-                ? "border-[#E05A10] text-[#0F172A] bg-white rounded-t-md shadow-sm"
-                : "border-transparent text-slate-500 hover:text-[#0F172A]"
-            )}
-          >
-            <CheckCircle2
-              className={cn(
-                "h-3.5 w-3.5",
-                activeViewTab === "PAGADAS"
-                  ? "text-emerald-600"
-                  : "text-slate-400"
-              )}
-            />
-            Facturas Pagadas
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[10px] font-mono border",
-                activeViewTab === "PAGADAS"
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  : "bg-[#F1F5F9] text-slate-600 border-slate-200"
-              )}
-            >
-              {response.pagadasCount}
-            </span>
-          </button>
-
-          {/* Pestaña 3: FAC / NC (Neteos y Ajustes Comerciales sin flujo financiero) */}
-          <button
-            type="button"
-            onClick={() => handleSwitchTab("FAC_NC")}
-            className={cn(
-              "px-3.5 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 -mb-px",
-              activeViewTab === "FAC_NC"
-                ? "border-[#E05A10] text-[#0F172A] bg-white rounded-t-md shadow-sm"
-                : "border-transparent text-slate-500 hover:text-[#0F172A]"
-            )}
-          >
-            <FileDiff
-              className={cn(
-                "h-3.5 w-3.5",
-                activeViewTab === "FAC_NC"
-                  ? "text-rose-600"
-                  : "text-slate-400"
-              )}
-            />
-            FAC / NC
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-[10px] font-mono border",
-                activeViewTab === "FAC_NC"
-                  ? "bg-rose-50 text-rose-700 border-rose-200"
-                  : "bg-[#F1F5F9] text-slate-600 border-slate-200"
-              )}
-            >
-              {response.facNcCount ?? 0}
-            </span>
-          </button>
-
-          {/* Pestaña 4: Resumen (Balance Consolidado por Razón Social) */}
-          <button
-            type="button"
-            onClick={() => handleSwitchTab("RESUMEN")}
-            className={cn(
-              "px-3.5 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 -mb-px",
-              activeViewTab === "RESUMEN"
-                ? "border-[#E05A10] text-[#0F172A] bg-white rounded-t-md shadow-sm"
-                : "border-transparent text-slate-500 hover:text-[#0F172A]"
-            )}
-          >
-            <BarChart3
-              className={cn(
-                "h-3.5 w-3.5",
-                activeViewTab === "RESUMEN"
-                  ? "text-[#E05A10]"
-                  : "text-slate-400"
-              )}
-            />
-            Resumen
-            {resumenFacturas !== null && (
-              <span
-                className={cn(
-                  "rounded-full px-2 py-0.5 text-[10px] font-mono border",
-                  activeViewTab === "RESUMEN"
-                    ? "bg-orange-50 text-[#E05A10] border-orange-200"
-                    : "bg-[#F1F5F9] text-slate-600 border-slate-200"
-                )}
-              >
-                {resumenClientes.length}
-              </span>
-            )}
-          </button>
-        </div>
-
-        {(isPending || isLoadingResumen) && (
-          <span className="inline-flex items-center gap-1 text-xs text-[#E05A10] font-medium pr-2">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Sincronizando...
-          </span>
-        )}
-      </div>
+          ) : undefined
+        }
+      />
 
       {/* PESTAÑA 4: RESUMEN POR RAZÓN SOCIAL */}
       {activeViewTab === "RESUMEN" ? (

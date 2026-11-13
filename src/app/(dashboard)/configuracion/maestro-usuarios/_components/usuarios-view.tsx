@@ -7,6 +7,7 @@ import {
   GLOBAL_PAGE_SIZE,
   paginateArray,
 } from "@/components/ui/TablePagination";
+import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import {
   Search,
   Plus,
@@ -355,56 +356,28 @@ export function UsuariosView({
       </div>
 
       {/* Barra de Pestañas */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab("CUENTAS")}
-          className={cn(
-            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
-            activeTab === "CUENTAS"
-              ? "bg-[#0F172A] text-white shadow-sm"
-              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-          )}
-        >
-          <Users className="h-3.5 w-3.5" />
-          Cuentas de Usuario
-          <span
-            className={cn(
-              "ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono",
-              activeTab === "CUENTAS"
-                ? "bg-white/15 text-white"
-                : "bg-slate-100 text-slate-600"
-            )}
-          >
-            {usuarios.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("ACTIVIDAD")}
-          className={cn(
-            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
-            activeTab === "ACTIVIDAD"
-              ? "bg-[#0F172A] text-white shadow-sm"
-              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-          )}
-        >
-          <Activity className="h-3.5 w-3.5" />
-          Actividad y Conexiones
-          <span
-            className={cn(
-              "ml-1 inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono",
-              activeTab === "ACTIVIDAD"
-                ? "bg-emerald-500/20 text-emerald-300"
-                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-            )}
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            {presenceStats.conectadosAhora} en línea
-          </span>
-        </button>
-      </div>
+      <SegmentedTabs
+        ariaLabel="Vistas de maestro de usuarios"
+        activeTab={activeTab}
+        onChange={setActiveTab}
+        tabs={[
+          {
+            id: "CUENTAS",
+            label: "Cuentas de Usuario",
+            icon: Users,
+            count: usuarios.length,
+          },
+          {
+            id: "ACTIVIDAD",
+            label: "Actividad y Conexiones",
+            icon: Activity,
+            countPrefix: (
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            ),
+            count: `${presenceStats.conectadosAhora} en línea`,
+          },
+        ]}
+      />
 
       {/* Barra de Búsqueda y Filtros */}
       <div className="bg-white border border-slate-200 rounded-md px-3 py-2 shadow-sm flex flex-wrap items-center justify-between gap-2">
