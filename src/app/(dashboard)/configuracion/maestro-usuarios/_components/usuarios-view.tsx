@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useTransition, useEffect } from "react";
+import React, { useState, useTransition, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   TablePagination,
   GLOBAL_PAGE_SIZE,
@@ -21,13 +22,70 @@ import {
   Mail,
   KeyRound,
   UserCheck,
+  Users,
+  Activity,
+  RefreshCw,
+  Clock,
 } from "lucide-react";
 import { PerfilUsuario, UsuarioSistema } from "@/types/database.types";
 import {
   saveUsuarioAction,
   deleteUsuarioAction,
+  getUsuariosAction,
 } from "@/actions/configuracion.actions";
 import { cn } from "@/lib/utils";
+
+const CHILE_TZ = "America/Santiago";
+const ONLINE_THRESHOLD_MS = 120_000;
+
+function isUserOnline(user: UsuarioSistema, nowMs: number): boolean {
+  if (!user.sesion_activa || !user.ultimo_pulso) return false;
+  const pulsoMs = new Date(user.ultimo_pulso).getTime();
+  if (Number.isNaN(pulsoMs)) return false;
+  return nowMs - pulsoMs <= ONLINE_THRESHOLD_MS;
+}
+
+function formatChileDateTime(iso?: string | null): string {
+  if (!iso) return "Nunca";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Nunca";
+  const parts = new Intl.DateTimeFormat("es-CL", {
+    timeZone: CHILE_TZ,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value || "00";
+  return `${get("day")}-${get("month")}-${get("year")} ${get("hour")}:${get("minute")}`;
+}
+
+function getChileDateKey(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: CHILE_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+function formatRelativeActivity(user: UsuarioSistema, nowMs: number): string {
+  if (isUserOnline(user, nowMs)) return "Activo ahora";
+  if (!user.ultimo_pulso) return "Sin registro";
+  const pulsoMs = new Date(user.ultimo_pulso).getTime();
+  if (Number.isNaN(pulsoMs)) return "Sin registro";
+
+  const diffMin = Math.max(0, Math.floor((nowMs - pulsoMs) / 60_000));
+  if (diffMin < 1) return "Hace menos de 1 min";
+  if (diffMin < 60) return `Hace ${diffMin} min`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return diffHours === 1 ? "Hace 1 hora" : `Hace ${diffHours} horas`;
+  return formatChileDateTime(user.ultimo_pulso);
+}
 
 interface UsuariosViewProps {
   initialUsuarios: UsuarioSistema[];
@@ -40,14 +98,35 @@ export function UsuariosView({
   perfiles,
   canManage = false,
 }: UsuariosViewProps) {
+  const router = useRouter();
   const [usuarios, setUsuarios] = useState<UsuarioSistema[]>(initialUsuarios);
+  const [activeTab, setActiveTab] = useState<"CUENTAS" | "ACTIVIDAD">("CUENTAS");
   const [searchQuery, setSearchQuery] = useState("");
   const [perfilFilter, setPerfilFilter] = useState("TODOS");
   const [currentPage, setCurrentPage] = useState(1);
+  const [isRefreshingPresence, setIsRefreshingPresence] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, perfilFilter]);
+  }, [activeTab, searchQuery, perfilFilter]);
+
+  const handleRefreshPresence = async () => {
+    setIsRefreshingPresence(true);
+    try {
+      const fresh = await getUsuariosAction();
+      setUsuarios(fresh);
+      setNowMs(Date.now());
+      router.refresh();
+    } finally {
+      setIsRefreshingPresence(false);
+    }
+  };
   const [isPending, startTransition] = useTransition();
 
   // Control de visibilidad global de contraseñas (por defecto visualizando texto plano según requerimiento)
@@ -170,6 +249,32 @@ export function UsuariosView({
     return matchSearch && matchPerfil;
   });
 
+  const presenceStats = useMemo(() => {
+    const todayKey = getChileDateKey(new Date(nowMs).toISOString());
+    let conectadosAhora = 0;
+    let conectadosHoy = 0;
+    let sinConexion = 0;
+
+    for (const u of usuarios) {
+      if (isUserOnline(u, nowMs)) conectadosAhora += 1;
+      if (!u.ultima_conexion) {
+        sinConexion += 1;
+      } else if (getChileDateKey(u.ultima_conexion) === todayKey) {
+        conectadosHoy += 1;
+      }
+    }
+
+    return { conectadosAhora, conectadosHoy, sinConexion };
+  }, [usuarios, nowMs]);
+
+  const actividadUsuarios = useMemo(() => {
+    return [...filteredUsuarios].sort((a, b) => {
+      const aTime = a.ultimo_pulso ? new Date(a.ultimo_pulso).getTime() : -1;
+      const bTime = b.ultimo_pulso ? new Date(b.ultimo_pulso).getTime() : -1;
+      return bTime - aTime;
+    });
+  }, [filteredUsuarios]);
+
   return (
     <div className="space-y-3.5">
       {/* Cabecera del Módulo */}
@@ -186,7 +291,7 @@ export function UsuariosView({
           </span>
         </div>
 
-        {canManage && (
+        {canManage && activeTab === "CUENTAS" && (
           <button
             type="button"
             onClick={handleOpenCreate}
@@ -249,6 +354,58 @@ export function UsuariosView({
         </div>
       </div>
 
+      {/* Barra de Pestañas */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab("CUENTAS")}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
+            activeTab === "CUENTAS"
+              ? "bg-[#0F172A] text-white shadow-sm"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+          )}
+        >
+          <Users className="h-3.5 w-3.5" />
+          Cuentas de Usuario
+          <span
+            className={cn(
+              "ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono",
+              activeTab === "CUENTAS"
+                ? "bg-white/15 text-white"
+                : "bg-slate-100 text-slate-600"
+            )}
+          >
+            {usuarios.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("ACTIVIDAD")}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all",
+            activeTab === "ACTIVIDAD"
+              ? "bg-[#0F172A] text-white shadow-sm"
+              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+          )}
+        >
+          <Activity className="h-3.5 w-3.5" />
+          Actividad y Conexiones
+          <span
+            className={cn(
+              "ml-1 inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono",
+              activeTab === "ACTIVIDAD"
+                ? "bg-emerald-500/20 text-emerald-300"
+                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+            )}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            {presenceStats.conectadosAhora} en línea
+          </span>
+        </button>
+      </div>
+
       {/* Barra de Búsqueda y Filtros */}
       <div className="bg-white border border-slate-200 rounded-md px-3 py-2 shadow-sm flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-1 min-w-[220px] max-w-md relative">
@@ -283,155 +440,335 @@ export function UsuariosView({
               Sincronizando...
             </span>
           )}
+
+          {activeTab === "ACTIVIDAD" && (
+            <button
+              type="button"
+              onClick={handleRefreshPresence}
+              disabled={isRefreshingPresence}
+              className="inline-flex items-center gap-1.5 rounded border border-slate-300 bg-white hover:bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-xs transition-colors disabled:opacity-60"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5 text-[#E05A10]", isRefreshingPresence && "animate-spin")} />
+              Actualizar Estado
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Tabla Maestro Usuarios (Densidad Stripe/Linear) */}
-      <div className="bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden w-full">
-        <div className="w-full overflow-x-auto">
-          <table className="min-w-[750px] lg:min-w-full table-auto text-left border-collapse">
-          <thead>
-            <tr className="bg-[#0F172A] text-slate-200 text-[10px] font-semibold uppercase tracking-wider border-b border-[#1E293B]">
-              <th className="py-2.5 px-3">Nombre Completo</th>
-              <th className="py-2.5 px-3 w-[150px]">Usuario</th>
-              <th className="py-2.5 px-3 w-[180px]">
-                Contraseña (Texto Plano)
-              </th>
-              <th className="py-2.5 px-3">Correo Electrónico</th>
-              <th className="py-2.5 px-3 w-[170px]">Tipo Perfil</th>
-              <th className="py-2.5 px-3 text-center w-[100px]">Estado</th>
-              <th className="py-2.5 px-3 text-right w-[100px]">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200 text-xs">
-            {filteredUsuarios.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="py-8 text-center text-slate-500 text-xs"
-                >
-                  No se encontraron usuarios registrados bajo los criterios de búsqueda.
-                </td>
+      {/* PESTAÑA 1: CUENTAS DE USUARIO */}
+      {activeTab === "CUENTAS" && (
+        <div className="bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden w-full">
+          <div className="w-full overflow-x-auto">
+            <table className="min-w-[850px] lg:min-w-full table-auto text-left border-collapse">
+            <thead>
+              <tr className="bg-[#0F172A] text-slate-200 text-[10px] font-semibold uppercase tracking-wider border-b border-[#1E293B]">
+                <th className="py-2.5 px-3">Nombre Completo</th>
+                <th className="py-2.5 px-3 w-[140px]">Usuario</th>
+                <th className="py-2.5 px-3 w-[170px]">
+                  Contraseña (Texto Plano)
+                </th>
+                <th className="py-2.5 px-3">Correo Electrónico</th>
+                <th className="py-2.5 px-3 w-[160px]">Tipo Perfil</th>
+                <th className="py-2.5 px-3 w-[145px]">Última Conexión</th>
+                <th className="py-2.5 px-3 text-center w-[95px]">Estado</th>
+                <th className="py-2.5 px-3 text-right w-[95px]">Acciones</th>
               </tr>
-            ) : (
-              paginateArray(filteredUsuarios, currentPage, GLOBAL_PAGE_SIZE).map((user) => {
-                const isPasswordVisible = visiblePasswords[user.id] ?? true;
-
-                return (
-                  <tr
-                    key={user.id}
-                    className="hover:bg-[#F8FAFC] transition-colors"
+            </thead>
+            <tbody className="divide-y divide-slate-200 text-xs">
+              {filteredUsuarios.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="py-8 text-center text-slate-500 text-xs"
                   >
-                    {/* Nombre */}
-                    <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-2">
-                        <div className="h-6 w-6 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-700 font-bold text-[10px] shrink-0">
-                          {user.nombre.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="font-bold text-[#0F172A]">
-                          {user.nombre}
-                        </div>
-                      </div>
-                    </td>
+                    No se encontraron usuarios registrados bajo los criterios de búsqueda.
+                  </td>
+                </tr>
+              ) : (
+                paginateArray(filteredUsuarios, currentPage, GLOBAL_PAGE_SIZE).map((user) => {
+                  const isPasswordVisible = visiblePasswords[user.id] ?? true;
+                  const online = isUserOnline(user, nowMs);
 
-                    {/* Usuario */}
-                    <td className="py-2.5 px-3 font-mono font-medium text-slate-700 whitespace-nowrap">
-                      {user.usuario}
-                    </td>
+                  return (
+                    <tr
+                      key={user.id}
+                      className="hover:bg-[#F8FAFC] transition-colors"
+                    >
+                      {/* Nombre */}
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-2">
+                          <div className="h-6 w-6 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-700 font-bold text-[10px] shrink-0">
+                            {user.nombre.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="font-bold text-[#0F172A]">
+                            {user.nombre}
+                          </div>
+                        </div>
+                      </td>
 
-                    {/* Contraseña con Visibilidad Explícita */}
-                    <td className="py-2.5 px-3 whitespace-nowrap">
-                      <div className="inline-flex items-center gap-1.5 bg-[#F1F5F9] px-2 py-0.5 rounded border border-slate-200">
-                        <KeyRound className="h-3 w-3 text-slate-400 shrink-0" />
-                        <span className="font-mono text-[11px] font-semibold text-[#0F172A] tracking-wider min-w-[70px]">
-                          {isPasswordVisible ? user.contrasena : "••••••••"}
+                      {/* Usuario */}
+                      <td className="py-2.5 px-3 font-mono font-medium text-slate-700 whitespace-nowrap">
+                        {user.usuario}
+                      </td>
+
+                      {/* Contraseña con Visibilidad Explícita */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5 bg-[#F1F5F9] px-2 py-0.5 rounded border border-slate-200">
+                          <KeyRound className="h-3 w-3 text-slate-400 shrink-0" />
+                          <span className="font-mono text-[11px] font-semibold text-[#0F172A] tracking-wider min-w-[70px]">
+                            {isPasswordVisible ? user.contrasena : "••••••••"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => togglePasswordVisibility(user.id)}
+                            className="text-slate-400 hover:text-slate-700 transition-colors p-0.5"
+                            title={isPasswordVisible ? "Ocultar contraseña" : "Ver contraseña en texto plano"}
+                          >
+                            {isPasswordVisible ? (
+                              <EyeOff className="h-3 w-3" />
+                            ) : (
+                              <Eye className="h-3 w-3" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+
+                      {/* Correo */}
+                      <td className="py-2.5 px-3 text-slate-600 truncate max-w-[220px]" title={user.correo}>
+                        <span className="flex items-center gap-1.5">
+                          <Mail className="h-3 w-3 text-slate-400 shrink-0" />
+                          <span className="truncate">{user.correo}</span>
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => togglePasswordVisibility(user.id)}
-                          className="text-slate-400 hover:text-slate-700 transition-colors p-0.5"
-                          title={isPasswordVisible ? "Ocultar contraseña" : "Ver contraseña en texto plano"}
-                        >
-                          {isPasswordVisible ? (
-                            <EyeOff className="h-3 w-3" />
-                          ) : (
-                            <Eye className="h-3 w-3" />
-                          )}
-                        </button>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Correo */}
-                    <td className="py-2.5 px-3 text-slate-600 truncate max-w-[220px]" title={user.correo}>
-                      <span className="flex items-center gap-1.5">
-                        <Mail className="h-3 w-3 text-slate-400 shrink-0" />
-                        <span className="truncate">{user.correo}</span>
-                      </span>
-                    </td>
+                      {/* Tipo Perfil */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-orange-50 text-[#E05A10] border border-orange-200">
+                          <Shield className="h-2.5 w-2.5" />
+                          {user.perfil_nombre || "Sin Asignar"}
+                        </span>
+                      </td>
 
-                    {/* Tipo Perfil */}
-                    <td className="py-2.5 px-3 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-orange-50 text-[#E05A10] border border-orange-200">
-                        <Shield className="h-2.5 w-2.5" />
-                        {user.perfil_nombre || "Sin Asignar"}
-                      </span>
-                    </td>
-
-                    {/* Estado */}
-                    <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                      <span
-                        className={cn(
-                          "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border",
-                          user.estado === "Activo"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : "bg-slate-100 text-slate-600 border-slate-300"
+                      {/* Última Conexión */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        {online ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            En línea
+                          </span>
+                        ) : (
+                          <span className="font-mono text-[11px] text-slate-600">
+                            {formatChileDateTime(user.ultima_conexion)}
+                          </span>
                         )}
-                      >
-                        {user.estado}
-                      </span>
-                    </td>
+                      </td>
 
-                    {/* Acciones */}
-                    <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                      {canManage ? (
-                        <div className="inline-flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEdit(user)}
-                            title="Editar usuario"
-                            className="h-6 w-6 rounded border border-slate-200 bg-white text-slate-600 hover:text-[#E05A10] hover:border-[#E05A10] flex items-center justify-center transition-colors"
-                          >
-                            <Edit2 className="h-3 w-3" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteUsuario(user)}
-                            title="Eliminar usuario"
-                            className="h-6 w-6 rounded border border-slate-200 bg-white text-slate-600 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center transition-colors"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="text-[11px] text-slate-400">
-                          Solo lectura
+                      {/* Estado */}
+                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                        <span
+                          className={cn(
+                            "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                            user.estado === "Activo"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : "bg-slate-100 text-slate-600 border-slate-300"
+                          )}
+                        >
+                          {user.estado}
                         </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                      </td>
+
+                      {/* Acciones */}
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        {canManage ? (
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(user)}
+                              title="Editar usuario"
+                              className="h-6 w-6 rounded border border-slate-200 bg-white text-slate-600 hover:text-[#E05A10] hover:border-[#E05A10] flex items-center justify-center transition-colors"
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteUsuario(user)}
+                              title="Eliminar usuario"
+                              className="h-6 w-6 rounded border border-slate-200 bg-white text-slate-600 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center transition-colors"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">
+                            Solo lectura
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+          </div>
+          <TablePagination
+            currentPage={currentPage}
+            totalItems={filteredUsuarios.length}
+            pageSize={GLOBAL_PAGE_SIZE}
+            onPageChange={setCurrentPage}
+          />
         </div>
-        <TablePagination
-          currentPage={currentPage}
-          totalItems={filteredUsuarios.length}
-          pageSize={GLOBAL_PAGE_SIZE}
-          onPageChange={setCurrentPage}
-        />
-      </div>
+      )}
+
+      {/* PESTAÑA 2: ACTIVIDAD Y CONEXIONES */}
+      {activeTab === "ACTIVIDAD" && (
+        <div className="space-y-3">
+          {/* KPIs de Presencia */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="bg-white border border-slate-200 border-l-4 border-l-emerald-500 rounded-md px-3.5 py-2.5 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  CONECTADOS AHORA
+                </div>
+                <div className="text-base font-bold font-mono tabular-nums text-emerald-700 mt-0.5">
+                  {presenceStats.conectadosAhora}{" "}
+                  <span className="text-xs font-sans font-normal text-slate-500">
+                    en línea
+                  </span>
+                </div>
+              </div>
+              <div className="h-8 w-8 rounded bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+                <Activity className="h-4 w-4" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 border-l-4 border-l-sky-500 rounded-md px-3.5 py-2.5 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  CONECTADOS HOY
+                </div>
+                <div className="text-base font-bold font-mono tabular-nums text-[#0F172A] mt-0.5">
+                  {presenceStats.conectadosHoy}{" "}
+                  <span className="text-xs font-sans font-normal text-slate-500">
+                    usuarios hoy
+                  </span>
+                </div>
+              </div>
+              <div className="h-8 w-8 rounded bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-600">
+                <UserCheck className="h-4 w-4" />
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 border-l-4 border-l-slate-400 rounded-md px-3.5 py-2.5 shadow-sm flex items-center justify-between">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  SIN CONEXIÓN REGISTRADA
+                </div>
+                <div className="text-base font-bold font-mono tabular-nums text-slate-700 mt-0.5">
+                  {presenceStats.sinConexion}{" "}
+                  <span className="text-xs font-sans font-normal text-slate-500">
+                    sin ingreso
+                  </span>
+                </div>
+              </div>
+              <div className="h-8 w-8 rounded bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500">
+                <Clock className="h-4 w-4" />
+              </div>
+            </div>
+          </div>
+
+          {/* Tabla de Monitoreo en Tiempo Real */}
+          <div className="bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden w-full">
+            <div className="w-full overflow-x-auto">
+              <table className="min-w-[750px] lg:min-w-full table-auto text-left border-collapse">
+                <thead>
+                  <tr className="bg-[#0F172A] text-slate-200 text-[10px] font-semibold uppercase tracking-wider border-b border-[#1E293B]">
+                    <th className="py-2.5 px-3">Usuario / Nombre</th>
+                    <th className="py-2.5 px-3">Perfil</th>
+                    <th className="py-2.5 px-3 text-center">Estado de Conexión</th>
+                    <th className="py-2.5 px-3">Última Conexión (Inicio Sesión)</th>
+                    <th className="py-2.5 px-3">Última Actividad</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-xs">
+                  {actividadUsuarios.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-slate-500 text-xs">
+                        No se encontraron usuarios bajo los criterios de búsqueda.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginateArray(actividadUsuarios, currentPage, GLOBAL_PAGE_SIZE).map((user) => {
+                      const online = isUserOnline(user, nowMs);
+                      return (
+                        <tr key={user.id} className="hover:bg-[#F8FAFC] transition-colors">
+                          <td className="py-2.5 px-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="h-7 w-7 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center text-slate-700 font-bold text-[11px] shrink-0">
+                                {user.nombre.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="font-bold text-[#0F172A] leading-tight">
+                                  {user.nombre}
+                                </div>
+                                <div className="text-[11px] font-mono text-slate-500">
+                                  @{user.usuario}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-orange-50 text-[#E05A10] border border-orange-200">
+                              <Shield className="h-2.5 w-2.5" />
+                              {user.perfil_nombre || "Sin Asignar"}
+                            </span>
+                          </td>
+
+                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                            {online ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                                En línea
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                <span className="h-2 w-2 rounded-full bg-slate-400" />
+                                Desconectado
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-2.5 px-3 font-mono text-xs text-slate-700 whitespace-nowrap">
+                            {formatChileDateTime(user.ultima_conexion)}
+                          </td>
+
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <span
+                              className={cn(
+                                "text-xs font-medium",
+                                online ? "text-emerald-700 font-semibold" : "text-slate-600"
+                              )}
+                            >
+                              {formatRelativeActivity(user, nowMs)}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <TablePagination
+              currentPage={currentPage}
+              totalItems={actividadUsuarios.length}
+              pageSize={GLOBAL_PAGE_SIZE}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Modal Crear / Editar Usuario */}
       {modalOpen && (

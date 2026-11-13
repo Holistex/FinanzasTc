@@ -250,6 +250,9 @@ export async function getUsuariosAction(): Promise<UsuarioSistema[]> {
             perfil_id: perfilId,
             perfil_nombre: perfilMap.get(perfilId) || String(u.perfil || "Sin Perfil"),
             estado: (u.estado as "Activo" | "Inactivo") || "Activo",
+            ultima_conexion: u.ultima_conexion ? String(u.ultima_conexion) : null,
+            ultimo_pulso: u.ultimo_pulso ? String(u.ultimo_pulso) : null,
+            sesion_activa: typeof u.sesion_activa === "boolean" ? u.sesion_activa : Boolean(u.sesion_activa),
             created_at: String(u.created_at || new Date().toISOString()),
             updated_at: u.updated_at ? String(u.updated_at) : undefined,
           };

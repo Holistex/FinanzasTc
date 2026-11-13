@@ -5,10 +5,11 @@ import {
   isServerSupabaseConfigured,
   createServerSupabaseClient,
 } from "@/lib/supabase/server";
-import { readLocalDb } from "@/lib/supabase/local-fallback-db";
+import { readLocalDb, writeLocalDb } from "@/lib/supabase/local-fallback-db";
 import {
   ALL_ADMIN_PERMISSIONS,
   getPermisosForPerfil,
+  getServerUserSession,
 } from "@/lib/auth/session";
 import { buildNormalizedPermisosMatrix } from "@/types/database.types";
 
@@ -149,6 +150,41 @@ export async function loginUserAction(
     };
   }
 
+  // 2.5 Registrar última conexión y sesión activa
+  const ahora = new Date().toISOString();
+  if (isServerSupabaseConfigured()) {
+    try {
+      const supabase = await createServerSupabaseClient();
+      await supabase
+        .from("usuarios_sistema")
+        .update({
+          ultima_conexion: ahora,
+          ultimo_pulso: ahora,
+          sesion_activa: true,
+        })
+        .eq("id", matchedUser.id);
+    } catch {
+      // No bloquear el login si la columna aún no existe
+    }
+  }
+  try {
+    const dbLocal = readLocalDb();
+    const localIdx = (dbLocal.usuarios || []).findIndex(
+      (u) => u.id === matchedUser!.id
+    );
+    if (localIdx >= 0) {
+      dbLocal.usuarios[localIdx] = {
+        ...dbLocal.usuarios[localIdx],
+        ultima_conexion: ahora,
+        ultimo_pulso: ahora,
+        sesion_activa: true,
+      };
+      writeLocalDb(dbLocal);
+    }
+  } catch {
+    // Ignorar error en fallback local
+  }
+
   // 3. Crear sesión en cookie HTTP
   const cookieStore = await cookies();
   cookieStore.set(
@@ -169,9 +205,91 @@ export async function loginUserAction(
 }
 
 /**
- * Cierra la sesión activa eliminando la cookie de sesión
+ * Cierra la sesión activa marcando sesion_activa = false y eliminando la cookie
  */
 export async function logoutAction(): Promise<void> {
+  const session = await getServerUserSession();
+  const ahora = new Date().toISOString();
+
+  if (session?.id) {
+    if (isServerSupabaseConfigured()) {
+      try {
+        const supabase = await createServerSupabaseClient();
+        await supabase
+          .from("usuarios_sistema")
+          .update({
+            sesion_activa: false,
+            ultimo_pulso: ahora,
+          })
+          .eq("id", session.id);
+      } catch {
+        // No bloquear el logout
+      }
+    }
+    try {
+      const dbLocal = readLocalDb();
+      const localIdx = (dbLocal.usuarios || []).findIndex(
+        (u) => u.id === session.id
+      );
+      if (localIdx >= 0) {
+        dbLocal.usuarios[localIdx] = {
+          ...dbLocal.usuarios[localIdx],
+          sesion_activa: false,
+          ultimo_pulso: ahora,
+        };
+        writeLocalDb(dbLocal);
+      }
+    } catch {
+      // Ignorar error en fallback local
+    }
+  }
+
   const cookieStore = await cookies();
   cookieStore.delete(SESSION_COOKIE_NAME);
+}
+
+/**
+ * Heartbeat silencioso para mantener sesion_activa = true y actualizar ultimo_pulso
+ */
+export async function registrarPulsoSesionAction(): Promise<{ ok: boolean }> {
+  const session = await getServerUserSession();
+  if (!session?.id) {
+    return { ok: false };
+  }
+
+  const ahora = new Date().toISOString();
+
+  if (isServerSupabaseConfigured()) {
+    try {
+      const supabase = await createServerSupabaseClient();
+      await supabase
+        .from("usuarios_sistema")
+        .update({
+          ultimo_pulso: ahora,
+          sesion_activa: true,
+        })
+        .eq("id", session.id);
+    } catch {
+      // Silencioso
+    }
+  }
+
+  try {
+    const dbLocal = readLocalDb();
+    const localIdx = (dbLocal.usuarios || []).findIndex(
+      (u) => u.id === session.id
+    );
+    if (localIdx >= 0) {
+      dbLocal.usuarios[localIdx] = {
+        ...dbLocal.usuarios[localIdx],
+        ultimo_pulso: ahora,
+        sesion_activa: true,
+      };
+      writeLocalDb(dbLocal);
+    }
+  } catch {
+    // Silencioso
+  }
+
+  return { ok: true };
 }
