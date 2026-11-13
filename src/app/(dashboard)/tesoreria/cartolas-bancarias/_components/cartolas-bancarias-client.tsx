@@ -61,6 +61,7 @@ export function CartolasBancariasClient({
   const [activeTab, setActiveTab] = useState<ActiveTab>("PENDIENTES");
   const [isPending, startTransition] = useTransition();
   const [savingLineaId, setSavingLineaId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Filtros Superiores
   const [selectedBanco, setSelectedBanco] = useState<string>("TODOS");
@@ -214,8 +215,11 @@ export function CartolasBancariasClient({
     const targetLinea = lineas.find((l) => l.id === lineaId);
     if (!targetLinea || Number(targetLinea.giro || 0) <= 0) return;
 
+    const prevTipoId = targetLinea.tipo_pago_id || null;
+    const prevTipoObj = targetLinea.tipo_pago || null;
     const tipoObj = tiposPago.find((t) => t.id === nuevoTipoId) || null;
 
+    setActionError(null);
     setSavingLineaId(lineaId);
     // Actualización optimista inmediata: remueve la fila de "Líneas por clasificar" y la suma a "Movimientos Clasificados"
     setLineas((prev) =>
@@ -228,17 +232,25 @@ export function CartolasBancariasClient({
 
     try {
       const res = await clasificarLineaCartolaAction(lineaId, nuevoTipoId);
-      if (!res.success) {
-        alert(res.error || "Error al clasificar el movimiento.");
-        const fresh = await getCartolasBancariasAction();
-        setLineas(fresh.lineas);
-      } else {
-        router.refresh();
+      if (!res?.success) {
+        throw new Error(
+          res?.error || "Error al guardar la clasificación en Supabase."
+        );
       }
+      router.refresh();
     } catch (err) {
-      alert("Error: " + (err instanceof Error ? err.message : String(err)));
-      const fresh = await getCartolasBancariasAction();
-      setLineas(fresh.lineas);
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Error inesperado al clasificar el movimiento.";
+      setLineas((prev) =>
+        prev.map((l) =>
+          l.id === lineaId
+            ? { ...l, tipo_pago_id: prevTipoId, tipo_pago: prevTipoObj }
+            : l
+        )
+      );
+      setActionError(msg);
     } finally {
       setSavingLineaId(null);
     }
@@ -252,6 +264,10 @@ export function CartolasBancariasClient({
     );
     if (!confirmed) return;
 
+    const prevTipoId = linea.tipo_pago_id || null;
+    const prevTipoObj = linea.tipo_pago || null;
+
+    setActionError(null);
     setSavingLineaId(linea.id);
     // Actualización optimista inmediata: tipo_pago_id = null
     setLineas((prev) =>
@@ -262,17 +278,25 @@ export function CartolasBancariasClient({
 
     try {
       const res = await reversarLineaCartolaAction(linea.id);
-      if (!res.success) {
-        alert(res.error || "Error al reversar la clasificación.");
-        const fresh = await getCartolasBancariasAction();
-        setLineas(fresh.lineas);
-      } else {
-        router.refresh();
+      if (!res?.success) {
+        throw new Error(
+          res?.error || "Error al reversar la clasificación en Supabase."
+        );
       }
+      router.refresh();
     } catch (err) {
-      alert("Error: " + (err instanceof Error ? err.message : String(err)));
-      const fresh = await getCartolasBancariasAction();
-      setLineas(fresh.lineas);
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Error inesperado al reversar la clasificación.";
+      setLineas((prev) =>
+        prev.map((l) =>
+          l.id === linea.id
+            ? { ...l, tipo_pago_id: prevTipoId, tipo_pago: prevTipoObj }
+            : l
+        )
+      );
+      setActionError(msg);
     } finally {
       setSavingLineaId(null);
     }
@@ -345,16 +369,16 @@ export function CartolasBancariasClient({
 
     try {
       const res = await asignarTipoMovimientoMasivoAction(targetIds, bulkTipoPagoId);
-      if (!res.success) {
-        alert(res.error || "Ocurrió un error en la asignación masiva.");
-        // Si falló, refrescar datos reales
-        const fresh = await getCartolasBancariasAction();
-        setLineas(fresh.lineas);
-      } else {
-        router.refresh();
+      if (!res?.success) {
+        throw new Error(
+          res?.error || "Ocurrió un error en la asignación masiva."
+        );
       }
+      setActionError(null);
+      router.refresh();
     } catch (err) {
-      alert("Error: " + (err instanceof Error ? err.message : String(err)));
+      const msg = err instanceof Error ? err.message : String(err);
+      setActionError(msg);
       const fresh = await getCartolasBancariasAction();
       setLineas(fresh.lineas);
     } finally {
@@ -778,6 +802,32 @@ export function CartolasBancariasClient({
           </div>
         </div>
       </div>
+
+      {/* ALERTA ROJA VISIBLE DE ERROR EN CLASIFICACIÓN / SUPABASE */}
+      {actionError && (
+        <div
+          role="alert"
+          className="flex items-start justify-between gap-3 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-xs text-rose-800 shadow-xs"
+        >
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-rose-900">
+                No se pudo guardar la clasificación en Supabase
+              </p>
+              <p className="mt-0.5 font-mono text-[11px]">{actionError}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            className="rounded p-1 text-rose-500 hover:bg-rose-100 hover:text-rose-800"
+            aria-label="Cerrar alerta"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* 5. TABLA UNIFICADA DE CARTOLAS BANCARIAS */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">

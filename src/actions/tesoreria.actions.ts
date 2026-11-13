@@ -553,16 +553,52 @@ export async function asignarTipoPagoLineaCartolaAction(
 
     if (isServerSupabaseConfigured() && !lineaId.startsWith("cl-")) {
       const supabase = await createServerSupabaseClient();
+      let resolvedSupaTipoId: string | null = cleanTipoId ? String(cleanTipoId) : null;
+
+      // Si el tipo proviene del catálogo local ("mtp-..."), asegurar su existencia en mantenedor_tipos_pago de Supabase
+      if (resolvedSupaTipoId && resolvedSupaTipoId.startsWith("mtp-")) {
+        const localTipo = (db.mantenedor_tipos_pago || []).find(
+          (t) => t.id === resolvedSupaTipoId
+        );
+        if (localTipo) {
+          const { data: existingSupa } = await supabase
+            .from("mantenedor_tipos_pago")
+            .select("id")
+            .ilike("nombre", localTipo.nombre.trim())
+            .maybeSingle();
+
+          if (existingSupa?.id) {
+            resolvedSupaTipoId = String(existingSupa.id);
+          } else {
+            const { data: insertedSupa } = await supabase
+              .from("mantenedor_tipos_pago")
+              .upsert(
+                {
+                  nombre: localTipo.nombre.trim().toUpperCase(),
+                  descripcion: localTipo.descripcion || null,
+                  activo: localTipo.activo !== false,
+                },
+                { onConflict: "nombre" }
+              )
+              .select("id")
+              .single();
+            if (insertedSupa?.id) {
+              resolvedSupaTipoId = String(insertedSupa.id);
+            }
+          }
+        }
+      }
+
       const { error } = await supabase
         .from("cartolas_lineas")
         .update({
-          tipo_pago_id:
-            cleanTipoId && !cleanTipoId.startsWith("mtp-") ? cleanTipoId : null,
+          tipo_pago_id: resolvedSupaTipoId,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", lineaId);
 
       if (error) {
-        throw new Error(`Error al clasificar movimiento en Supabase: ${error.message}`);
+        throw new Error(error.message);
       }
     }
 
@@ -629,16 +665,50 @@ export async function asignarTipoMovimientoMasivoAction(
       const supabase = await createServerSupabaseClient();
       const validSupaIds = lineaIds.filter((id) => !id.startsWith("cl-"));
       if (validSupaIds.length > 0) {
-        const finalSupaTipoId = !cleanTipoId.startsWith("mtp-") ? cleanTipoId : null;
+        let finalSupaTipoId: string | null = String(cleanTipoId);
+        if (finalSupaTipoId.startsWith("mtp-")) {
+          const localTipo = (db.mantenedor_tipos_pago || []).find(
+            (t) => t.id === finalSupaTipoId
+          );
+          if (localTipo) {
+            const { data: existingSupa } = await supabase
+              .from("mantenedor_tipos_pago")
+              .select("id")
+              .ilike("nombre", localTipo.nombre.trim())
+              .maybeSingle();
+
+            if (existingSupa?.id) {
+              finalSupaTipoId = String(existingSupa.id);
+            } else {
+              const { data: insertedSupa } = await supabase
+                .from("mantenedor_tipos_pago")
+                .upsert(
+                  {
+                    nombre: localTipo.nombre.trim().toUpperCase(),
+                    descripcion: localTipo.descripcion || null,
+                    activo: localTipo.activo !== false,
+                  },
+                  { onConflict: "nombre" }
+                )
+                .select("id")
+                .single();
+              if (insertedSupa?.id) {
+                finalSupaTipoId = String(insertedSupa.id);
+              }
+            }
+          }
+        }
+
         const { error } = await supabase
           .from("cartolas_lineas")
           .update({
             tipo_pago_id: finalSupaTipoId,
+            updated_at: new Date().toISOString(),
           })
           .in("id", validSupaIds);
 
         if (error) {
-          throw new Error(`Error al actualizar clasificación masiva en Supabase: ${error.message}`);
+          throw new Error(error.message);
         }
       }
     }
