@@ -6,6 +6,7 @@ import {
   isServerSupabaseConfigured,
 } from "@/lib/supabase/server";
 import { readLocalDb, writeLocalDb } from "@/lib/supabase/local-fallback-db";
+import { assertCanManage } from "@/lib/auth/session";
 
 function safeRevalidatePath(path: string) {
   try {
@@ -147,6 +148,11 @@ export async function upsertLitigioMultaAction(input: {
   estado: EstadoLitigioMulta;
   observaciones?: string | null;
 }): Promise<LitigioMulta> {
+  const auth = await assertCanManage(["litigios_multas", "reg_litigios"]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   if (!input.procedencia.trim()) throw new Error("La procedencia o causal es obligatoria.");
   if (!input.nro_multa.trim()) throw new Error("El N° de Multa es obligatorio.");
   if (!input.fecha_publicacion) throw new Error("La fecha de publicación es obligatoria.");
@@ -266,6 +272,11 @@ export async function upsertAudienciaJuicioAction(input: {
   fecha_audiencia: string;
   resultado_dictamen?: string | null;
 }): Promise<LitigioAudienciaJuicio> {
+  const auth = await assertCanManage(["litigios_juicios", "reg_litigios"]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   if (!input.juicio_id) throw new Error("El ID del juicio es obligatorio.");
   if (!input.fecha_audiencia) throw new Error("La fecha de la audiencia es obligatoria.");
 
@@ -344,6 +355,11 @@ export async function deleteAudienciaJuicioAction(
   audienciaId: string,
   juicioId?: string
 ): Promise<void> {
+  const auth = await assertCanManage(["litigios_juicios", "reg_litigios"]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   if (!audienciaId) throw new Error("El ID de la audiencia es obligatorio.");
 
   if (isServerSupabaseConfigured()) {
@@ -547,6 +563,11 @@ export interface UpsertLitigioJuicioInput {
 export async function upsertLitigioJuicioAction(
   input: UpsertLitigioJuicioInput
 ): Promise<LitigioJuicio> {
+  const auth = await assertCanManage(["litigios_juicios", "reg_litigios"]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   if (!input.rit_ruc.trim()) throw new Error("El RIT-RUC de la causa es obligatorio.");
   if (!input.nombre_trabajador.trim()) throw new Error("El nombre del trabajador/demandante es obligatorio.");
   if (!input.materia.trim()) throw new Error("La materia de la demanda es obligatoria.");
@@ -1003,6 +1024,11 @@ export async function getLitigiosComparendosAction(
 export async function upsertLitigioComparendoAction(
   data: Partial<LitigioComparendo>
 ): Promise<LitigioComparendo> {
+  const auth = await assertCanManage(["litigios_comparendos", "reg_litigios"]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   const now = new Date().toISOString();
   const id = data.id || `comp-${Date.now()}`;
 
@@ -1079,6 +1105,11 @@ export async function saveAcuerdoComparendoAction(
   montoTotal: number,
   cuotas: Array<Partial<CuotaComparendo>>
 ): Promise<LitigioComparendo> {
+  const auth = await assertCanManage(["litigios_comparendos", "reg_litigios"]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   const now = new Date().toISOString();
 
   // Calcular estado del comparendo según las cuotas
@@ -1193,6 +1224,11 @@ export async function togglePagoCuotaComparendoAction(
   nuevoEstado: EstadoCuotaComparendo,
   fechaPagoReal?: string | null
 ): Promise<{ cuota: CuotaComparendo; comparendo: LitigioComparendo }> {
+  const auth = await assertCanManage(["litigios_comparendos", "reg_litigios"]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   const now = new Date().toISOString();
   const db = readLocalDb();
   if (!db.litigios_cuotas_comparendo) db.litigios_cuotas_comparendo = [];
@@ -1264,6 +1300,11 @@ export async function togglePagoCuotaComparendoAction(
 }
 
 export async function deleteLitigioComparendoAction(id: string): Promise<void> {
+  const auth = await assertCanManage(["litigios_comparendos", "reg_litigios"]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   if (isServerSupabaseConfigured()) {
     const supabase = await createServerSupabaseClient();
     const { error: errCuotas } = await supabase

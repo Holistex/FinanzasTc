@@ -2,6 +2,7 @@ import React from "react";
 import { getColaboradoresAction } from "@/actions/colaboradores.actions";
 import { getTiposPagoAction } from "@/actions/tesoreria.actions";
 import { getServerUserSession } from "@/lib/auth/session";
+import { getModuleAccess } from "@/lib/permissions";
 import { MantenedorColaboradoresClient } from "./_components/mantenedor-colaboradores-client";
 
 export const dynamic = "force-dynamic";
@@ -17,12 +18,17 @@ export default async function MantenedorColaboradoresPage() {
   const isAdmin =
     Boolean(session?.esAdmin) ||
     session?.perfil?.toUpperCase() === "ADMINISTRADOR";
+  const { canManage } = getModuleAccess(session, [
+    "mantenedor_colaboradores",
+    "configuracion_adm",
+  ]);
 
   return (
     <MantenedorColaboradoresClient
       initialData={colaboradores}
       initialTiposPago={tiposPago}
       isAdmin={isAdmin}
+      canManage={canManage}
     />
   );
 }

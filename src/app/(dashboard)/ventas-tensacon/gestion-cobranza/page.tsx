@@ -2,6 +2,7 @@ import React from "react";
 import { Metadata } from "next";
 import { getCarteraCobranzaAction } from "@/actions/gestion-cobranza.actions";
 import { getServerUserSession } from "@/lib/auth/session";
+import { getModuleAccess } from "@/lib/permissions";
 import { GestionCobranzaView } from "./_components/gestion-cobranza-view";
 
 export const metadata: Metadata = {
@@ -30,11 +31,17 @@ export default async function GestionCobranzaPage() {
       "Usuario Sistema"
   ).trim();
 
+  const { canManage } = getModuleAccess(session, [
+    "gestion_cobranza",
+    "ventas_global",
+  ]);
+
   return (
     <div className="w-full px-4 sm:px-6 py-4 space-y-4">
       <GestionCobranzaView
         initialData={data}
         currentUserName={currentUserName}
+        canManage={canManage}
       />
     </div>
   );

@@ -10,6 +10,8 @@ import {
   EmpresaFactoringProveedor,
 } from "@/types/database.types";
 import { MantenedoresTabsClient } from "../../mantenedores/_components/mantenedores-tabs-client";
+import { getServerUserSession } from "@/lib/auth/session";
+import { getModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -53,11 +55,18 @@ export default async function MantenedoresFactoringConfigPage() {
     );
   }
 
+  const session = await getServerUserSession();
+  const { canManage } = getModuleAccess(session, [
+    "mantenedor_factoring",
+    "mantenedores",
+  ]);
+
   return (
     <MantenedoresTabsClient
       initialClientes={clientes}
       initialProveedores={proveedores}
       initialConfirming={confirming}
+      canManage={canManage}
     />
   );
 }

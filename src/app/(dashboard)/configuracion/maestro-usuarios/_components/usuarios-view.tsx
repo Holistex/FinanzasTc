@@ -27,9 +27,14 @@ import { cn } from "@/lib/utils";
 interface UsuariosViewProps {
   initialUsuarios: UsuarioSistema[];
   perfiles: PerfilUsuario[];
+  canManage?: boolean;
 }
 
-export function UsuariosView({ initialUsuarios, perfiles }: UsuariosViewProps) {
+export function UsuariosView({
+  initialUsuarios,
+  perfiles,
+  canManage = false,
+}: UsuariosViewProps) {
   const [usuarios, setUsuarios] = useState<UsuarioSistema[]>(initialUsuarios);
   const [searchQuery, setSearchQuery] = useState("");
   const [perfilFilter, setPerfilFilter] = useState("TODOS");
@@ -171,14 +176,16 @@ export function UsuariosView({ initialUsuarios, perfiles }: UsuariosViewProps) {
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={handleOpenCreate}
-          className="inline-flex items-center gap-1.5 rounded-md bg-[#E05A10] hover:bg-[#C2410C] text-white px-3 py-1.5 text-xs font-semibold shadow-sm transition-all active:scale-[0.98]"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Nuevo Usuario
-        </button>
+        {canManage && (
+          <button
+            type="button"
+            onClick={handleOpenCreate}
+            className="inline-flex items-center gap-1.5 rounded-md bg-[#E05A10] hover:bg-[#C2410C] text-white px-3 py-1.5 text-xs font-semibold shadow-sm transition-all active:scale-[0.98]"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nuevo Usuario
+          </button>
+        )}
       </div>
 
       {/* KPI Cards Ejecutivos */}
@@ -376,24 +383,30 @@ export function UsuariosView({ initialUsuarios, perfiles }: UsuariosViewProps) {
 
                     {/* Acciones */}
                     <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                      <div className="inline-flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(user)}
-                          title="Editar usuario"
-                          className="h-6 w-6 rounded border border-slate-200 bg-white text-slate-600 hover:text-[#E05A10] hover:border-[#E05A10] flex items-center justify-center transition-colors"
-                        >
-                          <Edit2 className="h-3 w-3" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteUsuario(user)}
-                          title="Eliminar usuario"
-                          className="h-6 w-6 rounded border border-slate-200 bg-white text-slate-600 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center transition-colors"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
+                      {canManage ? (
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(user)}
+                            title="Editar usuario"
+                            className="h-6 w-6 rounded border border-slate-200 bg-white text-slate-600 hover:text-[#E05A10] hover:border-[#E05A10] flex items-center justify-center transition-colors"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteUsuario(user)}
+                            title="Eliminar usuario"
+                            className="h-6 w-6 rounded border border-slate-200 bg-white text-slate-600 hover:text-rose-600 hover:border-rose-300 flex items-center justify-center transition-colors"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">
+                          Solo lectura
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );

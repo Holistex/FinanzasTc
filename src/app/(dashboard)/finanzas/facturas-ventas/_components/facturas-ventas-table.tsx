@@ -71,6 +71,7 @@ interface FacturasVentasTableProps {
   factoringClientes: EmpresaFactoringCliente[];
   catalogoOn?: MantenedorON[];
   isAdmin?: boolean;
+  canManage?: boolean;
 }
 
 export function FacturasVentasTable({
@@ -78,6 +79,7 @@ export function FacturasVentasTable({
   factoringClientes,
   catalogoOn = [],
   isAdmin = true,
+  canManage = false,
 }: FacturasVentasTableProps) {
   const queryClient = useQueryClient();
 
@@ -962,15 +964,21 @@ export function FacturasVentasTable({
                           —
                         </span>
                       ) : tieneOnValida ? (
-                        <button
-                          type="button"
-                          onClick={() => setFacturaToAssignOn(row)}
-                          title={`ON ${row.on_proyecto} asignada · Clic para modificar`}
-                          className="inline-flex items-center justify-center bg-white border border-emerald-500 text-emerald-600 hover:bg-emerald-50 font-mono font-semibold text-xs px-2.5 py-1 rounded-md transition-colors shadow-sm cursor-pointer"
-                        >
-                          ON {row.on_proyecto}
-                        </button>
-                      ) : (
+                        canManage ? (
+                          <button
+                            type="button"
+                            onClick={() => setFacturaToAssignOn(row)}
+                            title={`ON ${row.on_proyecto} asignada · Clic para modificar`}
+                            className="inline-flex items-center justify-center bg-white border border-emerald-500 text-emerald-600 hover:bg-emerald-50 font-mono font-semibold text-xs px-2.5 py-1 rounded-md transition-colors shadow-sm cursor-pointer"
+                          >
+                            ON {row.on_proyecto}
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center justify-center bg-white border border-emerald-500 text-emerald-600 font-mono font-semibold text-xs px-2.5 py-1 rounded-md">
+                            ON {row.on_proyecto}
+                          </span>
+                        )
+                      ) : canManage ? (
                         <button
                           type="button"
                           onClick={() => setFacturaToAssignOn(row)}
@@ -979,6 +987,10 @@ export function FacturasVentasTable({
                         >
                           Asignar ON
                         </button>
+                      ) : (
+                        <span className="inline-flex items-center justify-center bg-slate-50 border border-slate-200 text-slate-400 font-medium text-xs px-2.5 py-1 rounded-md">
+                          Sin ON
+                        </span>
                       )}
                     </td>
 
@@ -998,7 +1010,7 @@ export function FacturasVentasTable({
                         >
                           <FileText className="h-4 w-4" />
                         </a>
-                      ) : (
+                      ) : canManage ? (
                         <button
                           type="button"
                           onClick={() => setFacturaToUploadPdf(row)}
@@ -1007,6 +1019,13 @@ export function FacturasVentasTable({
                         >
                           <FileText className="h-4 w-4" />
                         </button>
+                      ) : (
+                        <span
+                          title="Sin PDF adjunto"
+                          className="inline-flex items-center justify-center p-1.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-300"
+                        >
+                          <FileText className="h-4 w-4" />
+                        </span>
                       )}
                     </td>
 
@@ -1040,33 +1059,40 @@ export function FacturasVentasTable({
                             </span>
                           )}
 
-                          <button
-                            type="button"
-                            disabled={!puedeGestionar}
-                            onClick={() => {
-                              if (puedeGestionar) setFacturaToAssignFactoring(row);
-                            }}
-                            title={
-                              !puedeGestionar
-                                ? getBloqueoTooltip("ceder")
-                                : isFactoring
-                                ? `Factoring activo (${
-                                    row.empresa_factoring_cliente
-                                      ?.razon_social || "Asignado"
-                                  }) · Clic para modificar cesión`
-                                : "Cobro Directo Cliente · Clic para ceder factura a Factoring"
-                            }
-                            className={cn(
-                              "inline-flex items-center justify-center h-7 w-7 rounded-md border transition-all",
-                              !puedeGestionar
-                                ? "border-slate-200 bg-slate-100 text-slate-300 cursor-not-allowed opacity-50"
-                                : isFactoring
-                                ? "border-orange-300 bg-orange-50 text-[#E05A10] hover:bg-[#E05A10] hover:text-white"
-                                : "border-slate-200 bg-[#F8FAFC] text-slate-600 hover:bg-[#E05A10] hover:text-white hover:border-[#E05A10]"
-                            )}
-                          >
-                            <ArrowRightLeft className="h-3.5 w-3.5" />
-                          </button>
+                          {canManage && (
+                            <button
+                              type="button"
+                              disabled={!puedeGestionar}
+                              onClick={() => {
+                                if (puedeGestionar) setFacturaToAssignFactoring(row);
+                              }}
+                              title={
+                                !puedeGestionar
+                                  ? getBloqueoTooltip("ceder")
+                                  : isFactoring
+                                  ? `Factoring activo (${
+                                      row.empresa_factoring_cliente
+                                        ?.razon_social || "Asignado"
+                                    }) · Clic para modificar cesión`
+                                  : "Cobro Directo Cliente · Clic para ceder factura a Factoring"
+                              }
+                              className={cn(
+                                "inline-flex items-center justify-center h-7 w-7 rounded-md border transition-all",
+                                !puedeGestionar
+                                  ? "border-slate-200 bg-slate-100 text-slate-300 cursor-not-allowed opacity-50"
+                                  : isFactoring
+                                  ? "border-orange-300 bg-orange-50 text-[#E05A10] hover:bg-[#E05A10] hover:text-white"
+                                  : "border-slate-200 bg-[#F8FAFC] text-slate-600 hover:bg-[#E05A10] hover:text-white hover:border-[#E05A10]"
+                              )}
+                            >
+                              <ArrowRightLeft className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {!canManage && !isFactoring && (
+                            <span className="text-[10px] text-slate-400">
+                              Directo
+                            </span>
+                          )}
                         </div>
                       )}
                     </td>
@@ -1078,27 +1104,33 @@ export function FacturasVentasTable({
                           —
                         </span>
                       ) : deudaActual > 0 ? (
-                        <button
-                          type="button"
-                          disabled={!puedeGestionar}
-                          onClick={() => {
-                            if (puedeGestionar) setFacturaToPay(row);
-                          }}
-                          title={
-                            !puedeGestionar
-                              ? getBloqueoTooltip("pagar")
-                              : `Registrar Pago o Abono para Factura #${row.folio}`
-                          }
-                          className={cn(
-                            "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors shadow-sm",
-                            !puedeGestionar
-                              ? "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60"
-                              : "bg-[#E05A10] text-white hover:bg-[#C2410C]"
-                          )}
-                        >
-                          <Banknote className="h-3.5 w-3.5" />
-                          Pagar
-                        </button>
+                        canManage ? (
+                          <button
+                            type="button"
+                            disabled={!puedeGestionar}
+                            onClick={() => {
+                              if (puedeGestionar) setFacturaToPay(row);
+                            }}
+                            title={
+                              !puedeGestionar
+                                ? getBloqueoTooltip("pagar")
+                                : `Registrar Pago o Abono para Factura #${row.folio}`
+                            }
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors shadow-sm",
+                              !puedeGestionar
+                                ? "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                                : "bg-[#E05A10] text-white hover:bg-[#C2410C]"
+                            )}
+                          >
+                            <Banknote className="h-3.5 w-3.5" />
+                            Pagar
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-400">
+                            Pendiente
+                          </span>
+                        )
                       ) : (
                         <button
                           type="button"

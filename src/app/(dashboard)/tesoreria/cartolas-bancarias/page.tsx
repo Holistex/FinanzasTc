@@ -1,5 +1,6 @@
 import React from "react";
 import { getCartolasBancariasAction } from "@/actions/tesoreria.actions";
+import { getModuleAccess } from "@/lib/permissions";
 import { getServerUserSession } from "@/lib/auth/session";
 import { CartolasBancariasClient } from "./_components/cartolas-bancarias-client";
 
@@ -15,6 +16,13 @@ export default async function CartolasBancariasPage() {
   const isAdmin =
     Boolean(session?.esAdmin) ||
     session?.perfil?.toUpperCase() === "ADMINISTRADOR";
+  const { canManage } = getModuleAccess(session, ["tesoreria_saldos"]);
 
-  return <CartolasBancariasClient initialData={initialData} isAdmin={isAdmin} />;
+  return (
+    <CartolasBancariasClient
+      initialData={initialData}
+      isAdmin={isAdmin}
+      canManage={canManage}
+    />
+  );
 }

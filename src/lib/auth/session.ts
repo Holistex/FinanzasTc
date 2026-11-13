@@ -15,8 +15,15 @@ import {
   ROUTE_MODULE_MAP,
   UserSessionData,
 } from "./permissions";
+import { getModuleAccess } from "@/lib/permissions";
 
-export { hasPermission, isRouteAllowed, getModuleForRoute, ROUTE_MODULE_MAP };
+export {
+  hasPermission,
+  isRouteAllowed,
+  getModuleForRoute,
+  ROUTE_MODULE_MAP,
+  getModuleAccess,
+};
 
 export interface TensaconUserSession extends UserSessionData {
   id?: string;
@@ -208,4 +215,25 @@ export async function assertIsAdmin(): Promise<{
     };
   }
   return { authorized: true };
+}
+
+/**
+ * Verifica si el usuario actual tiene permiso de GESTION (escritura) en al menos uno de los módulos indicados.
+ * Bloquea mutaciones en perfiles con permiso de Solo Lectura o Sin Acceso.
+ */
+export async function assertCanManage(moduleKeys: string[]): Promise<{
+  authorized: boolean;
+  error?: string;
+  session: TensaconUserSession;
+}> {
+  const session = await getServerUserSession();
+  const access = getModuleAccess(session, moduleKeys);
+  if (!access.canManage) {
+    return {
+      authorized: false,
+      error: `Acceso denegado: El perfil actual (${session.perfil}) tiene permiso de Solo Lectura o Sin Acceso para esta operación.`,
+      session,
+    };
+  }
+  return { authorized: true, session };
 }

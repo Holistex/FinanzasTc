@@ -14,6 +14,7 @@ import {
   TipoGestionCobranza,
 } from "@/types/database.types";
 import { formatDateCL } from "@/lib/utils";
+import { assertCanManage } from "@/lib/auth/session";
 
 async function getCurrentSessionUser(): Promise<{ id?: string; nombre: string }> {
   try {
@@ -438,6 +439,11 @@ export interface RegistrarGestionInput {
 export async function registrarGestionCobranzaAction(
   input: RegistrarGestionInput
 ): Promise<{ success: boolean; gestion?: GestionCobranza; error?: string }> {
+  const auth = await assertCanManage(["gestion_cobranza", "ventas_global"]);
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
   try {
     if (!input.facturaId) {
       return { success: false, error: "ID de factura requerido." };
@@ -535,6 +541,11 @@ export interface RegistrarGestionLoteInput {
 export async function registrarGestionCobranzaLoteAction(
   input: RegistrarGestionLoteInput
 ): Promise<{ success: boolean; count: number; error?: string }> {
+  const auth = await assertCanManage(["gestion_cobranza", "ventas_global"]);
+  if (!auth.authorized) {
+    return { success: false, count: 0, error: auth.error };
+  }
+
   try {
     if (!input.facturaIds || input.facturaIds.length === 0) {
       return {

@@ -34,6 +34,7 @@ import { RegisterPaymentModal } from "./register-payment-modal";
 interface FactoringClientesViewProps {
   initialFacturasFactoring: FacturaVenta[];
   factoringClientes: EmpresaFactoringCliente[];
+  canManage?: boolean;
 }
 
 export interface FactoringGroupSummary {
@@ -52,6 +53,7 @@ export interface FactoringGroupSummary {
 export function FactoringClientesView({
   initialFacturasFactoring,
   factoringClientes,
+  canManage = false,
 }: FactoringClientesViewProps) {
   const [facturasFactoring, setFacturasFactoring] = useState<FacturaVenta[]>(
     initialFacturasFactoring
@@ -666,16 +668,22 @@ export function FactoringClientesView({
                                               </td>
 
                                               <td className="py-1.5 px-3 whitespace-nowrap text-right">
-                                                <button
-                                                  type="button"
-                                                  onClick={() =>
-                                                    setFacturaToReassign(fac)
-                                                  }
-                                                  title="Cambiar de Entidad de Factoring o retornar a Directo Cliente"
-                                                  className="inline-flex items-center justify-center h-6 w-6 rounded border border-orange-300 bg-orange-50 text-[#E05A10] hover:bg-[#E05A10] hover:text-white transition-colors"
-                                                >
-                                                  <ArrowRightLeft className="h-3 w-3" />
-                                                </button>
+                                                {canManage ? (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      setFacturaToReassign(fac)
+                                                    }
+                                                    title="Cambiar de Entidad de Factoring o retornar a Directo Cliente"
+                                                    className="inline-flex items-center justify-center h-6 w-6 rounded border border-orange-300 bg-orange-50 text-[#E05A10] hover:bg-[#E05A10] hover:text-white transition-colors"
+                                                  >
+                                                    <ArrowRightLeft className="h-3 w-3" />
+                                                  </button>
+                                                ) : (
+                                                  <span className="text-[10px] text-slate-400">
+                                                    —
+                                                  </span>
+                                                )}
                                               </td>
 
                                               <td className="py-1.5 px-3 whitespace-nowrap text-right">
@@ -686,7 +694,7 @@ export function FactoringClientesView({
                                                   >
                                                     <CheckCircle2 className="h-3.5 w-3.5" />
                                                   </span>
-                                                ) : (
+                                                ) : canManage ? (
                                                   <button
                                                     type="button"
                                                     onClick={() =>
@@ -697,6 +705,10 @@ export function FactoringClientesView({
                                                   >
                                                     <CreditCard className="h-3.5 w-3.5" />
                                                   </button>
+                                                ) : (
+                                                  <span className="text-[10px] text-slate-400">
+                                                    Pendiente
+                                                  </span>
                                                 )}
                                               </td>
                                             </tr>

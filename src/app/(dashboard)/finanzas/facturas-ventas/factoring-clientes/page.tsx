@@ -6,6 +6,8 @@ import {
 import { readLocalDb } from "@/lib/supabase/local-fallback-db";
 import { EmpresaFactoringCliente, FacturaVenta } from "@/types/database.types";
 import { EXCLUDED_DTE_TYPES } from "@/services/sii-csv-parser";
+import { getServerUserSession } from "@/lib/auth/session";
+import { getModuleAccess } from "@/lib/permissions";
 import { FactoringClientesView } from "../_components/factoring-clientes-view";
 
 export const dynamic = "force-dynamic";
@@ -59,10 +61,17 @@ export default async function FactoringClientesSubmodulePage() {
     );
   }
 
+  const session = await getServerUserSession();
+  const { canManage } = getModuleAccess(session, [
+    "factoring_clientes",
+    "ventas_global",
+  ]);
+
   return (
     <FactoringClientesView
       initialFacturasFactoring={facturasFactoring}
       factoringClientes={factoringClientes}
+      canManage={canManage}
     />
   );
 }

@@ -10,7 +10,7 @@ import {
 } from "@/actions/garantias-mantenedores.actions";
 import { GarantiasModuleView } from "@/components/garantias/garantias-module-view";
 import { getServerUserSession } from "@/lib/auth/session";
-import { hasPermission } from "@/lib/auth/permissions";
+import { getModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -23,7 +23,7 @@ export default async function PolizasGarantiasPage() {
     getCompaniasAction(),
   ]);
 
-  const canManage = hasPermission(session, "polizas_garantias", "GESTION");
+  const { canManage } = getModuleAccess(session, ["garantias_polizas"]);
 
   return (
     <GarantiasModuleView

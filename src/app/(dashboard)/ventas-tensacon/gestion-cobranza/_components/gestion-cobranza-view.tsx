@@ -57,11 +57,13 @@ type TabCobranza = "CARTERA" | "COBRANZAS" | "SEMANAL" | "POR_CLIENTE";
 interface GestionCobranzaViewProps {
   initialData: CarteraCobranzaData;
   currentUserName?: string;
+  canManage?: boolean;
 }
 
 export function GestionCobranzaView({
   initialData,
   currentUserName = "Usuario Sistema",
+  canManage = false,
 }: GestionCobranzaViewProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -521,15 +523,17 @@ export function GestionCobranzaView({
             <table className="min-w-[850px] lg:min-w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600">
-                  <th className="py-2.5 px-3 w-10 text-center">
-                    <input
-                      type="checkbox"
-                      checked={isAllVisibleSelected}
-                      onChange={toggleSelectAll}
-                      className="h-4 w-4 rounded border-slate-300 text-[#E05A10] focus:ring-[#E05A10] cursor-pointer"
-                      title="Seleccionar / Deseleccionar Todo"
-                    />
-                  </th>
+                  {canManage && (
+                    <th className="py-2.5 px-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isAllVisibleSelected}
+                        onChange={toggleSelectAll}
+                        className="h-4 w-4 rounded border-slate-300 text-[#E05A10] focus:ring-[#E05A10] cursor-pointer"
+                        title="Seleccionar / Deseleccionar Todo"
+                      />
+                    </th>
+                  )}
                   <th className="py-2.5 px-3">Folio / Doc</th>
                   <th className="py-2.5 px-3">RUT Cliente</th>
                   <th className="py-2.5 px-3">Razón Social</th>
@@ -562,17 +566,19 @@ export function GestionCobranzaView({
                         )}
                       >
                         {/* Checkbox */}
-                        <td
-                          className="py-2.5 px-3 text-center whitespace-nowrap"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSelectRow(row.id)}
-                            className="h-4 w-4 rounded border-slate-300 text-[#E05A10] focus:ring-[#E05A10] cursor-pointer"
-                          />
-                        </td>
+                        {canManage && (
+                          <td
+                            className="py-2.5 px-3 text-center whitespace-nowrap"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelectRow(row.id)}
+                              className="h-4 w-4 rounded border-slate-300 text-[#E05A10] focus:ring-[#E05A10] cursor-pointer"
+                            />
+                          </td>
+                        )}
 
                         {/* Folio */}
                         <td className="py-2.5 px-3 whitespace-nowrap">
@@ -665,14 +671,20 @@ export function GestionCobranzaView({
 
                         {/* Acción */}
                         <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedFacturaModal(row)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#E05A10] text-white text-[11px] font-bold hover:bg-[#c94f0e] transition-colors shadow-sm"
-                          >
-                            <PhoneCall className="h-3 w-3" />
-                            <span>Cobranza</span>
-                          </button>
+                          {canManage ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedFacturaModal(row)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-[#E05A10] text-white text-[11px] font-bold hover:bg-[#c94f0e] transition-colors shadow-sm"
+                            >
+                              <PhoneCall className="h-3 w-3" />
+                              <span>Cobranza</span>
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">
+                              Solo lectura
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -838,14 +850,20 @@ export function GestionCobranzaView({
 
                           {/* Acción: Botón Cobranza */}
                           <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedFacturaModal(row)}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#E05A10] text-white text-xs font-bold hover:bg-[#c94f0e] transition-colors shadow-sm"
-                            >
-                              <PhoneCall className="h-3.5 w-3.5" />
-                              <span>Cobranza</span>
-                            </button>
+                            {canManage ? (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedFacturaModal(row)}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#E05A10] text-white text-xs font-bold hover:bg-[#c94f0e] transition-colors shadow-sm"
+                              >
+                                <PhoneCall className="h-3.5 w-3.5" />
+                                <span>Cobranza</span>
+                              </button>
+                            ) : (
+                              <span className="text-[11px] text-slate-400">
+                                Solo lectura
+                              </span>
+                            )}
                           </td>
                         </tr>
 

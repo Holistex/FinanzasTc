@@ -12,6 +12,7 @@ import {
   EmpresaFactoringProveedor,
 } from "@/types/database.types";
 import { normalizeRut } from "@/lib/utils";
+import { assertCanManage } from "@/lib/auth/session";
 
 // ============================================================================
 // 1. MANTENEDOR: EMPRESA FACTORING CLIENTE
@@ -65,6 +66,9 @@ export async function upsertFactoringClienteAction(input: {
   contacto_nombre?: string | null;
   contacto_email?: string | null;
 }): Promise<EmpresaFactoringCliente> {
+  const auth = await assertCanManage(["mantenedor_factoring", "mantenedores"]);
+  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
+
   const cleanRut = normalizeRut(input.rut_cliente);
   if (!cleanRut || !input.razon_social.trim()) {
     throw new Error("El RUT Cliente y la Razón Social son obligatorios.");
@@ -136,6 +140,9 @@ export async function upsertFactoringClienteAction(input: {
 export async function deleteFactoringClienteAction(
   id: string
 ): Promise<{ success: boolean }> {
+  const auth = await assertCanManage(["mantenedor_factoring", "mantenedores"]);
+  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
+
   if (isServerSupabaseConfigured()) {
     const supabase = await createServerSupabaseClient();
     const { error } = await supabase
@@ -212,6 +219,9 @@ export async function upsertFactoringProveedorAction(input: {
   rut_proveedor: string;
   razon_social: string;
 }): Promise<EmpresaFactoringProveedor> {
+  const auth = await assertCanManage(["mantenedor_factoring", "mantenedores"]);
+  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
+
   const cleanRut = normalizeRut(input.rut_proveedor);
   if (!cleanRut || !input.razon_social.trim()) {
     throw new Error("El RUT Proveedor y la Razón Social son obligatorios.");
@@ -274,6 +284,9 @@ export async function upsertFactoringProveedorAction(input: {
 export async function deleteFactoringProveedorAction(
   id: string
 ): Promise<{ success: boolean }> {
+  const auth = await assertCanManage(["mantenedor_factoring", "mantenedores"]);
+  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
+
   if (isServerSupabaseConfigured()) {
     const supabase = await createServerSupabaseClient();
     const { error } = await supabase
@@ -347,6 +360,9 @@ export async function upsertEmpresaConfirmingAction(input: {
   contacto_nombre?: string | null;
   contacto_email?: string | null;
 }): Promise<EmpresaConfirming> {
+  const auth = await assertCanManage(["mantenedor_factoring", "mantenedores"]);
+  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
+
   const cleanRut = normalizeRut(input.rut_confirming);
   if (!cleanRut || !input.razon_social.trim()) {
     throw new Error("El RUT Confirming y la Razón Social son obligatorios.");
@@ -421,6 +437,9 @@ export async function upsertEmpresaConfirmingAction(input: {
 export async function deleteEmpresaConfirmingAction(
   id: string
 ): Promise<{ success: boolean }> {
+  const auth = await assertCanManage(["mantenedor_factoring", "mantenedores"]);
+  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
+
   if (isServerSupabaseConfigured()) {
     const supabase = await createServerSupabaseClient();
     const { error } = await supabase

@@ -7,6 +7,7 @@ import {
 } from "@/lib/supabase/server";
 import { readLocalDb, writeLocalDb } from "@/lib/supabase/local-fallback-db";
 import { MantenedorON } from "@/types/database.types";
+import { assertCanManage } from "@/lib/auth/session";
 
 export interface UpsertMantenedorOnInput {
   id?: string;
@@ -117,6 +118,11 @@ export interface MantenedorOnActionResult {
 export async function upsertMantenedorOnAction(
   input: UpsertMantenedorOnInput
 ): Promise<MantenedorOnActionResult> {
+  const auth = await assertCanManage(["mantenedor_on", "configuracion_adm"]);
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
   try {
     const cleanCode = input.codigo_on.trim();
     if (!/^[0-9]{3}$/.test(cleanCode)) {
@@ -238,6 +244,11 @@ export async function toggleMantenedorOnStatusAction(
   id: string,
   activo: boolean
 ): Promise<{ success: boolean; error?: string }> {
+  const auth = await assertCanManage(["mantenedor_on", "configuracion_adm"]);
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
   try {
     const now = new Date().toISOString();
     const db = readLocalDb();
@@ -286,6 +297,11 @@ export async function deleteMantenedorOnAction(
   idOrCodigo: string,
   codigoOn?: string
 ): Promise<{ success: boolean; error?: string }> {
+  const auth = await assertCanManage(["mantenedor_on", "configuracion_adm"]);
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
   try {
     const valorLimpio = String(idOrCodigo).trim();
     const isUuid =

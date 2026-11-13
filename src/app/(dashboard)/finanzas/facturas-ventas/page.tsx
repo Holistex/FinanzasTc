@@ -17,6 +17,7 @@ import {
 } from "@/types/database.types";
 import { EXCLUDED_DTE_TYPES } from "@/services/sii-csv-parser";
 import { getServerUserSession } from "@/lib/auth/session";
+import { getModuleAccess } from "@/lib/permissions";
 import { FacturasVentasTable } from "./_components/facturas-ventas-table";
 
 export const dynamic = "force-dynamic";
@@ -136,6 +137,10 @@ export default async function FacturasVentasPage() {
     ]);
 
   const isAdmin = session.esAdmin || session.perfil === "ADMINISTRADOR";
+  const { canManage } = getModuleAccess(session, [
+    "facturas_ventas",
+    "ventas_global",
+  ]);
 
   return (
     <FacturasVentasTable
@@ -143,6 +148,7 @@ export default async function FacturasVentasPage() {
       factoringClientes={factoringClientes}
       catalogoOn={catalogoOn}
       isAdmin={isAdmin}
+      canManage={canManage}
     />
   );
 }

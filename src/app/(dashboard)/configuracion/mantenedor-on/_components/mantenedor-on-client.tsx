@@ -26,9 +26,13 @@ import { cn } from "@/lib/utils";
 
 interface MantenedorOnClientProps {
   initialData: MantenedorON[];
+  canManage?: boolean;
 }
 
-export function MantenedorOnClient({ initialData }: MantenedorOnClientProps) {
+export function MantenedorOnClient({
+  initialData,
+  canManage = false,
+}: MantenedorOnClientProps) {
   const router = useRouter();
   const [data, setData] = useState<MantenedorON[]>(initialData);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -230,14 +234,16 @@ export function MantenedorOnClient({ initialData }: MantenedorOnClientProps) {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#E05A10] px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-[#c94e0c] transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Nueva ON
-        </button>
+        {canManage && (
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#E05A10] px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-[#c94e0c] transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Nueva ON
+          </button>
+        )}
       </div>
 
       {/* Alerta roja visible de error */}
@@ -391,52 +397,77 @@ export function MantenedorOnClient({ initialData }: MantenedorOnClientProps) {
 
                     {/* Estado con Toggle */}
                     <td className="py-3 px-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStatus(item)}
-                        title="Haga clic para cambiar estado"
-                        className={cn(
-                          "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all cursor-pointer shadow-xs",
-                          item.activo !== false
-                            ? "bg-emerald-950/30 text-emerald-400 border-emerald-800/30 hover:bg-emerald-950/60"
-                            : "bg-slate-800/60 text-slate-400 border-slate-700 hover:bg-slate-800"
-                        )}
-                      >
+                      {canManage ? (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(item)}
+                          title="Haga clic para cambiar estado"
+                          className={cn(
+                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all cursor-pointer shadow-xs",
+                            item.activo !== false
+                              ? "bg-emerald-950/30 text-emerald-400 border-emerald-800/30 hover:bg-emerald-950/60"
+                              : "bg-slate-800/60 text-slate-400 border-slate-700 hover:bg-slate-800"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "h-1.5 w-1.5 rounded-full",
+                              item.activo !== false ? "bg-emerald-400" : "bg-slate-500"
+                            )}
+                          />
+                          {item.activo !== false ? "ACTIVO" : "INACTIVO"}
+                        </button>
+                      ) : (
                         <span
                           className={cn(
-                            "h-1.5 w-1.5 rounded-full",
-                            item.activo !== false ? "bg-emerald-400" : "bg-slate-500"
+                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border",
+                            item.activo !== false
+                              ? "bg-emerald-950/30 text-emerald-400 border-emerald-800/30"
+                              : "bg-slate-800/60 text-slate-400 border-slate-700"
                           )}
-                        />
-                        {item.activo !== false ? "ACTIVO" : "INACTIVO"}
-                      </button>
+                        >
+                          <span
+                            className={cn(
+                              "h-1.5 w-1.5 rounded-full",
+                              item.activo !== false ? "bg-emerald-400" : "bg-slate-500"
+                            )}
+                          />
+                          {item.activo !== false ? "ACTIVO" : "INACTIVO"}
+                        </span>
+                      )}
                     </td>
 
                     {/* Acciones */}
                     <td className="py-3 px-4 text-right">
-                      <div className="inline-flex items-center gap-1.5 justify-end">
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(item)}
-                          className="p-1.5 rounded-md text-slate-400 hover:text-orange-400 hover:bg-slate-800 transition-colors"
-                          title="Editar ON"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(item.id, item.codigo_on)}
-                          disabled={deletingId === item.id}
-                          className="p-1.5 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-50"
-                          title="Eliminar ON"
-                        >
-                          {deletingId === item.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-3.5 w-3.5" />
-                          )}
-                        </button>
-                      </div>
+                      {canManage ? (
+                        <div className="inline-flex items-center gap-1.5 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(item)}
+                            className="p-1.5 rounded-md text-slate-400 hover:text-orange-400 hover:bg-slate-800 transition-colors"
+                            title="Editar ON"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(item.id, item.codigo_on)}
+                            disabled={deletingId === item.id}
+                            className="p-1.5 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-50"
+                            title="Eliminar ON"
+                          >
+                            {deletingId === item.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-slate-500">
+                          Solo lectura
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))

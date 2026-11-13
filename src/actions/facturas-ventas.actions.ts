@@ -20,7 +20,11 @@ import {
   parseAndValidateSiiCsv,
 } from "@/services/sii-csv-parser";
 import { normalizeRut } from "@/lib/utils";
-import { assertIsAdmin, getServerUserSession } from "@/lib/auth/session";
+import {
+  assertCanManage,
+  assertIsAdmin,
+  getServerUserSession,
+} from "@/lib/auth/session";
 import {
   queryFacturasVentasServer,
   resolveDeudaCliente,
@@ -80,6 +84,15 @@ export async function registrarPagoFacturaAction(params: {
   nuevaDeuda: number;
   pagadaCompletamente: boolean;
 }> {
+  const auth = await assertCanManage([
+    "facturas_ventas",
+    "factoring_clientes",
+    "ventas_global",
+  ]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   const monto = Math.round(Number(params.montoPago) || 0);
   if (monto <= 0) {
     throw new Error("El monto del pago debe ser mayor a $ 0.");
@@ -551,6 +564,15 @@ export async function updateGestionPagoAction(params: {
   gestionPago: GestionPagoTipo;
   factoringClienteId: string | null;
 }): Promise<{ success: boolean }> {
+  const auth = await assertCanManage([
+    "facturas_ventas",
+    "factoring_clientes",
+    "ventas_global",
+  ]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   const effectiveFactoringId =
     params.gestionPago === "FACTORING" ? params.factoringClienteId : null;
 
@@ -601,6 +623,11 @@ export async function asignarOnFacturaAction(params: {
   facturaId: string;
   onProyecto: string;
 }): Promise<{ success: boolean; on_proyecto: string }> {
+  const auth = await assertCanManage(["facturas_ventas", "ventas_global"]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   const cleanOn = params.onProyecto.trim();
   if (!cleanOn || !/^[0-9]{3}$/.test(cleanOn)) {
     throw new Error("Debe ingresar o seleccionar un Código ON válido de 3 dígitos (ej. 701, 740).");
@@ -676,6 +703,11 @@ export async function asignarOnFacturaAction(params: {
 export async function subirRespaldoFacturaVentaAction(
   formData: FormData
 ): Promise<{ success: boolean; url_pdf: string }> {
+  const auth = await assertCanManage(["facturas_ventas", "ventas_global"]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   const facturaId = formData.get("facturaId") as string;
   const archivo = formData.get("archivo") as File | null;
 
@@ -794,6 +826,11 @@ export async function subirRespaldoFacturaVentaAction(
 export async function eliminarRespaldoFacturaVentaAction(
   facturaId: string
 ): Promise<{ success: boolean }> {
+  const auth = await assertCanManage(["facturas_ventas", "ventas_global"]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   // 1. Desvincular en Local DB
   const db = readLocalDb();
   if (db.facturas_ventas) {

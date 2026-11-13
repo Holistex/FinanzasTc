@@ -6,7 +6,7 @@ import {
 } from "@/actions/litigios.actions";
 import { JuiciosModuleView } from "@/components/litigios/juicios-module-view";
 import { getServerUserSession } from "@/lib/auth/session";
-import { hasPermission } from "@/lib/auth/permissions";
+import { getModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -17,7 +17,10 @@ export default async function RegLitigiosJuiciosPage() {
     getLitigiosJuiciosAction(),
   ]);
 
-  const canManage = hasPermission(session, "litigios_juicios", "GESTION");
+  const { canManage } = getModuleAccess(session, [
+    "litigios_juicios",
+    "reg_litigios",
+  ]);
 
   return (
     <JuiciosModuleView

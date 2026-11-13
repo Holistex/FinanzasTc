@@ -53,6 +53,7 @@ import {
 } from "@/lib/utils";
 import dynamic from "next/dynamic";
 import { TensaconUserSession } from "@/lib/auth/session";
+import { getModuleAccess } from "@/lib/permissions";
 
 // Code-splitting y carga diferida (lazy loading) de modales pesados que usan PapaParse
 const CsvImportComprasModal = dynamic(
@@ -143,6 +144,10 @@ export function FacturasComprasTable({
   initialFacNcCount = 0,
   userSession,
 }: FacturasComprasTableProps) {
+  const { canManage } = getModuleAccess(userSession, [
+    "facturas_compras",
+    "compras_global",
+  ]);
   const [data, setData] = useState<FacturaCompra[]>(initialData);
   const [kpis, setKpis] = useState<ComprasKPIs>(initialKpis);
   const [neteos, setNeteos] = useState<NeteoCompra[]>(initialNeteos);
@@ -1030,34 +1035,40 @@ export function FacturasComprasTable({
 
                         {/* 7. Acciones */}
                         <td className="py-3 px-4 text-center whitespace-nowrap">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              onClick={() => setSelectedFacturaForPago(factura)}
-                              className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-xs"
-                              title="Registrar pago directo o confirmar cobro de cheque"
-                            >
-                              <Banknote className="h-3 w-3" />
-                              <span>Pagar</span>
-                            </button>
-                            {(activeTab === "CHEQUES" || factura.estado === "CHEQUE") && (
+                          {canManage ? (
+                            <div className="flex items-center justify-center gap-1.5">
                               <button
-                                onClick={() => setSelectedFacturaForProrroga(factura)}
-                                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 transition-colors shadow-xs"
-                                title="Prorrogar o modificar fecha de vencimiento/cobro del cheque"
+                                onClick={() => setSelectedFacturaForPago(factura)}
+                                className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-xs"
+                                title="Registrar pago directo o confirmar cobro de cheque"
                               >
-                                <CalendarClock className="h-3 w-3 text-amber-700" />
-                                <span>Prorrogar</span>
+                                <Banknote className="h-3 w-3" />
+                                <span>Pagar</span>
                               </button>
-                            )}
-                            <button
-                              onClick={() => setSelectedFacturaForState(factura)}
-                              className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:text-white bg-slate-100 hover:bg-[#E05A10] border border-slate-300 hover:border-[#E05A10] transition-all shadow-xs"
-                              title="Cambiar modalidad o estado"
-                            >
-                              <span>Modalidad</span>
-                              <ChevronRight className="h-3 w-3" />
-                            </button>
-                          </div>
+                              {(activeTab === "CHEQUES" || factura.estado === "CHEQUE") && (
+                                <button
+                                  onClick={() => setSelectedFacturaForProrroga(factura)}
+                                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 transition-colors shadow-xs"
+                                  title="Prorrogar o modificar fecha de vencimiento/cobro del cheque"
+                                >
+                                  <CalendarClock className="h-3 w-3 text-amber-700" />
+                                  <span>Prorrogar</span>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setSelectedFacturaForState(factura)}
+                                className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:text-white bg-slate-100 hover:bg-[#E05A10] border border-slate-300 hover:border-[#E05A10] transition-all shadow-xs"
+                                title="Cambiar modalidad o estado"
+                              >
+                                <span>Modalidad</span>
+                                <ChevronRight className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">
+                              Solo lectura
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -1225,25 +1236,31 @@ export function FacturasComprasTable({
                             {/* 8. Acciones */}
                             <td className="py-3 px-4 text-center whitespace-nowrap">
                               {!isNC && (
-                                <div className="flex items-center justify-center gap-1.5">
-                                  {saldoFactura > 0 && (
+                                canManage ? (
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    {saldoFactura > 0 && (
+                                      <button
+                                        onClick={() => setSelectedFacturaForPago(doc)}
+                                        className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-xs"
+                                        title="Registrar pago directo o abono parcial"
+                                      >
+                                        <Banknote className="h-3 w-3" />
+                                        <span>Pagar</span>
+                                      </button>
+                                    )}
                                     <button
-                                      onClick={() => setSelectedFacturaForPago(doc)}
-                                      className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-xs"
-                                      title="Registrar pago directo o abono parcial"
+                                      onClick={() => setSelectedFacturaForState(doc)}
+                                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-700 hover:text-white bg-slate-100 hover:bg-[#E05A10] border border-slate-300 hover:border-[#E05A10] transition-all shadow-xs"
                                     >
-                                      <Banknote className="h-3 w-3" />
-                                      <span>Pagar</span>
+                                      <span>Gestionar</span>
+                                      <ChevronRight className="h-3 w-3" />
                                     </button>
-                                  )}
-                                  <button
-                                    onClick={() => setSelectedFacturaForState(doc)}
-                                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-slate-700 hover:text-white bg-slate-100 hover:bg-[#E05A10] border border-slate-300 hover:border-[#E05A10] transition-all shadow-xs"
-                                  >
-                                    <span>Gestionar</span>
-                                    <ChevronRight className="h-3 w-3" />
-                                  </button>
-                                </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400">
+                                    Solo lectura
+                                  </span>
+                                )
                               )}
                             </td>
                           </tr>

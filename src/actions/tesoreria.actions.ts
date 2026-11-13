@@ -8,7 +8,7 @@ import {
   isServerSupabaseConfigured,
 } from "@/lib/supabase/server";
 import { readLocalDb, writeLocalDb } from "@/lib/supabase/local-fallback-db";
-import { assertIsAdmin } from "@/lib/auth/session";
+import { assertCanManage, assertIsAdmin } from "@/lib/auth/session";
 import {
   BancoCartola,
   CartolaBancaria,
@@ -244,6 +244,11 @@ export async function upsertTipoPagoAction(input: {
   descripcion?: string | null;
   activo?: boolean;
 }): Promise<MantenedorTipoPago> {
+  const auth = await assertCanManage(["mantenedor_colaboradores", "tesoreria_saldos", "configuracion_adm"]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   const cleanNombre = input.nombre.trim().toUpperCase();
   if (!cleanNombre) {
     throw new Error("El nombre del Tipo de Pago es obligatorio.");
@@ -325,6 +330,11 @@ export async function toggleTipoPagoStatusAction(
   id: string,
   activo: boolean
 ): Promise<{ success: boolean; error?: string }> {
+  const auth = await assertCanManage(["mantenedor_colaboradores", "tesoreria_saldos", "configuracion_adm"]);
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
   try {
     const db = readLocalDb();
     if (!db.mantenedor_tipos_pago) db.mantenedor_tipos_pago = [];
@@ -539,6 +549,11 @@ export async function asignarTipoPagoLineaCartolaAction(
   lineaId: string,
   tipoPagoId: string | null
 ): Promise<{ success: boolean; error?: string }> {
+  const auth = await assertCanManage(["tesoreria_saldos"]);
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
   try {
     const cleanTipoId = tipoPagoId && tipoPagoId.trim() !== "" ? tipoPagoId : null;
 
@@ -637,6 +652,11 @@ export async function asignarTipoMovimientoMasivoAction(
   lineaIds: string[],
   tipoPagoId: string
 ): Promise<{ success: boolean; count: number; error?: string }> {
+  const auth = await assertCanManage(["tesoreria_saldos"]);
+  if (!auth.authorized) {
+    return { success: false, count: 0, error: auth.error };
+  }
+
   try {
     if (!lineaIds || lineaIds.length === 0) {
       throw new Error("No se han seleccionado movimientos para clasificar.");

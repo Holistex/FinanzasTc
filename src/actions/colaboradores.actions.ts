@@ -8,7 +8,7 @@ import {
 } from "@/lib/supabase/server";
 import { readLocalDb, writeLocalDb } from "@/lib/supabase/local-fallback-db";
 import { MantenedorColaborador } from "@/types/database.types";
-import { assertIsAdmin } from "@/lib/auth/session";
+import { assertCanManage, assertIsAdmin } from "@/lib/auth/session";
 import { formatRutDisplay } from "@/lib/utils";
 
 export interface UpsertColaboradorInput {
@@ -136,6 +136,14 @@ export async function getColaboradoresAction(
 export async function upsertColaboradorAction(
   input: UpsertColaboradorInput
 ): Promise<MantenedorColaborador> {
+  const auth = await assertCanManage([
+    "mantenedor_colaboradores",
+    "configuracion_adm",
+  ]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   const cleanRut = cleanColaboradorRut(input.rut);
   if (!cleanRut || cleanRut.length < 2 || !/^[0-9]+[0-9K]$/.test(cleanRut)) {
     throw new Error("El RUT ingresado no es válido (ej. 12.345.678-9).");
@@ -245,6 +253,14 @@ export async function toggleColaboradorStatusAction(
   rut: string,
   activo: boolean
 ): Promise<boolean> {
+  const auth = await assertCanManage([
+    "mantenedor_colaboradores",
+    "configuracion_adm",
+  ]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   const cleanRut = cleanColaboradorRut(rut);
   const now = new Date().toISOString();
   const db = readLocalDb();

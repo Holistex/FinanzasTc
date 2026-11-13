@@ -23,7 +23,7 @@ import {
   parseAndValidateComprasCsv,
   SiiComprasValidationSummary,
 } from "@/services/sii-compras-csv-parser";
-import { assertIsAdmin } from "@/lib/auth/session";
+import { assertCanManage, assertIsAdmin } from "@/lib/auth/session";
 import { formatCLP, normalizeRut } from "@/lib/utils";
 
 export interface ComprasKPIs {
@@ -614,6 +614,11 @@ export async function cambiarEstadoCompraAction(input: {
   onProyecto?: string | null;
   observacionTc?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
+  const auth = await assertCanManage(["facturas_compras", "compras_global"]);
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
   try {
     if (input.estado === "COMPRA_TC" && !input.colaboradorId) {
       return {
@@ -958,6 +963,11 @@ export async function netearFacturaCompraAction(input: {
   montoNeteado?: number;
   saldoRestanteFactura?: number;
 }> {
+  const auth = await assertCanManage(["facturas_compras", "compras_global"]);
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
   try {
     if (!input.facturaId || !input.notaCreditoId) {
       return { success: false, error: "Factura y Nota de Crédito son requeridas." };
@@ -1085,6 +1095,11 @@ export async function editarFechaVencimientoCompraAction(
   id: string,
   nuevaFechaVencimiento: string
 ): Promise<{ success: boolean; error?: string }> {
+  const auth = await assertCanManage(["facturas_compras", "compras_global"]);
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
   try {
     if (!nuevaFechaVencimiento) {
       return { success: false, error: "Fecha de vencimiento inválida." };
@@ -1145,6 +1160,11 @@ export async function registrarChequesCompraAction(
   nuevoSaldo?: number;
   totalChequesEmitidos?: number;
 }> {
+  const auth = await assertCanManage(["facturas_compras", "compras_global"]);
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
   try {
     if (!input.facturaId) {
       return { success: false, error: "Identificador de factura no proporcionado." };
@@ -1353,6 +1373,11 @@ export const emitirChequeCompraAction = registrarChequesCompraAction;
 export async function eliminarChequeCompraAction(
   chequeId: string
 ): Promise<{ success: boolean; error?: string }> {
+  const auth = await assertCanManage(["facturas_compras", "compras_global"]);
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
   try {
     const db = readLocalDb();
     if (!db.cheques_compras) db.cheques_compras = [];
@@ -1430,6 +1455,11 @@ export interface ProrrogarChequeCompraParams {
 export async function prorrogarChequeCompraAction(
   params: ProrrogarChequeCompraParams
 ): Promise<{ success: boolean; error?: string }> {
+  const auth = await assertCanManage(["facturas_compras", "compras_global"]);
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
   try {
     const { facturaId, chequeId, nuevaFechaVencimiento, observacion } = params;
     if (!facturaId) throw new Error("El ID de la factura es obligatorio.");
@@ -1531,6 +1561,11 @@ export async function registrarPagoFacturaCompraAction(
   estaSaldada?: boolean;
   error?: string;
 }> {
+  const auth = await assertCanManage(["facturas_compras", "compras_global"]);
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
   try {
     const {
       facturaId,

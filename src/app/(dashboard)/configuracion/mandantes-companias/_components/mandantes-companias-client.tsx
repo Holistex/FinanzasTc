@@ -32,11 +32,13 @@ import { cn, formatDateCL, formatRutDisplay } from "@/lib/utils";
 interface MandantesCompaniasClientProps {
   initialMandantes: MantenedorMandante[];
   initialCompanias: MantenedorCompania[];
+  canManage?: boolean;
 }
 
 export function MandantesCompaniasClient({
   initialMandantes,
   initialCompanias,
+  canManage = false,
 }: MandantesCompaniasClientProps) {
   const [activeTab, setActiveTab] = useState<"MANDANTES" | "COMPANIAS">("MANDANTES");
   const [mandantes, setMandantes] = useState<MantenedorMandante[]>(initialMandantes);
@@ -239,25 +241,27 @@ export function MandantesCompaniasClient({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {activeTab === "MANDANTES" ? (
-            <button
-              onClick={openCreateMandante}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#E05A10] text-white text-xs font-semibold hover:bg-[#c94e0d] transition-colors shadow-sm"
-            >
-              <Plus className="h-4 w-4" />
-              Nuevo Mandante
-            </button>
-          ) : (
-            <button
-              onClick={openCreateCompania}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#E05A10] text-white text-xs font-semibold hover:bg-[#c94e0d] transition-colors shadow-sm"
-            >
-              <Plus className="h-4 w-4" />
-              Nueva Compañía / Banco
-            </button>
-          )}
-        </div>
+        {canManage && (
+          <div className="flex items-center gap-2">
+            {activeTab === "MANDANTES" ? (
+              <button
+                onClick={openCreateMandante}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#E05A10] text-white text-xs font-semibold hover:bg-[#c94e0d] transition-colors shadow-sm"
+              >
+                <Plus className="h-4 w-4" />
+                Nuevo Mandante
+              </button>
+            ) : (
+              <button
+                onClick={openCreateCompania}
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#E05A10] text-white text-xs font-semibold hover:bg-[#c94e0d] transition-colors shadow-sm"
+              >
+                <Plus className="h-4 w-4" />
+                Nueva Compañía / Banco
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -388,22 +392,28 @@ export function MandantesCompaniasClient({
                           {formatDateCL(m.created_at)}
                         </td>
                         <td className="py-3 px-4 text-center whitespace-nowrap">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => openEditMandante(m)}
-                              className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
-                              title="Editar mandante"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteMandante(m)}
-                              className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
-                              title="Eliminar mandante"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
+                          {canManage ? (
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => openEditMandante(m)}
+                                className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
+                                title="Editar mandante"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteMandante(m)}
+                                className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
+                                title="Eliminar mandante"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">
+                              Solo lectura
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -508,22 +518,28 @@ export function MandantesCompaniasClient({
                           {formatDateCL(c.created_at)}
                         </td>
                         <td className="py-3 px-4 text-center whitespace-nowrap">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => openEditCompania(c)}
-                              className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
-                              title="Editar compañía"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteCompania(c)}
-                              className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
-                              title="Eliminar compañía"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
+                          {canManage ? (
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => openEditCompania(c)}
+                                className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
+                                title="Editar compañía"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCompania(c)}
+                                className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
+                                title="Eliminar compañía"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">
+                              Solo lectura
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))

@@ -34,12 +34,14 @@ interface MantenedorColaboradoresClientProps {
   initialData: MantenedorColaborador[];
   initialTiposPago?: MantenedorTipoPago[];
   isAdmin: boolean;
+  canManage?: boolean;
 }
 
 export function MantenedorColaboradoresClient({
   initialData,
   initialTiposPago = [],
   isAdmin,
+  canManage = false,
 }: MantenedorColaboradoresClientProps) {
   const [activeMainTab, setActiveMainTab] = useState<"COLABORADORES" | "TIPOS_PAGO">("COLABORADORES");
   const [data, setData] = useState<MantenedorColaborador[]>(initialData);
@@ -262,7 +264,7 @@ export function MantenedorColaboradoresClient({
         </div>
 
         {/* Botones de Acción Superior (Alineados a la derecha) */}
-        {activeMainTab === "COLABORADORES" && (
+        {activeMainTab === "COLABORADORES" && canManage && (
           <div className="flex flex-wrap items-center gap-2.5">
             {isAdmin && (
               <button
@@ -493,34 +495,40 @@ export function MantenedorColaboradoresClient({
 
                       {/* 5. ACCIONES */}
                       <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <div className="inline-flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleStatus(item)}
-                            title={
-                              isActivo
-                                ? "Cambiar a No Activo"
-                                : "Activar Colaborador"
-                            }
-                            className={cn(
-                              "px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors bg-white shadow-sm",
-                              isActivo
-                                ? "border-slate-300 text-slate-600 hover:border-rose-400 hover:text-rose-600 hover:bg-rose-50"
-                                : "border-emerald-400 text-emerald-600 hover:bg-emerald-50"
-                            )}
-                          >
-                            {isActivo ? "Inactivar" : "Activar"}
-                          </button>
+                        {canManage ? (
+                          <div className="inline-flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleStatus(item)}
+                              title={
+                                isActivo
+                                  ? "Cambiar a No Activo"
+                                  : "Activar Colaborador"
+                              }
+                              className={cn(
+                                "px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors bg-white shadow-sm",
+                                isActivo
+                                  ? "border-slate-300 text-slate-600 hover:border-rose-400 hover:text-rose-600 hover:bg-rose-50"
+                                  : "border-emerald-400 text-emerald-600 hover:bg-emerald-50"
+                              )}
+                            >
+                              {isActivo ? "Inactivar" : "Activar"}
+                            </button>
 
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(item)}
-                            title="Editar Colaborador"
-                            className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-600 hover:text-[#E05A10] hover:border-orange-300 hover:bg-orange-50/50 transition-colors shadow-sm"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(item)}
+                              title="Editar Colaborador"
+                              className="p-1.5 rounded-md border border-slate-200 bg-white text-slate-600 hover:text-[#E05A10] hover:border-orange-300 hover:bg-orange-50/50 transition-colors shadow-sm"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">
+                            Solo lectura
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );

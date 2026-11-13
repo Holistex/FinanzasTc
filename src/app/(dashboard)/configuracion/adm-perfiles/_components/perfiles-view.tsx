@@ -47,9 +47,13 @@ function formatearFecha(fechaStr: string | null | undefined): string {
 
 interface PerfilesViewProps {
   initialPerfiles: PerfilUsuario[];
+  canManage?: boolean;
 }
 
-export function PerfilesView({ initialPerfiles }: PerfilesViewProps) {
+export function PerfilesView({
+  initialPerfiles,
+  canManage = false,
+}: PerfilesViewProps) {
   const [perfiles, setPerfiles] = useState<PerfilUsuario[]>(initialPerfiles);
   const [cargando, setCargando] = useState(false);
   const [filtro, setFiltro] = useState("");
@@ -273,14 +277,16 @@ export function PerfilesView({ initialPerfiles }: PerfilesViewProps) {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={abrirCrear}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#E05A10] hover:bg-[#C2410C] px-4 py-2 text-xs font-bold text-white shadow-md shadow-[#E05A10]/20 transition-all active:scale-[0.98]"
-        >
-          <Plus className="h-4 w-4" />
-          + Crear Nuevo Perfil
-        </button>
+        {canManage && (
+          <button
+            type="button"
+            onClick={abrirCrear}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#E05A10] hover:bg-[#C2410C] px-4 py-2 text-xs font-bold text-white shadow-md shadow-[#E05A10]/20 transition-all active:scale-[0.98]"
+          >
+            <Plus className="h-4 w-4" />
+            + Crear Nuevo Perfil
+          </button>
+        )}
       </div>
 
       {/* Tarjeta de Lista y Tabla */}
@@ -397,25 +403,31 @@ export function PerfilesView({ initialPerfiles }: PerfilesViewProps) {
 
                     {/* 5. ACCIONES */}
                     <td className="px-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => abrirEditar(p)}
-                          className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-                        >
-                          <Pencil className="h-3 w-3 text-slate-500" />
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          disabled={esAdmin}
-                          onClick={() => setPerfilAEliminar(p)}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 bg-white text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                          title={esAdmin ? "No se puede eliminar el perfil ADMINISTRADOR" : "Eliminar perfil"}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                      {canManage ? (
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => abrirEditar(p)}
+                            className="inline-flex h-7 items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                          >
+                            <Pencil className="h-3 w-3 text-slate-500" />
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            disabled={esAdmin}
+                            onClick={() => setPerfilAEliminar(p)}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 bg-white text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={esAdmin ? "No se puede eliminar el perfil ADMINISTRADOR" : "Eliminar perfil"}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">
+                          Solo lectura
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );

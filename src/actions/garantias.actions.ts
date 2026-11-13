@@ -6,7 +6,7 @@ import {
   isServerSupabaseConfigured,
 } from "@/lib/supabase/server";
 import { readLocalDb, writeLocalDb } from "@/lib/supabase/local-fallback-db";
-import { getServerUserSession } from "@/lib/auth/session";
+import { assertCanManage, getServerUserSession } from "@/lib/auth/session";
 import {
   BoletaGarantia,
   PolizaGarantia,
@@ -190,6 +190,11 @@ export async function upsertBoletaGarantiaAction(input: {
   contrafianza_compania?: string | null;
   contador_renovaciones?: number;
 }): Promise<BoletaGarantia> {
+  const auth = await assertCanManage(["garantias_boletas"]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   if (!input.nro_folio.trim()) throw new Error("El N° Folio es obligatorio.");
   if (!input.mandante_id) throw new Error("Debe seleccionar un Mandante.");
   if (!input.compania_id) throw new Error("Debe seleccionar una Compañía.");
@@ -435,6 +440,11 @@ export async function upsertPolizaGarantiaAction(input: {
   contrafianza_compania?: string | null;
   contador_renovaciones?: number;
 }): Promise<PolizaGarantia> {
+  const auth = await assertCanManage(["garantias_polizas"]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   if (!input.nro_folio.trim()) throw new Error("El N° Folio es obligatorio.");
   if (!input.mandante_id) throw new Error("Debe seleccionar un Mandante.");
   if (!input.compania_id) throw new Error("Debe seleccionar una Compañía.");
@@ -533,6 +543,13 @@ export async function renovarGarantiaAction(input: {
   observaciones?: string;
   usuarioId?: string;
 }): Promise<{ success: boolean; contador_renovaciones: number; nueva_fecha_vencimiento: string }> {
+  const targetKey =
+    input.tipo === "BOLETA" ? "garantias_boletas" : "garantias_polizas";
+  const auth = await assertCanManage([targetKey]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   if (!input.id) throw new Error("ID de garantía no proporcionado.");
   if (!input.nuevaFechaVencimiento) throw new Error("Debe ingresar la nueva fecha de vencimiento.");
 
@@ -727,6 +744,13 @@ export async function registrarGestionGarantiaAction(input: {
   observacion: string;
   fecha_proximo_seguimiento?: string | null;
 }): Promise<GestionGarantia> {
+  const targetKey =
+    input.tipo_documento === "BOLETA" ? "garantias_boletas" : "garantias_polizas";
+  const auth = await assertCanManage([targetKey]);
+  if (!auth.authorized) {
+    throw new Error(auth.error || "Acceso denegado.");
+  }
+
   if (!input.documento_id) {
     throw new Error("ID del documento es obligatorio.");
   }

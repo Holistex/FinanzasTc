@@ -4,7 +4,7 @@ import {
 } from "@/actions/litigios.actions";
 import { MultasModuleView } from "@/components/litigios/multas-module-view";
 import { getServerUserSession } from "@/lib/auth/session";
-import { hasPermission } from "@/lib/auth/permissions";
+import { getModuleAccess } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,7 +15,10 @@ export default async function RegLitigiosMultasPage() {
     getLitigiosMultasAction(),
   ]);
 
-  const canManage = hasPermission(session, "litigios_multas", "GESTION");
+  const { canManage } = getModuleAccess(session, [
+    "litigios_multas",
+    "reg_litigios",
+  ]);
 
   return (
     <MultasModuleView

@@ -36,12 +36,14 @@ interface MantenedoresTabsClientProps {
   initialClientes: EmpresaFactoringCliente[];
   initialProveedores: EmpresaFactoringProveedor[];
   initialConfirming: EmpresaConfirming[];
+  canManage?: boolean;
 }
 
 export function MantenedoresTabsClient({
   initialClientes,
   initialProveedores,
   initialConfirming,
+  canManage = false,
 }: MantenedoresTabsClientProps) {
   const [activeTab, setActiveTab] = useState<"CLIENTES" | "PROVEEDORES" | "CONFIRMING">(
     "CLIENTES"
@@ -384,14 +386,16 @@ export function MantenedoresTabsClient({
               />
             </div>
 
-            <button
-              type="button"
-              onClick={openCreateCliente}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[#E05A10] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#C2410C] transition-colors"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Nueva Empresa Factoring Cliente
-            </button>
+            {canManage && (
+              <button
+                type="button"
+                onClick={openCreateCliente}
+                className="inline-flex items-center gap-1.5 rounded-md bg-[#E05A10] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#C2410C] transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Nueva Empresa Factoring Cliente
+              </button>
+            )}
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -432,28 +436,34 @@ export function MantenedoresTabsClient({
                         {formatDateCL(c.created_at)}
                       </td>
                       <td className="py-2.5 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            type="button"
-                            onClick={() => openEditCliente(c)}
-                            title="Editar"
-                            className="p-1 rounded text-slate-500 hover:text-[#0F172A] hover:bg-slate-100"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm("¿Eliminar esta entidad de factoring?")) {
-                                handleDeleteCliente(c.id);
-                              }
-                            }}
-                            title="Eliminar"
-                            className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                        {canManage ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openEditCliente(c)}
+                              title="Editar"
+                              className="p-1 rounded text-slate-500 hover:text-[#0F172A] hover:bg-slate-100"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm("¿Eliminar esta entidad de factoring?")) {
+                                  handleDeleteCliente(c.id);
+                                }
+                              }}
+                              title="Eliminar"
+                              className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">
+                            Solo lectura
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -481,14 +491,16 @@ export function MantenedoresTabsClient({
               />
             </div>
 
-            <button
-              type="button"
-              onClick={openCreateProveedor}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[#E05A10] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#C2410C] transition-colors"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Nueva Empresa Factoring Proveedor
-            </button>
+            {canManage && (
+              <button
+                type="button"
+                onClick={openCreateProveedor}
+                className="inline-flex items-center gap-1.5 rounded-md bg-[#E05A10] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#C2410C] transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Nueva Empresa Factoring Proveedor
+              </button>
+            )}
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -521,28 +533,34 @@ export function MantenedoresTabsClient({
                         {formatDateCL(p.created_at)}
                       </td>
                       <td className="py-2.5 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            type="button"
-                            onClick={() => openEditProveedor(p)}
-                            title="Editar"
-                            className="p-1 rounded text-slate-500 hover:text-[#0F172A] hover:bg-slate-100"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm("¿Eliminar este proveedor de factoring?")) {
-                                handleDeleteProveedor(p.id);
-                              }
-                            }}
-                            title="Eliminar"
-                            className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                        {canManage ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openEditProveedor(p)}
+                              title="Editar"
+                              className="p-1 rounded text-slate-500 hover:text-[#0F172A] hover:bg-slate-100"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm("¿Eliminar este proveedor de factoring?")) {
+                                  handleDeleteProveedor(p.id);
+                                }
+                              }}
+                              title="Eliminar"
+                              className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">
+                            Solo lectura
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -570,14 +588,16 @@ export function MantenedoresTabsClient({
               />
             </div>
 
-            <button
-              type="button"
-              onClick={openCreateConfirming}
-              className="inline-flex items-center gap-1.5 rounded-md bg-[#E05A10] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#C2410C] transition-colors"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Nueva Empresa Confirming
-            </button>
+            {canManage && (
+              <button
+                type="button"
+                onClick={openCreateConfirming}
+                className="inline-flex items-center gap-1.5 rounded-md bg-[#E05A10] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#C2410C] transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Nueva Empresa Confirming
+              </button>
+            )}
           </div>
 
           <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -618,28 +638,34 @@ export function MantenedoresTabsClient({
                         {formatDateCL(c.created_at)}
                       </td>
                       <td className="py-2.5 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            type="button"
-                            onClick={() => openEditConfirming(c)}
-                            title="Editar"
-                            className="p-1 rounded text-slate-500 hover:text-[#0F172A] hover:bg-slate-100"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm("¿Eliminar esta entidad de confirming?")) {
-                                handleDeleteConfirming(c.id);
-                              }
-                            }}
-                            title="Eliminar"
-                            className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                        {canManage ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openEditConfirming(c)}
+                              title="Editar"
+                              className="p-1 rounded text-slate-500 hover:text-[#0F172A] hover:bg-slate-100"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm("¿Eliminar esta entidad de confirming?")) {
+                                  handleDeleteConfirming(c.id);
+                                }
+                              }}
+                              title="Eliminar"
+                              className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">
+                            Solo lectura
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))

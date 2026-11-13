@@ -11,6 +11,7 @@ import {
   UsuarioSistema,
   buildNormalizedPermisosMatrix,
 } from "@/types/database.types";
+import { assertCanManage } from "@/lib/auth/session";
 
 function mapPerfilRow(row: Record<string, unknown>): PerfilUsuario {
   return {
@@ -78,6 +79,9 @@ export async function savePerfilAction(
     permisos: Record<string, any>;
   }
 ): Promise<PerfilUsuario> {
+  const auth = await assertCanManage(["adm_perfiles", "configuracion_adm"]);
+  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
+
   const nombreLimpio = payload.nombre_perfil.trim().toUpperCase();
   if (!nombreLimpio) {
     throw new Error("El nombre del perfil es obligatorio.");
@@ -186,6 +190,9 @@ export async function savePerfilAction(
  * Elimina un perfil de usuario
  */
 export async function deletePerfilAction(id: string): Promise<{ success: boolean }> {
+  const auth = await assertCanManage(["adm_perfiles", "configuracion_adm"]);
+  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
+
   // Validar si existen usuarios asignados a este perfil
   const db = readLocalDb();
   const usuariosAsociados = (db.usuarios || []).filter((u) => u.perfil_id === id);
@@ -275,6 +282,9 @@ export async function saveUsuarioAction(
     estado?: "Activo" | "Inactivo";
   }
 ): Promise<UsuarioSistema> {
+  const auth = await assertCanManage(["maestro_usuarios", "configuracion_adm"]);
+  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
+
   const nombre = payload.nombre.trim();
   const username = payload.usuario.trim().toLowerCase().replace(/^@+/, "");
   const usuarioOriginal = (payload.usuarioOriginal || username).trim().toLowerCase().replace(/^@+/, "");
@@ -437,6 +447,9 @@ export async function saveUsuarioAction(
  * Elimina un usuario del sistema
  */
 export async function deleteUsuarioAction(id: string): Promise<{ success: boolean }> {
+  const auth = await assertCanManage(["maestro_usuarios", "configuracion_adm"]);
+  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
+
   if (isServerSupabaseConfigured()) {
     const supabase = await createServerSupabaseClient();
     const { error } = await supabase.from("usuarios_sistema").delete().eq("id", id);

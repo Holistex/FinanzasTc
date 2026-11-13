@@ -44,6 +44,7 @@ import { cn, formatCLP, formatDateCL } from "@/lib/utils";
 interface CartolasBancariasClientProps {
   initialData: CartolasTesoreriaResponse;
   isAdmin?: boolean;
+  canManage?: boolean;
 }
 
 type ActiveTab = "PENDIENTES" | "CLASIFICADOS" | "ABONOS";
@@ -53,6 +54,7 @@ const ITEMS_PER_PAGE = 30;
 export function CartolasBancariasClient({
   initialData,
   isAdmin = false,
+  canManage = false,
 }: CartolasBancariasClientProps) {
   const router = useRouter();
   const [lineas, setLineas] = useState<CartolaLinea[]>(initialData.lineas);
@@ -921,16 +923,18 @@ export function CartolasBancariasClient({
             <thead>
               <tr className="bg-[#0B1528] text-slate-200 text-[11px] font-bold uppercase tracking-wider border-b border-[#1E293B]">
                 {/* Checkbox Maestro (Solo Giros / Cargos válidos) */}
-                <th className="py-3 px-3 w-12 text-center whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    aria-label="Seleccionar todos los giros de esta página"
-                    checked={allPageSelected}
-                    onChange={handleToggleSelectAll}
-                    disabled={selectableLineas.length === 0 || activeTab === "ABONOS"}
-                    className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-[#E05A10] focus:ring-[#E05A10] focus:ring-offset-slate-950 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                  />
-                </th>
+                {canManage && (
+                  <th className="py-3 px-3 w-12 text-center whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      aria-label="Seleccionar todos los giros de esta página"
+                      checked={allPageSelected}
+                      onChange={handleToggleSelectAll}
+                      disabled={selectableLineas.length === 0 || activeTab === "ABONOS"}
+                      className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-[#E05A10] focus:ring-[#E05A10] focus:ring-offset-slate-950 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    />
+                  </th>
+                )}
                 <th className="py-3 px-3.5 whitespace-nowrap">1. BANCO</th>
                 <th className="py-3 px-3 whitespace-nowrap text-center">2. N° CARTOLA</th>
                 <th className="py-3 px-3 whitespace-nowrap">3. FECHA</th>
@@ -996,21 +1000,23 @@ export function CartolasBancariasClient({
                       )}
                     >
                       {/* Checkbox Individual (Solo Giros / Cargos válidos) */}
-                      <td className="py-2.5 px-3 w-12 text-center whitespace-nowrap">
-                        <input
-                          type="checkbox"
-                          aria-label={`Seleccionar movimiento ${linea.descripcion}`}
-                          checked={isSelected}
-                          disabled={!esGiroValido}
-                          onChange={() => handleToggleRow(linea.id)}
-                          title={
-                            esGiroValido
-                              ? "Seleccionar giro para clasificación masiva"
-                              : "Los depósitos / abonos no se clasifican como pagos"
-                          }
-                          className="h-4 w-4 rounded border-slate-300 text-[#E05A10] focus:ring-[#E05A10] cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
-                        />
-                      </td>
+                      {canManage && (
+                        <td className="py-2.5 px-3 w-12 text-center whitespace-nowrap">
+                          <input
+                            type="checkbox"
+                            aria-label={`Seleccionar movimiento ${linea.descripcion}`}
+                            checked={isSelected}
+                            disabled={!esGiroValido}
+                            onChange={() => handleToggleRow(linea.id)}
+                            title={
+                              esGiroValido
+                                ? "Seleccionar giro para clasificación masiva"
+                                : "Los depósitos / abonos no se clasifican como pagos"
+                            }
+                            className="h-4 w-4 rounded border-slate-300 text-[#E05A10] focus:ring-[#E05A10] cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
+                          />
+                        </td>
+                      )}
 
                       {/* 1. BANCO */}
                       <td className="py-2.5 px-3.5 whitespace-nowrap">
@@ -1078,7 +1084,11 @@ export function CartolasBancariasClient({
                       {/* 9. TIPO DE MOVIMIENTO / ACCIÓN DE REVERSA */}
                       <td className="py-2 px-4 whitespace-nowrap">
                         {activeTab === "PENDIENTES" ? (
-                          esGiroValido ? (
+                          !canManage ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 border border-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                              Pendiente (Solo Lectura)
+                            </span>
+                          ) : esGiroValido ? (
                             <div className="relative flex items-center gap-1.5">
                               <select
                                 value={linea.tipo_pago_id || ""}
@@ -1116,15 +1126,17 @@ export function CartolasBancariasClient({
                               </span>
                             </span>
 
-                            <button
-                              type="button"
-                              onClick={() => handleReversarLinea(linea)}
-                              disabled={isSavingThis}
-                              className="bg-white border border-rose-300 text-rose-600 hover:bg-rose-50 font-semibold text-xs px-2 py-1 rounded-md transition-colors shadow-2xs shrink-0 disabled:opacity-50"
-                              title="Reversar clasificación y devolver a Líneas por clasificar"
-                            >
-                              {isSavingThis ? "..." : "↺ Reversar"}
-                            </button>
+                            {canManage && (
+                              <button
+                                type="button"
+                                onClick={() => handleReversarLinea(linea)}
+                                disabled={isSavingThis}
+                                className="bg-white border border-rose-300 text-rose-600 hover:bg-rose-50 font-semibold text-xs px-2 py-1 rounded-md transition-colors shadow-2xs shrink-0 disabled:opacity-50"
+                                title="Reversar clasificación y devolver a Líneas por clasificar"
+                              >
+                                {isSavingThis ? "..." : "↺ Reversar"}
+                              </button>
+                            )}
                           </div>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
