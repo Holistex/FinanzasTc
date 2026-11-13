@@ -27,6 +27,7 @@ import {
 } from "@/lib/auth/session";
 import {
   queryFacturasVentasServer,
+  queryAllFacturasVentasResumenServer,
   resolveDeudaCliente,
 } from "@/lib/data/facturas-ventas.server";
 import * as XLSX from "xlsx";
@@ -68,6 +69,13 @@ export async function getFacturasVentasAction(
   params: FacturasVentasFilterParams = {}
 ): Promise<PaginatedFacturasResponse> {
   return queryFacturasVentasServer(params);
+}
+
+/**
+ * Obtiene todas las facturas del Libro de Ventas para el balance consolidado en la pestaña Resumen.
+ */
+export async function getFacturasVentasResumenAction(): Promise<FacturaVenta[]> {
+  return queryAllFacturasVentasResumenServer();
 }
 
 /**

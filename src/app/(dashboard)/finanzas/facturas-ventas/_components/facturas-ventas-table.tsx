@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useEffect, useMemo } from "react";
 import Link from "next/link";
 import {
   Search,
   Filter,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   RotateCcw,
   ArrowRightLeft,
   Landmark,
@@ -21,6 +23,7 @@ import {
   Paperclip,
   Upload,
   ShieldAlert,
+  BarChart3,
 } from "lucide-react";
 import {
   EmpresaFactoringCliente,
@@ -30,7 +33,10 @@ import {
   MantenedorON,
   PaginatedFacturasResponse,
 } from "@/types/database.types";
-import { getFacturasVentasAction } from "@/actions/facturas-ventas.actions";
+import {
+  getFacturasVentasAction,
+  getFacturasVentasResumenAction,
+} from "@/actions/facturas-ventas.actions";
 import {
   calculateDueDateInfo,
   cn,
@@ -38,7 +44,13 @@ import {
   formatDateCL,
   formatRutDisplay,
   getTipoDocLabel,
+  normalizeRut,
 } from "@/lib/utils";
+import {
+  TablePagination,
+  GLOBAL_PAGE_SIZE,
+  paginateArray,
+} from "@/components/ui/TablePagination";
 import dynamic from "next/dynamic";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/prefetch-helpers";
@@ -96,9 +108,35 @@ export function FacturasVentasTable({
   );
   const [isPending, startTransition] = useTransition();
 
-  // Pestaña activa: 1. PENDIENTES (Deuda > 0) | 2. PAGADAS (Deuda == $0)
+  // Pestaña activa: 1. PENDIENTES | 2. PAGADAS | 3. FAC_NC | 4. RESUMEN
   const [estadoDeudaTab, setEstadoDeudaTab] =
     useState<EstadoDeudaTab>("PENDIENTES");
+  const [activeViewTab, setActiveViewTab] = useState<EstadoDeudaTab | "RESUMEN">(
+    "PENDIENTES"
+  );
+
+  // Estado y filtros para Pestaña 4: Resumen por Razón Social
+  const [resumenFacturas, setResumenFacturas] = useState<FacturaVenta[] | null>(null);
+  const [isLoadingResumen, setIsLoadingResumen] = useState(false);
+  const [resumenSearch, setResumenSearch] = useState("");
+  const [resumenRazonSocial, setResumenRazonSocial] = useState("TODAS");
+  const [resumenOnFilter, setResumenOnFilter] = useState("TODAS");
+  const [resumenPage, setResumenPage] = useState(1);
+  const [expandedClienteKey, setExpandedClienteKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    setResumenPage(1);
+  }, [resumenSearch, resumenRazonSocial, resumenOnFilter]);
+
+  const loadResumenData = async () => {
+    setIsLoadingResumen(true);
+    try {
+      const all = await getFacturasVentasResumenAction();
+      setResumenFacturas(all);
+    } finally {
+      setIsLoadingResumen(false);
+    }
+  };
 
   // Filter states
   const [rut, setRut] = useState("");
@@ -194,11 +232,158 @@ export function FacturasVentasTable({
     });
   };
 
-  const handleSwitchTab = (tab: EstadoDeudaTab) => {
+  const handleSwitchTab = (tab: EstadoDeudaTab | "RESUMEN") => {
+    setActiveViewTab(tab);
+    if (tab === "RESUMEN") {
+      if (resumenFacturas === null) {
+        loadResumenData();
+      }
+      return;
+    }
     setEstadoDeudaTab(tab);
     setTipoDoc("TODOS");
     fetchServerPage({ page: 1, estadoDeuda: tab, tipoDoc: "TODOS" });
   };
+
+  const resumenRazonesDisponibles = useMemo(() => {
+    if (!resumenFacturas) return [];
+    const set = new Set<string>();
+    for (const f of resumenFacturas) {
+      if (f.razon_social && f.razon_social.trim() !== "") {
+        set.add(f.razon_social.trim());
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
+  }, [resumenFacturas]);
+
+  const resumenOnsDisponibles = useMemo(() => {
+    if (!resumenFacturas) return [];
+    const set = new Set<string>();
+    for (const f of resumenFacturas) {
+      if (f.on_proyecto && f.on_proyecto.trim() !== "") {
+        set.add(f.on_proyecto.trim());
+      }
+    }
+    return Array.from(set).sort();
+  }, [resumenFacturas]);
+
+  const resumenClientes = useMemo(() => {
+    if (!resumenFacturas) return [];
+
+    const q = resumenSearch.trim().toLowerCase();
+    const qCleanRut = normalizeRut(q);
+
+    const filtered = resumenFacturas.filter((f) => {
+      if (resumenOnFilter === "SIN_ON") {
+        if (f.on_proyecto && f.on_proyecto.trim() !== "") return false;
+      } else if (resumenOnFilter !== "TODAS") {
+        if ((f.on_proyecto || "").trim() !== resumenOnFilter) return false;
+      }
+
+      if (resumenRazonSocial !== "TODAS") {
+        if ((f.razon_social || "").trim() !== resumenRazonSocial) return false;
+      }
+
+      if (q) {
+        const matchRazon = (f.razon_social || "").toLowerCase().includes(q);
+        const matchRut =
+          (f.rut_cliente || "").toLowerCase().includes(q) ||
+          (qCleanRut.length >= 2 && normalizeRut(f.rut_cliente || "").includes(qCleanRut));
+        if (!matchRazon && !matchRut) return false;
+      }
+
+      return true;
+    });
+
+    const groupMap = new Map<
+      string,
+      {
+        key: string;
+        rutCliente: string;
+        razonSocial: string;
+        docsEmitidos: number;
+        sumFacturas: number;
+        sumNC: number;
+        saldoPendiente: number;
+        facturas: FacturaVenta[];
+      }
+    >();
+
+    for (const f of filtered) {
+      const rutNorm = normalizeRut(f.rut_cliente || "");
+      const key = rutNorm || (f.razon_social || "").trim().toUpperCase() || f.id;
+      const isNC = Number(f.tipo_doc) === 61;
+      const monto = Number(f.monto_total || 0);
+      const deuda = isNC
+        ? 0
+        : Math.max(0, Number(f.deuda_cliente ?? f.monto_neto_saldo ?? 0));
+
+      const existing = groupMap.get(key);
+      if (!existing) {
+        groupMap.set(key, {
+          key,
+          rutCliente: f.rut_cliente || "",
+          razonSocial: (f.razon_social || "SIN RAZÓN SOCIAL").trim(),
+          docsEmitidos: isNC ? 0 : 1,
+          sumFacturas: isNC ? 0 : monto,
+          sumNC: isNC ? monto : 0,
+          saldoPendiente: deuda,
+          facturas: [f],
+        });
+      } else {
+        if (!isNC) existing.docsEmitidos += 1;
+        if (isNC) {
+          existing.sumNC += monto;
+        } else {
+          existing.sumFacturas += monto;
+        }
+        existing.saldoPendiente += deuda;
+        existing.facturas.push(f);
+      }
+    }
+
+    return Array.from(groupMap.values())
+      .map((g) => {
+        const totalEmitido = g.sumFacturas - g.sumNC;
+        const totalPagado = Math.max(0, totalEmitido - g.saldoPendiente);
+        const porcentajeRecaudacion =
+          totalEmitido > 0
+            ? Math.min(100, Math.max(0, Math.round((totalPagado / totalEmitido) * 100)))
+            : g.saldoPendiente === 0
+            ? 100
+            : 0;
+        g.facturas.sort((a, b) => {
+          if (a.fecha_docto !== b.fecha_docto) {
+            return b.fecha_docto.localeCompare(a.fecha_docto);
+          }
+          return b.folio - a.folio;
+        });
+        return {
+          ...g,
+          totalEmitido,
+          totalPagado,
+          porcentajeRecaudacion,
+        };
+      })
+      .sort((a, b) => {
+        if (b.saldoPendiente !== a.saldoPendiente) {
+          return b.saldoPendiente - a.saldoPendiente;
+        }
+        return b.totalEmitido - a.totalEmitido;
+      });
+  }, [resumenFacturas, resumenOnFilter, resumenRazonSocial, resumenSearch]);
+
+  const resumenTotales = useMemo(() => {
+    return resumenClientes.reduce(
+      (acc, c) => ({
+        docsEmitidos: acc.docsEmitidos + c.docsEmitidos,
+        totalEmitido: acc.totalEmitido + c.totalEmitido,
+        totalPagado: acc.totalPagado + c.totalPagado,
+        saldoPendiente: acc.saldoPendiente + c.saldoPendiente,
+      }),
+      { docsEmitidos: 0, totalEmitido: 0, totalPagado: 0, saldoPendiente: 0 }
+    );
+  }, [resumenClientes]);
 
   const handleApplyFilters = (e: React.FormEvent) => {
     e.preventDefault();
@@ -413,7 +598,7 @@ export function FacturasVentasTable({
             onClick={() => handleSwitchTab("PENDIENTES")}
             className={cn(
               "px-3.5 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 -mb-px",
-              estadoDeudaTab === "PENDIENTES"
+              activeViewTab === "PENDIENTES"
                 ? "border-[#E05A10] text-[#0F172A] bg-white rounded-t-md shadow-sm"
                 : "border-transparent text-slate-500 hover:text-[#0F172A]"
             )}
@@ -421,7 +606,7 @@ export function FacturasVentasTable({
             <Clock
               className={cn(
                 "h-3.5 w-3.5",
-                estadoDeudaTab === "PENDIENTES"
+                activeViewTab === "PENDIENTES"
                   ? "text-[#E05A10]"
                   : "text-slate-400"
               )}
@@ -430,7 +615,7 @@ export function FacturasVentasTable({
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-[10px] font-mono border",
-                estadoDeudaTab === "PENDIENTES"
+                activeViewTab === "PENDIENTES"
                   ? "bg-orange-50 text-[#E05A10] border-orange-200"
                   : "bg-[#F1F5F9] text-slate-600 border-slate-200"
               )}
@@ -445,7 +630,7 @@ export function FacturasVentasTable({
             onClick={() => handleSwitchTab("PAGADAS")}
             className={cn(
               "px-3.5 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 -mb-px",
-              estadoDeudaTab === "PAGADAS"
+              activeViewTab === "PAGADAS"
                 ? "border-[#E05A10] text-[#0F172A] bg-white rounded-t-md shadow-sm"
                 : "border-transparent text-slate-500 hover:text-[#0F172A]"
             )}
@@ -453,7 +638,7 @@ export function FacturasVentasTable({
             <CheckCircle2
               className={cn(
                 "h-3.5 w-3.5",
-                estadoDeudaTab === "PAGADAS"
+                activeViewTab === "PAGADAS"
                   ? "text-emerald-600"
                   : "text-slate-400"
               )}
@@ -462,7 +647,7 @@ export function FacturasVentasTable({
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-[10px] font-mono border",
-                estadoDeudaTab === "PAGADAS"
+                activeViewTab === "PAGADAS"
                   ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                   : "bg-[#F1F5F9] text-slate-600 border-slate-200"
               )}
@@ -477,7 +662,7 @@ export function FacturasVentasTable({
             onClick={() => handleSwitchTab("FAC_NC")}
             className={cn(
               "px-3.5 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 -mb-px",
-              estadoDeudaTab === "FAC_NC"
+              activeViewTab === "FAC_NC"
                 ? "border-[#E05A10] text-[#0F172A] bg-white rounded-t-md shadow-sm"
                 : "border-transparent text-slate-500 hover:text-[#0F172A]"
             )}
@@ -485,7 +670,7 @@ export function FacturasVentasTable({
             <FileDiff
               className={cn(
                 "h-3.5 w-3.5",
-                estadoDeudaTab === "FAC_NC"
+                activeViewTab === "FAC_NC"
                   ? "text-rose-600"
                   : "text-slate-400"
               )}
@@ -494,7 +679,7 @@ export function FacturasVentasTable({
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-[10px] font-mono border",
-                estadoDeudaTab === "FAC_NC"
+                activeViewTab === "FAC_NC"
                   ? "bg-rose-50 text-rose-700 border-rose-200"
                   : "bg-[#F1F5F9] text-slate-600 border-slate-200"
               )}
@@ -502,9 +687,43 @@ export function FacturasVentasTable({
               {response.facNcCount ?? 0}
             </span>
           </button>
+
+          {/* Pestaña 4: Resumen (Balance Consolidado por Razón Social) */}
+          <button
+            type="button"
+            onClick={() => handleSwitchTab("RESUMEN")}
+            className={cn(
+              "px-3.5 py-2 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 -mb-px",
+              activeViewTab === "RESUMEN"
+                ? "border-[#E05A10] text-[#0F172A] bg-white rounded-t-md shadow-sm"
+                : "border-transparent text-slate-500 hover:text-[#0F172A]"
+            )}
+          >
+            <BarChart3
+              className={cn(
+                "h-3.5 w-3.5",
+                activeViewTab === "RESUMEN"
+                  ? "text-[#E05A10]"
+                  : "text-slate-400"
+              )}
+            />
+            Resumen
+            {resumenFacturas !== null && (
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[10px] font-mono border",
+                  activeViewTab === "RESUMEN"
+                    ? "bg-orange-50 text-[#E05A10] border-orange-200"
+                    : "bg-[#F1F5F9] text-slate-600 border-slate-200"
+                )}
+              >
+                {resumenClientes.length}
+              </span>
+            )}
+          </button>
         </div>
 
-        {isPending && (
+        {(isPending || isLoadingResumen) && (
           <span className="inline-flex items-center gap-1 text-xs text-[#E05A10] font-medium pr-2">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             Sincronizando...
@@ -512,6 +731,286 @@ export function FacturasVentasTable({
         )}
       </div>
 
+      {/* PESTAÑA 4: RESUMEN POR RAZÓN SOCIAL */}
+      {activeViewTab === "RESUMEN" ? (
+        <div className="space-y-3">
+          {/* Barra de Filtros Dedicada: Razón Social + ON */}
+          <div className="bg-white border border-slate-200 rounded-md px-3 py-2 shadow-sm flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={resumenSearch}
+                onChange={(e) => setResumenSearch(e.target.value)}
+                placeholder="Buscar por Razón Social o RUT..."
+                className="w-full rounded border border-slate-300 bg-[#F8FAFC] pl-7 pr-2 py-1 text-xs text-[#0F172A] placeholder:text-slate-400 focus:bg-white focus:border-[#E05A10] focus:outline-none"
+              />
+            </div>
+
+            <select
+              value={resumenRazonSocial}
+              onChange={(e) => setResumenRazonSocial(e.target.value)}
+              title="Filtrar por Razón Social"
+              className="rounded border border-slate-300 bg-[#F8FAFC] px-2 py-1 text-xs font-medium text-slate-700 max-w-[260px] focus:bg-white focus:border-[#E05A10] focus:outline-none"
+            >
+              <option value="TODAS">Todas las Razones Sociales</option>
+              {resumenRazonesDisponibles.map((rs) => (
+                <option key={rs} value={rs}>
+                  {rs.length > 36 ? `${rs.substring(0, 36)}...` : rs}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={resumenOnFilter}
+              onChange={(e) => setResumenOnFilter(e.target.value)}
+              title="Filtrar por Proyecto (ON)"
+              className="rounded border border-slate-300 bg-[#F8FAFC] px-2 py-1 text-xs font-semibold text-slate-700 max-w-[240px] focus:bg-white focus:border-[#E05A10] focus:outline-none"
+            >
+              <option value="TODAS">ON: Todas</option>
+              <option value="SIN_ON">⚠️ Sin ON</option>
+              {resumenOnsDisponibles.map((codigo) => {
+                const matchCatalog = catalogoOn?.find((c) => c.codigo_on === codigo);
+                const label = matchCatalog
+                  ? `ON ${codigo} - ${matchCatalog.nombre_proyecto}`
+                  : `ON ${codigo}`;
+                return (
+                  <option key={codigo} value={codigo}>
+                    {label.length > 34 ? `${label.substring(0, 34)}...` : label}
+                  </option>
+                );
+              })}
+            </select>
+
+            <button
+              type="button"
+              onClick={() => {
+                setResumenSearch("");
+                setResumenRazonSocial("TODAS");
+                setResumenOnFilter("TODAS");
+              }}
+              className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-[#F1F5F9]"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Limpiar
+            </button>
+          </div>
+
+          {/* Tabla Consolidada de Balance por Razón Social */}
+          <div className="bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden w-full">
+            <div className="w-full overflow-x-auto">
+              <table className="min-w-[820px] lg:min-w-full table-auto text-left border-collapse">
+                <thead>
+                  <tr className="bg-[#0F172A] text-slate-200 text-[10px] font-semibold uppercase tracking-wider border-b border-[#1E293B]">
+                    <th className="py-2.5 px-3 w-[135px]">RUT Cliente</th>
+                    <th className="py-2.5 px-3">Razón Social</th>
+                    <th className="py-2.5 px-3 text-center w-[90px]">Docs.</th>
+                    <th className="py-2.5 px-3 text-right w-[160px]">Total Emitido</th>
+                    <th className="py-2.5 px-3 text-right w-[160px]">Total Pagado</th>
+                    <th className="py-2.5 px-3 text-right w-[160px]">Saldo Pendiente</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200/80 text-xs">
+                  {isLoadingResumen && resumenFacturas === null ? (
+                    <tr>
+                      <td colSpan={6} className="py-10 text-center text-slate-500">
+                        <Loader2 className="h-5 w-5 animate-spin text-[#E05A10] mx-auto mb-2" />
+                        Calculando balance consolidado por Razón Social...
+                      </td>
+                    </tr>
+                  ) : resumenClientes.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-500">
+                        No se encontraron clientes para los filtros seleccionados.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginateArray(resumenClientes, resumenPage, GLOBAL_PAGE_SIZE).map((cli) => {
+                      const isExpanded = expandedClienteKey === cli.key;
+                      return (
+                        <React.Fragment key={cli.key}>
+                          <tr
+                            onClick={() =>
+                              setExpandedClienteKey(isExpanded ? null : cli.key)
+                            }
+                            className={cn(
+                              "cursor-pointer transition-colors hover:bg-slate-50",
+                              isExpanded && "bg-orange-50/40"
+                            )}
+                          >
+                            <td className="py-2.5 px-3 font-mono text-xs text-slate-600 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                {isExpanded ? (
+                                  <ChevronUp className="h-3.5 w-3.5 text-[#E05A10] shrink-0" />
+                                ) : (
+                                  <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                )}
+                                <span>{formatRutDisplay(cli.rutCliente)}</span>
+                              </div>
+                            </td>
+
+                            <td className="py-2.5 px-3">
+                              <div className="font-bold text-slate-900 text-xs uppercase">
+                                {cli.razonSocial}
+                              </div>
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-emerald-500 rounded-full transition-all"
+                                    style={{ width: `${cli.porcentajeRecaudacion}%` }}
+                                  />
+                                </div>
+                                <span className="text-[10px] font-mono text-slate-500">
+                                  {cli.porcentajeRecaudacion}% recaudado
+                                </span>
+                              </div>
+                            </td>
+
+                            <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                              <span className="inline-flex items-center justify-center rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[11px] font-mono font-semibold text-slate-700">
+                                {cli.docsEmitidos}
+                              </span>
+                            </td>
+
+                            <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-800 whitespace-nowrap">
+                              {formatCLP(cli.totalEmitido)}
+                            </td>
+
+                            <td className="py-2.5 px-3 text-right font-mono font-semibold text-emerald-600 whitespace-nowrap">
+                              {formatCLP(cli.totalPagado)}
+                            </td>
+
+                            <td
+                              className={cn(
+                                "py-2.5 px-3 text-right font-mono font-bold whitespace-nowrap",
+                                cli.saldoPendiente > 0
+                                  ? "text-orange-600"
+                                  : "text-emerald-600"
+                              )}
+                            >
+                              {formatCLP(cli.saldoPendiente)}
+                            </td>
+                          </tr>
+
+                          {isExpanded && (
+                            <tr className="bg-slate-50/80">
+                              <td colSpan={6} className="px-6 py-3">
+                                <div className="rounded border border-slate-200 bg-white overflow-hidden">
+                                  <table className="w-full text-left text-[11px] border-collapse">
+                                    <thead>
+                                      <tr className="bg-slate-100 text-slate-600 uppercase text-[10px] font-semibold border-b border-slate-200">
+                                        <th className="py-1.5 px-3">Folio / DTE</th>
+                                        <th className="py-1.5 px-3">ON</th>
+                                        <th className="py-1.5 px-3">Emisión</th>
+                                        <th className="py-1.5 px-3 text-center">Estado</th>
+                                        <th className="py-1.5 px-3 text-right">Monto DTE</th>
+                                        <th className="py-1.5 px-3 text-right">Saldo</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                      {cli.facturas.map((doc) => {
+                                        const isNC = Number(doc.tipo_doc) === 61;
+                                        const saldoDoc = isNC
+                                          ? 0
+                                          : Math.max(
+                                              0,
+                                              Number(
+                                                doc.deuda_cliente ??
+                                                  doc.monto_neto_saldo ??
+                                                  0
+                                              )
+                                            );
+                                        return (
+                                          <tr key={doc.id} className="hover:bg-slate-50">
+                                            <td className="py-1.5 px-3 font-mono font-semibold text-slate-800">
+                                              #{doc.folio}{" "}
+                                              <span className="text-[10px] font-normal text-slate-500">
+                                                ({getTipoDocLabel(doc.tipo_doc).shortName})
+                                              </span>
+                                            </td>
+                                            <td className="py-1.5 px-3 font-mono text-slate-600">
+                                              {doc.on_proyecto || "Sin ON"}
+                                            </td>
+                                            <td className="py-1.5 px-3 font-mono text-slate-600">
+                                              {formatDateCL(doc.fecha_docto)}
+                                            </td>
+                                            <td className="py-1.5 px-3 text-center">
+                                              {isNC ? (
+                                                <span className="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-semibold">
+                                                  NC
+                                                </span>
+                                              ) : saldoDoc === 0 ? (
+                                                <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold">
+                                                  Saldada
+                                                </span>
+                                              ) : (
+                                                <span className="px-1.5 py-0.5 rounded bg-orange-50 text-orange-700 border border-orange-200 text-[10px] font-semibold">
+                                                  Pendiente
+                                                </span>
+                                              )}
+                                            </td>
+                                            <td className="py-1.5 px-3 text-right font-mono text-slate-700">
+                                              {isNC
+                                                ? `-${formatCLP(doc.monto_total)}`
+                                                : formatCLP(doc.monto_total)}
+                                            </td>
+                                            <td
+                                              className={cn(
+                                                "py-1.5 px-3 text-right font-mono font-bold",
+                                                saldoDoc > 0
+                                                  ? "text-orange-600"
+                                                  : "text-emerald-600"
+                                              )}
+                                            >
+                                              {formatCLP(saldoDoc)}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
+                  )}
+                </tbody>
+                {resumenClientes.length > 0 && (
+                  <tfoot>
+                    <tr className="bg-[#0F172A] text-white text-xs font-bold border-t-2 border-[#E05A10]">
+                      <td colSpan={2} className="py-2.5 px-3 uppercase tracking-wider">
+                        TOTAL GENERAL VISTA FILTRADA ({resumenClientes.length} clientes)
+                      </td>
+                      <td className="py-2.5 px-3 text-center font-mono">
+                        {resumenTotales.docsEmitidos}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono">
+                        {formatCLP(resumenTotales.totalEmitido)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-emerald-400">
+                        {formatCLP(resumenTotales.totalPagado)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-orange-400">
+                        {formatCLP(resumenTotales.saldoPendiente)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+            <TablePagination
+              currentPage={resumenPage}
+              totalItems={resumenClientes.length}
+              pageSize={GLOBAL_PAGE_SIZE}
+              onPageChange={setResumenPage}
+            />
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Compact Single-Row Filter Bar */}
       <form
         onSubmit={handleApplyFilters}
@@ -1204,6 +1703,8 @@ export function FacturasVentasTable({
           </div>
         </div>
       </div>
+        </>
+      )}
 
       {/* Modal de Cesión de Factura / Selección de Factoring */}
       <AssignFactoringModal

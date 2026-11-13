@@ -87,6 +87,74 @@ export function calculateFacturasVentasKpis(rows: FacturaVenta[]) {
 }
 
 /**
+ * Enriquece todas las facturas crudas con deuda efectiva, pagos y referencias de NC.
+ */
+export function enrichFacturasVentasList(
+  rawFacturas: FacturaVenta[],
+  pagosMap: Map<string, PagoFactura[]>
+): FacturaVenta[] {
+  const ncByTargetInvoiceKey = new Map<
+    string,
+    { totalMontoNC: number; ncFolios: number[] }
+  >();
+
+  for (const doc of rawFacturas) {
+    if (Number(doc.tipo_doc) === 61 && doc.folio_docto_ref) {
+      const key = `${normalizeRut(doc.rut_cliente)}__${Number(doc.folio_docto_ref)}`;
+      const current = ncByTargetInvoiceKey.get(key) || {
+        totalMontoNC: 0,
+        ncFolios: [],
+      };
+      current.totalMontoNC += Number(doc.monto_total) || 0;
+      current.ncFolios.push(Number(doc.folio));
+      ncByTargetInvoiceKey.set(key, current);
+    }
+  }
+
+  return rawFacturas
+    .filter((f) => !EXCLUDED_DTE_TYPES.has(Number(f.tipo_doc)))
+    .map((f) => {
+      const pagos = pagosMap.get(f.id) || [];
+      if (Number(f.tipo_doc) === 61) {
+        return {
+          ...f,
+          deuda_cliente: 0,
+          monto_neto_saldo: 0,
+          pagos_facturas: [],
+          nc_referenciada_folio: null,
+        };
+      }
+
+      const invoiceKey = `${normalizeRut(f.rut_cliente)}__${Number(f.folio)}`;
+      const ncRef = ncByTargetInvoiceKey.get(invoiceKey);
+      const totalPagosReales = pagos.reduce(
+        (acc, p) => acc + (Number(p.monto_pago) || 0),
+        0
+      );
+
+      const deudaPersistida = resolveDeudaCliente(f);
+      const deudaCalculadaPorNeteoYPagos = Math.max(
+        0,
+        (Number(f.monto_total) || 0) -
+          (ncRef?.totalMontoNC || 0) -
+          totalPagosReales
+      );
+      const deudaEfectiva = Math.min(
+        deudaPersistida,
+        deudaCalculadaPorNeteoYPagos
+      );
+
+      return {
+        ...f,
+        deuda_cliente: deudaEfectiva,
+        monto_neto_saldo: deudaEfectiva,
+        pagos_facturas: pagos,
+        nc_referenciada_folio: ncRef?.ncFolios?.[0] ?? null,
+      };
+    });
+}
+
+/**
  * Normaliza y pagina la respuesta de Facturas de Ventas a partir de las filas crudas de BD.
  */
 export function buildFacturasVentasResponse(
@@ -114,63 +182,7 @@ export function buildFacturasVentasResponse(
   const estadoDeuda = params.estadoDeuda || "PENDIENTES";
   const onFilter = params.onFilter?.trim();
 
-  const ncByTargetInvoiceKey = new Map<
-    string,
-    { totalMontoNC: number; ncFolios: number[] }
-  >();
-
-  for (const doc of rawFacturas) {
-    if (Number(doc.tipo_doc) === 61 && doc.folio_docto_ref) {
-      const key = `${normalizeRut(doc.rut_cliente)}__${Number(doc.folio_docto_ref)}`;
-      const current = ncByTargetInvoiceKey.get(key) || {
-        totalMontoNC: 0,
-        ncFolios: [],
-      };
-      current.totalMontoNC += Number(doc.monto_total) || 0;
-      current.ncFolios.push(Number(doc.folio));
-      ncByTargetInvoiceKey.set(key, current);
-    }
-  }
-
-  const allFacturas: FacturaVenta[] = rawFacturas.map((f) => {
-    const pagos = pagosMap.get(f.id) || [];
-    if (Number(f.tipo_doc) === 61) {
-      return {
-        ...f,
-        deuda_cliente: 0,
-        monto_neto_saldo: 0,
-        pagos_facturas: [],
-        nc_referenciada_folio: null,
-      };
-    }
-
-    const invoiceKey = `${normalizeRut(f.rut_cliente)}__${Number(f.folio)}`;
-    const ncRef = ncByTargetInvoiceKey.get(invoiceKey);
-    const totalPagosReales = pagos.reduce(
-      (acc, p) => acc + (Number(p.monto_pago) || 0),
-      0
-    );
-
-    const deudaPersistida = resolveDeudaCliente(f);
-    const deudaCalculadaPorNeteoYPagos = Math.max(
-      0,
-      (Number(f.monto_total) || 0) -
-        (ncRef?.totalMontoNC || 0) -
-        totalPagosReales
-    );
-    const deudaEfectiva = Math.min(
-      deudaPersistida,
-      deudaCalculadaPorNeteoYPagos
-    );
-
-    return {
-      ...f,
-      deuda_cliente: deudaEfectiva,
-      monto_neto_saldo: deudaEfectiva,
-      pagos_facturas: pagos,
-      nc_referenciada_folio: ncRef?.ncFolios?.[0] ?? null,
-    };
-  });
+  const allFacturas = enrichFacturasVentasList(rawFacturas, pagosMap);
 
   let pendientesCount = 0;
   let pagadasCount = 0;
@@ -472,4 +484,64 @@ export async function queryFacturasVentasServer(
     }));
 
   return buildFacturasVentasResponse(rawFacturas, pagosMap, params);
+}
+
+/**
+ * Retorna todas las facturas de ventas enriquecidas (sin paginar) para la pestaña Resumen.
+ */
+export async function queryAllFacturasVentasResumenServer(): Promise<FacturaVenta[]> {
+  if (isServerSupabaseConfigured()) {
+    const supabase = await createServerSupabaseClient();
+    const [facturasRes, pagosRes] = await Promise.all([
+      supabase
+        .from("facturas_ventas")
+        .select("*, empresa_factoring_cliente(*)")
+        .neq("tipo_doc", 46)
+        .order("fecha_docto", { ascending: false })
+        .order("folio", { ascending: false }),
+      supabase
+        .from("pagos_facturas")
+        .select("*")
+        .order("fecha_pago", { ascending: false }),
+    ]);
+
+    if (facturasRes.error) {
+      throw new Error(
+        `Error consultando facturas_ventas: ${facturasRes.error.message}`
+      );
+    }
+
+    const { rawFacturas, pagosMap } = mergeFacturasVentasWithLocalFallback(
+      (facturasRes.data as FacturaVenta[]) || [],
+      !pagosRes.error && pagosRes.data
+        ? (pagosRes.data as Array<Record<string, unknown>>)
+        : null
+    );
+
+    return enrichFacturasVentasList(rawFacturas, pagosMap);
+  }
+
+  const db = readLocalDb();
+  const clientesMap = new Map(
+    db.empresa_factoring_cliente.map((c) => [c.id, c])
+  );
+  const pagosMap = new Map<string, PagoFactura[]>();
+  for (const p of db.pagos_facturas) {
+    if (p.factura_id && Number(p.monto_pago) > 0) {
+      const list = pagosMap.get(p.factura_id) || [];
+      list.push(p);
+      pagosMap.set(p.factura_id, list);
+    }
+  }
+
+  const rawFacturas = db.facturas_ventas
+    .filter((f) => !EXCLUDED_DTE_TYPES.has(Number(f.tipo_doc)))
+    .map((f) => ({
+      ...f,
+      empresa_factoring_cliente: f.factoring_cliente_id
+        ? clientesMap.get(f.factoring_cliente_id) || null
+        : null,
+    }));
+
+  return enrichFacturasVentasList(rawFacturas, pagosMap);
 }
