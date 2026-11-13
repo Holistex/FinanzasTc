@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useTransition } from "react";
+import React, { useState, useTransition, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   FolderKanban,
   Plus,
@@ -28,7 +29,13 @@ interface MantenedorOnClientProps {
 }
 
 export function MantenedorOnClient({ initialData }: MantenedorOnClientProps) {
+  const router = useRouter();
   const [data, setData] = useState<MantenedorON[]>(initialData);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setData(initialData);
+  }, [initialData]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVO" | "INACTIVO">("ALL");
   const [isPending, startTransition] = useTransition();
@@ -77,6 +84,7 @@ export function MantenedorOnClient({ initialData }: MantenedorOnClientProps) {
   const handleToggleStatus = async (item: MantenedorON) => {
     const currentStatus = item.activo !== false;
     const newStatus = !currentStatus;
+    setActionError(null);
     // Optimistic update
     setData((prev) =>
       prev.map((o) =>
@@ -86,8 +94,12 @@ export function MantenedorOnClient({ initialData }: MantenedorOnClientProps) {
       )
     );
     try {
-      await toggleMantenedorOnStatusAction(item.id, newStatus);
-    } catch {
+      const res = await toggleMantenedorOnStatusAction(item.id, newStatus);
+      if (!res.success) {
+        throw new Error(res.error || "Error al actualizar estado");
+      }
+      router.refresh();
+    } catch (err: unknown) {
       // Revert on error
       setData((prev) =>
         prev.map((o) =>
@@ -96,19 +108,26 @@ export function MantenedorOnClient({ initialData }: MantenedorOnClientProps) {
             : o
         )
       );
+      setActionError(
+        err instanceof Error ? err.message : "Error al actualizar estado de ON."
+      );
     }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("¿Está seguro de que desea eliminar este código ON?")) return;
+    setActionError(null);
     setDeletingId(id);
     try {
-      const ok = await deleteMantenedorOnAction(id);
-      if (ok) {
-        setData((prev) => prev.filter((o) => o.id !== id));
+      const res = await deleteMantenedorOnAction(id);
+      if (!res.success) {
+        setActionError(res.error || "Error al eliminar el código ON.");
+        return;
       }
-    } catch (err: any) {
-      alert(err?.message || "Error al eliminar");
+      setData((prev) => prev.filter((o) => o.id !== id));
+      router.refresh();
+    } catch (err: unknown) {
+      setActionError(err instanceof Error ? err.message : "Error al eliminar");
     } finally {
       setDeletingId(null);
     }
@@ -144,7 +163,7 @@ export function MantenedorOnClient({ initialData }: MantenedorOnClientProps) {
 
     setIsSubmitting(true);
     try {
-      const result = await upsertMantenedorOnAction({
+      const res = await upsertMantenedorOnAction({
         id: editingItem?.id,
         codigo_on: cleanCode,
         nombre_proyecto: formNombre.trim(),
@@ -152,20 +171,27 @@ export function MantenedorOnClient({ initialData }: MantenedorOnClientProps) {
         activo: formActivo,
       });
 
+      if (!res.success || !res.data) {
+        setFormError(res.error || "Error al guardar el código ON.");
+        return;
+      }
+
+      const saved = res.data;
       setData((prev) => {
         const idx = prev.findIndex(
-          (o) => o.codigo_on === result.codigo_on || (editingItem && o.id === editingItem.id)
+          (o) => o.codigo_on === saved.codigo_on || (editingItem && o.id === editingItem.id)
         );
         if (idx !== -1) {
           const next = [...prev];
-          next[idx] = result;
+          next[idx] = saved;
           return next;
         }
-        return [...prev, result].sort((a, b) => a.codigo_on.localeCompare(b.codigo_on));
+        return [...prev, saved].sort((a, b) => a.codigo_on.localeCompare(b.codigo_on));
       });
       setIsModalOpen(false);
-    } catch (err: any) {
-      setFormError(err?.message || "Error al guardar el código ON.");
+      router.refresh();
+    } catch (err: unknown) {
+      setFormError(err instanceof Error ? err.message : "Error al guardar el código ON.");
     } finally {
       setIsSubmitting(false);
     }
@@ -213,6 +239,27 @@ export function MantenedorOnClient({ initialData }: MantenedorOnClientProps) {
           Nueva ON
         </button>
       </div>
+
+      {/* Alerta roja visible de error */}
+      {actionError && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 rounded-xl border border-rose-500/40 bg-rose-950/60 px-4 py-3 text-xs text-rose-200"
+        >
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
+            <span>{actionError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            className="text-rose-400 hover:text-white"
+            aria-label="Cerrar error"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* KPI Cards Superiores (3 Columnas Equilibradas) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
