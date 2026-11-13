@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useTransition, useEffect, useMemo } from "react";
+import React, { useState, useTransition, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -24,6 +24,7 @@ import {
   Upload,
   ShieldAlert,
   BarChart3,
+  X,
 } from "lucide-react";
 import {
   EmpresaFactoringCliente,
@@ -119,14 +120,28 @@ export function FacturasVentasTable({
   const [resumenFacturas, setResumenFacturas] = useState<FacturaVenta[] | null>(null);
   const [isLoadingResumen, setIsLoadingResumen] = useState(false);
   const [resumenSearch, setResumenSearch] = useState("");
-  const [resumenRazonSocial, setResumenRazonSocial] = useState("TODAS");
+  const [isRazonDropdownOpen, setIsRazonDropdownOpen] = useState(false);
+  const resumenComboboxRef = useRef<HTMLDivElement>(null);
   const [resumenOnFilter, setResumenOnFilter] = useState("TODAS");
   const [resumenPage, setResumenPage] = useState(1);
   const [expandedClienteKey, setExpandedClienteKey] = useState<string | null>(null);
 
   useEffect(() => {
     setResumenPage(1);
-  }, [resumenSearch, resumenRazonSocial, resumenOnFilter]);
+  }, [resumenSearch, resumenOnFilter]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        resumenComboboxRef.current &&
+        !resumenComboboxRef.current.contains(event.target as Node)
+      ) {
+        setIsRazonDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const loadResumenData = async () => {
     setIsLoadingResumen(true);
@@ -189,6 +204,11 @@ export function FacturasVentasTable({
         f.id === facturaId ? { ...f, url_pdf: urlPdf } : f
       ),
     }));
+    setResumenFacturas((prev) =>
+      prev
+        ? prev.map((f) => (f.id === facturaId ? { ...f, url_pdf: urlPdf } : f))
+        : prev
+    );
     queryClient.invalidateQueries({ queryKey: ["facturas_ventas"] });
   };
 
@@ -256,6 +276,20 @@ export function FacturasVentasTable({
     return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
   }, [resumenFacturas]);
 
+  const normalizeText = (s: string) =>
+    s
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+  const resumenRazonesSugeridas = useMemo(() => {
+    const qNorm = normalizeText(resumenSearch.trim());
+    if (!qNorm) return resumenRazonesDisponibles;
+    return resumenRazonesDisponibles.filter((rs) =>
+      normalizeText(rs).includes(qNorm)
+    );
+  }, [resumenRazonesDisponibles, resumenSearch]);
+
   const resumenOnsDisponibles = useMemo(() => {
     if (!resumenFacturas) return [];
     const set = new Set<string>();
@@ -270,8 +304,9 @@ export function FacturasVentasTable({
   const resumenClientes = useMemo(() => {
     if (!resumenFacturas) return [];
 
-    const q = resumenSearch.trim().toLowerCase();
-    const qCleanRut = normalizeRut(q);
+    const qRaw = resumenSearch.trim();
+    const qNorm = normalizeText(qRaw);
+    const qCleanRut = normalizeRut(qRaw.toLowerCase());
 
     const filtered = resumenFacturas.filter((f) => {
       if (resumenOnFilter === "SIN_ON") {
@@ -280,14 +315,10 @@ export function FacturasVentasTable({
         if ((f.on_proyecto || "").trim() !== resumenOnFilter) return false;
       }
 
-      if (resumenRazonSocial !== "TODAS") {
-        if ((f.razon_social || "").trim() !== resumenRazonSocial) return false;
-      }
-
-      if (q) {
-        const matchRazon = (f.razon_social || "").toLowerCase().includes(q);
+      if (qNorm) {
+        const matchRazon = normalizeText(f.razon_social || "").includes(qNorm);
         const matchRut =
-          (f.rut_cliente || "").toLowerCase().includes(q) ||
+          (f.rut_cliente || "").toLowerCase().includes(qNorm) ||
           (qCleanRut.length >= 2 && normalizeRut(f.rut_cliente || "").includes(qCleanRut));
         if (!matchRazon && !matchRut) return false;
       }
@@ -371,7 +402,7 @@ export function FacturasVentasTable({
         }
         return b.totalEmitido - a.totalEmitido;
       });
-  }, [resumenFacturas, resumenOnFilter, resumenRazonSocial, resumenSearch]);
+  }, [resumenFacturas, resumenOnFilter, resumenSearch]);
 
   const resumenTotales = useMemo(() => {
     return resumenClientes.reduce(
@@ -736,30 +767,97 @@ export function FacturasVentasTable({
         <div className="space-y-3">
           {/* Barra de Filtros Dedicada: Razón Social + ON */}
           <div className="bg-white border border-slate-200 rounded-md px-3 py-2 shadow-sm flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <div ref={resumenComboboxRef} className="relative flex-1 min-w-[260px] max-w-md">
+              <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={resumenSearch}
-                onChange={(e) => setResumenSearch(e.target.value)}
-                placeholder="Buscar por Razón Social o RUT..."
-                className="w-full rounded border border-slate-300 bg-[#F8FAFC] pl-7 pr-2 py-1 text-xs text-[#0F172A] placeholder:text-slate-400 focus:bg-white focus:border-[#E05A10] focus:outline-none"
+                onChange={(e) => {
+                  setResumenSearch(e.target.value);
+                  setIsRazonDropdownOpen(true);
+                }}
+                onFocus={() => setIsRazonDropdownOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setIsRazonDropdownOpen(false);
+                }}
+                placeholder="Buscar o seleccionar Razón Social o RUT..."
+                className="w-full rounded border border-slate-300 bg-[#F8FAFC] pl-7 pr-12 py-1 text-xs text-[#0F172A] placeholder:text-slate-400 focus:bg-white focus:border-[#E05A10] focus:outline-none"
               />
-            </div>
+              <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                {resumenSearch && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResumenSearch("");
+                      setIsRazonDropdownOpen(true);
+                    }}
+                    title="Limpiar Razón Social"
+                    className="p-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200/70"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsRazonDropdownOpen((prev) => !prev)}
+                  title="Mostrar lista de Razones Sociales"
+                  className="p-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200/70"
+                >
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${
+                      isRazonDropdownOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+              </div>
 
-            <select
-              value={resumenRazonSocial}
-              onChange={(e) => setResumenRazonSocial(e.target.value)}
-              title="Filtrar por Razón Social"
-              className="rounded border border-slate-300 bg-[#F8FAFC] px-2 py-1 text-xs font-medium text-slate-700 max-w-[260px] focus:bg-white focus:border-[#E05A10] focus:outline-none"
-            >
-              <option value="TODAS">Todas las Razones Sociales</option>
-              {resumenRazonesDisponibles.map((rs) => (
-                <option key={rs} value={rs}>
-                  {rs.length > 36 ? `${rs.substring(0, 36)}...` : rs}
-                </option>
-              ))}
-            </select>
+              {isRazonDropdownOpen && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded-md shadow-lg max-h-60 overflow-y-auto py-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResumenSearch("");
+                      setIsRazonDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-1.5 hover:bg-slate-100 flex items-center justify-between ${
+                      resumenSearch === ""
+                        ? "bg-orange-50 text-[#E05A10] font-semibold"
+                        : "text-slate-700 font-medium"
+                    }`}
+                  >
+                    <span>Todas las Razones Sociales</span>
+                    <span className="text-[10px] text-slate-400">
+                      ({resumenRazonesDisponibles.length})
+                    </span>
+                  </button>
+                  <div className="border-t border-slate-100 my-0.5" />
+                  {resumenRazonesSugeridas.length === 0 ? (
+                    <div className="px-3 py-2 text-[11px] text-slate-400 italic">
+                      Sin coincidencias exactas — filtrando por texto libre
+                    </div>
+                  ) : (
+                    resumenRazonesSugeridas.map((rs) => (
+                      <button
+                        key={rs}
+                        type="button"
+                        onClick={() => {
+                          setResumenSearch(rs);
+                          setIsRazonDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-1.5 hover:bg-orange-50 hover:text-[#E05A10] truncate ${
+                          resumenSearch === rs
+                            ? "bg-orange-50 text-[#E05A10] font-semibold"
+                            : "text-slate-700"
+                        }`}
+                        title={rs}
+                      >
+                        {rs}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
 
             <select
               value={resumenOnFilter}
@@ -786,8 +884,8 @@ export function FacturasVentasTable({
               type="button"
               onClick={() => {
                 setResumenSearch("");
-                setResumenRazonSocial("TODAS");
                 setResumenOnFilter("TODAS");
+                setIsRazonDropdownOpen(false);
               }}
               className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-[#F1F5F9]"
             >
@@ -900,6 +998,7 @@ export function FacturasVentasTable({
                                     <thead>
                                       <tr className="bg-slate-100 text-slate-600 uppercase text-[10px] font-semibold border-b border-slate-200">
                                         <th className="py-1.5 px-3">Folio / DTE</th>
+                                        <th className="py-1.5 px-2 text-center">PDF</th>
                                         <th className="py-1.5 px-3">ON</th>
                                         <th className="py-1.5 px-3">Emisión</th>
                                         <th className="py-1.5 px-3 text-center">Estado</th>
@@ -927,6 +1026,39 @@ export function FacturasVentasTable({
                                               <span className="text-[10px] font-normal text-slate-500">
                                                 ({getTipoDocLabel(doc.tipo_doc).shortName})
                                               </span>
+                                            </td>
+                                            <td className="py-1.5 px-2 text-center">
+                                              {doc.url_pdf ? (
+                                                <a
+                                                  href={doc.url_pdf}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  onClick={(e) => e.stopPropagation()}
+                                                  title="Ver / Descargar PDF"
+                                                  className="inline-flex items-center justify-center bg-white border border-emerald-400 text-emerald-600 hover:bg-emerald-50 p-1 rounded-md shadow-sm transition-colors"
+                                                >
+                                                  <FileText className="h-3.5 w-3.5" />
+                                                </a>
+                                              ) : canManage ? (
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setFacturaToUploadPdf(doc);
+                                                  }}
+                                                  title="Sin PDF cargado (clic para subir)"
+                                                  className="inline-flex items-center justify-center bg-white border border-red-300 text-red-500 hover:bg-red-50 p-1 rounded-md shadow-sm transition-colors"
+                                                >
+                                                  <FileText className="h-3.5 w-3.5" />
+                                                </button>
+                                              ) : (
+                                                <span
+                                                  title="Sin PDF cargado"
+                                                  className="inline-flex items-center justify-center bg-white border border-red-200 text-red-400 p-1 rounded-md opacity-80"
+                                                >
+                                                  <FileText className="h-3.5 w-3.5" />
+                                                </span>
+                                              )}
                                             </td>
                                             <td className="py-1.5 px-3 font-mono text-slate-600">
                                               {doc.on_proyecto || "Sin ON"}
