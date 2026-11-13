@@ -60,6 +60,19 @@ const NOMBRES_MESES = [
   "Diciembre",
 ];
 
+// Normaliza cualquier fecha a string estricto "YYYY-MM-DD" sin usar new Date() (evita desfase UTC)
+function normalizarFechaISO(raw: unknown): string {
+  const str = String(raw || "").trim();
+  if (!str) return "";
+
+  const matchDMY = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (matchDMY) {
+    return `${matchDMY[3]}-${matchDMY[2].padStart(2, "0")}-${matchDMY[1].padStart(2, "0")}`;
+  }
+
+  return str.slice(0, 10);
+}
+
 // Genera las semanas (Lunes a Domingo) que intersecan o componen un mes dado
 function calcularSemanasDelMes(year: number, month: number): SemanaPeriodo[] {
   const semanas: SemanaPeriodo[] = [];
@@ -81,14 +94,16 @@ function calcularSemanasDelMes(year: number, month: number): SemanaPeriodo[] {
     const finSemana = new Date(cursorLunes.getTime());
     finSemana.setUTCDate(cursorLunes.getUTCDate() + 6);
 
-    const inicio = inicioSemana.toISOString().slice(0, 10);
-    const fin = finSemana.toISOString().slice(0, 10);
-
-    // Formatear etiqueta con rango completo exacto: "DD/MM al DD/MM" (sin la palabra "Semana")
-    const diaInicio = String(inicioSemana.getUTCDate()).padStart(2, "0");
+    const yInicio = inicioSemana.getUTCFullYear();
     const mesInicio = String(inicioSemana.getUTCMonth() + 1).padStart(2, "0");
-    const diaFin = String(finSemana.getUTCDate()).padStart(2, "0");
+    const diaInicio = String(inicioSemana.getUTCDate()).padStart(2, "0");
+
+    const yFin = finSemana.getUTCFullYear();
     const mesFin = String(finSemana.getUTCMonth() + 1).padStart(2, "0");
+    const diaFin = String(finSemana.getUTCDate()).padStart(2, "0");
+
+    const inicio = `${yInicio}-${mesInicio}-${diaInicio}`;
+    const fin = `${yFin}-${mesFin}-${diaFin}`;
     const label = `${diaInicio}/${mesInicio} al ${diaFin}/${mesFin}`;
 
     semanas.push({
@@ -120,7 +135,7 @@ export function PagosTesoreriaClient({
     // Si hay líneas, tomar el mes del movimiento más reciente o el mes actual
     if (initialData.lineas.length > 0) {
       const fechas = initialData.lineas
-        .map((l) => l.fecha)
+        .map((l) => normalizarFechaISO(l.fecha))
         .filter(Boolean)
         .sort();
       const ultima = fechas[fechas.length - 1];
@@ -149,8 +164,9 @@ export function PagosTesoreriaClient({
     const setMeses = new Set<string>();
 
     lineas.forEach((l) => {
-      if (l.fecha && l.fecha.length >= 7) {
-        setMeses.add(l.fecha.slice(0, 7));
+      const fechaStr = normalizarFechaISO(l.fecha);
+      if (fechaStr.length >= 7) {
+        setMeses.add(fechaStr.slice(0, 7));
       }
     });
 
@@ -180,12 +196,14 @@ export function PagosTesoreriaClient({
     return calcularSemanasDelMes(year, month);
   }, [selectedMonth]);
 
-  // Movimientos bancarios clasificados de egreso (giros > 0 o clasificados con giro)
+  // Movimientos bancarios clasificados (considera giro o abono cuando giro === 0)
   const lineasEgresosClasificados = useMemo(() => {
     return lineas.filter((l) => {
       if (!l.tipo_pago_id) return false;
       if (selectedBanco !== "TODOS" && l.banco !== selectedBanco) return false;
-      return Number(l.giro || 0) > 0;
+      const giro = Math.abs(Number(l.giro || 0));
+      const abono = Math.abs(Number(l.abono || 0));
+      return (giro > 0 ? giro : abono) > 0;
     });
   }, [lineas, selectedBanco]);
 
@@ -238,12 +256,15 @@ export function PagosTesoreriaClient({
 
       if (!cat || !matriz[cat]) return;
 
-      const monto = Number(l.giro || 0);
+      const giro = Math.abs(Number(l.giro || 0));
+      const abono = Math.abs(Number(l.abono || 0));
+      const monto = giro > 0 ? giro : abono;
       if (monto <= 0) return;
 
-      // Asignar a la semana correspondiente usando comparación estricta de rango inicio / fin
+      // Asignar a la semana correspondiente usando comparación estricta de string YYYY-MM-DD
+      const fechaStr = normalizarFechaISO(l.fecha);
       const semanaMatch = semanasDelMes.find(
-        (sem) => l.fecha >= sem.inicio && l.fecha <= sem.fin
+        (sem) => fechaStr >= sem.inicio && fechaStr <= sem.fin
       );
 
       if (semanaMatch) {
@@ -309,16 +330,18 @@ export function PagosTesoreriaClient({
     if (semanasDelMes.length === 0) return 0;
 
     if (activeSemanaObj) {
-      return lineasEgresosClasificados.filter(
-        (l) => l.fecha >= activeSemanaObj.inicio && l.fecha <= activeSemanaObj.fin
-      ).length;
+      return lineasEgresosClasificados.filter((l) => {
+        const fechaStr = normalizarFechaISO(l.fecha);
+        return fechaStr >= activeSemanaObj.inicio && fechaStr <= activeSemanaObj.fin;
+      }).length;
     }
 
     const minFecha = semanasDelMes[0].inicio;
     const maxFecha = semanasDelMes[semanasDelMes.length - 1].fin;
-    return lineasEgresosClasificados.filter(
-      (l) => l.fecha >= minFecha && l.fecha <= maxFecha
-    ).length;
+    return lineasEgresosClasificados.filter((l) => {
+      const fechaStr = normalizarFechaISO(l.fecha);
+      return fechaStr >= minFecha && fechaStr <= maxFecha;
+    }).length;
   }, [lineasEgresosClasificados, semanasDelMes, activeSemanaObj]);
 
   const handleRefresh = () => {
