@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   TablePagination,
   GLOBAL_PAGE_SIZE,
@@ -40,7 +41,7 @@ interface MultasModuleViewProps {
   onFetchAction: (
     filters?: MultasFilterParams
   ) => Promise<{ items: LitigioMulta[]; kpis: LitigiosMultasKpis }>;
-  onUpsertAction: (data: any) => Promise<LitigioMulta>;
+  onUpsertAction: (data: any) => Promise<{ success: boolean; data?: LitigioMulta; error?: string }>;
   canManage?: boolean;
 }
 
@@ -51,6 +52,7 @@ export function MultasModuleView({
   onUpsertAction,
   canManage = true,
 }: MultasModuleViewProps) {
+  const router = useRouter();
   const queryClient = useQueryClient();
 
   // Caché dinámico de TanStack Query: renders instantáneos (<1ms) y revalidación en segundo plano
@@ -249,7 +251,7 @@ export function MultasModuleView({
 
     setIsSubmitting(true);
     try {
-      await onUpsertAction({
+      const res = await onUpsertAction({
         id: editingItem?.id,
         procedencia: formData.procedencia.trim(),
         entidad: formData.entidad.trim(),
@@ -263,6 +265,11 @@ export function MultasModuleView({
         observaciones: formData.observaciones.trim() || null,
       });
 
+      if (!res.success) {
+        setFormError(res.error || "Error al guardar los datos de la multa.");
+        return;
+      }
+
       // Refrescar datos y sincronizar caché
       startTransition(async () => {
         const refreshed = await onFetchAction();
@@ -270,6 +277,7 @@ export function MultasModuleView({
       });
 
       setIsModalOpen(false);
+      router.refresh();
     } catch (err: any) {
       setFormError(err.message || "Error al guardar los datos de la multa.");
     } finally {

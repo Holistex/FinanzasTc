@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   TablePagination,
   GLOBAL_PAGE_SIZE,
@@ -48,9 +49,9 @@ interface JuiciosModuleViewProps {
   onFetchAction: (
     filters?: JuiciosFilterParams
   ) => Promise<{ items: LitigioJuicio[]; kpis: LitigiosJuiciosKpis }>;
-  onUpsertAction: (data: any) => Promise<LitigioJuicio>;
-  onUpsertAudienciaAction?: (data: any) => Promise<LitigioAudienciaJuicio>;
-  onDeleteAudienciaAction?: (audienciaId: string, juicioId?: string) => Promise<void>;
+  onUpsertAction: (data: any) => Promise<{ success: boolean; data?: LitigioJuicio; error?: string }>;
+  onUpsertAudienciaAction?: (data: any) => Promise<{ success: boolean; data?: LitigioAudienciaJuicio; error?: string }>;
+  onDeleteAudienciaAction?: (audienciaId: string, juicioId?: string) => Promise<{ success: boolean; error?: string }>;
   canManage?: boolean;
 }
 
@@ -63,6 +64,7 @@ export function JuiciosModuleView({
   onDeleteAudienciaAction = deleteAudienciaJuicioAction,
   canManage = true,
 }: JuiciosModuleViewProps) {
+  const router = useRouter();
   const queryClient = useQueryClient();
 
   // Caché dinámico de TanStack Query: renders instantáneos (<1ms) y revalidación en segundo plano
@@ -325,7 +327,7 @@ export function JuiciosModuleView({
 
     setIsSubmitting(true);
     try {
-      await onUpsertAction({
+      const res = await onUpsertAction({
         id: editingItem?.id,
         rit_ruc: formData.rit_ruc.trim(),
         nombre_trabajador: formData.nombre_trabajador.trim(),
@@ -337,6 +339,11 @@ export function JuiciosModuleView({
         audiencias: formData.audiencias,
       });
 
+      if (!res.success) {
+        setFormError(res.error || "Error al guardar la causa laboral.");
+        return;
+      }
+
       // Refrescar datos y sincronizar caché
       startTransition(async () => {
         const refreshed = await onFetchAction();
@@ -344,6 +351,7 @@ export function JuiciosModuleView({
       });
 
       setIsModalOpen(false);
+      router.refresh();
     } catch (err: any) {
       setFormError(err.message || "Error al guardar la causa laboral.");
     } finally {
@@ -374,12 +382,16 @@ export function JuiciosModuleView({
       const nextCorrelativo = (bitacoraJuicio.audiencias || []).length + 1;
 
       if (onUpsertAudienciaAction) {
-        await onUpsertAudienciaAction({
+        const resAud = await onUpsertAudienciaAction({
           juicio_id: bitacoraJuicio.id,
           numero_audiencia: nextCorrelativo,
           fecha_audiencia: bitacoraNewFecha,
           resultado_dictamen: finalResultado,
         });
+        if (!resAud.success) {
+          setBitacoraError(resAud.error || "Error al registrar la audiencia.");
+          return;
+        }
       } else {
         const existingAuds = bitacoraJuicio.audiencias || [];
         const updatedAuds = [
@@ -390,7 +402,7 @@ export function JuiciosModuleView({
             resultado_dictamen: finalResultado,
           },
         ];
-        await onUpsertAction({
+        const resJuicio = await onUpsertAction({
           id: bitacoraJuicio.id,
           rit_ruc: bitacoraJuicio.rit_ruc,
           nombre_trabajador: bitacoraJuicio.nombre_trabajador,
@@ -401,6 +413,10 @@ export function JuiciosModuleView({
           observaciones: bitacoraJuicio.observaciones,
           audiencias: updatedAuds,
         });
+        if (!resJuicio.success) {
+          setBitacoraError(resJuicio.error || "Error al registrar la audiencia.");
+          return;
+        }
       }
 
       const refreshed = await onFetchAction();
@@ -414,6 +430,7 @@ export function JuiciosModuleView({
       setBitacoraNewResultado("");
       setBitacoraNewFecha(new Date().toISOString().slice(0, 10));
       setIsAddingAudienceInBitacora(false);
+      router.refresh();
     } catch (err: any) {
       setBitacoraError(err.message || "Error al registrar la audiencia.");
     } finally {
@@ -463,13 +480,17 @@ export function JuiciosModuleView({
     setBitacoraSubmitting(true);
     try {
       if (onUpsertAudienciaAction) {
-        await onUpsertAudienciaAction({
+        const resAud = await onUpsertAudienciaAction({
           id: aud.id,
           juicio_id: bitacoraJuicio.id,
           numero_audiencia: aud.numero_audiencia,
           fecha_audiencia: editAudienceFecha,
           resultado_dictamen: finalResultado,
         });
+        if (!resAud.success) {
+          setBitacoraError(resAud.error || "Error al actualizar la audiencia.");
+          return;
+        }
       } else {
         const existingAuds = bitacoraJuicio.audiencias || [];
         const updatedAuds = existingAuds.map((a) =>
@@ -481,7 +502,7 @@ export function JuiciosModuleView({
               }
             : a
         );
-        await onUpsertAction({
+        const resJuicio = await onUpsertAction({
           id: bitacoraJuicio.id,
           rit_ruc: bitacoraJuicio.rit_ruc,
           nombre_trabajador: bitacoraJuicio.nombre_trabajador,
@@ -492,6 +513,10 @@ export function JuiciosModuleView({
           observaciones: bitacoraJuicio.observaciones,
           audiencias: updatedAuds,
         });
+        if (!resJuicio.success) {
+          setBitacoraError(resJuicio.error || "Error al actualizar la audiencia.");
+          return;
+        }
       }
 
       const refreshed = await onFetchAction();
@@ -505,6 +530,7 @@ export function JuiciosModuleView({
       setEditingAudienceId(null);
       setEditAudienceFecha("");
       setEditAudienceResultado("");
+      router.refresh();
     } catch (err: any) {
       setBitacoraError(err.message || "Error al actualizar la audiencia.");
     } finally {
@@ -521,10 +547,13 @@ export function JuiciosModuleView({
     setBitacoraSubmitting(true);
     setBitacoraError(null);
     try {
-      if (onDeleteAudienciaAction) {
-        await onDeleteAudienciaAction(aud.id, bitacoraJuicio.id);
-      } else {
-        await deleteAudienciaJuicioAction(aud.id, bitacoraJuicio.id);
+      const resDel = onDeleteAudienciaAction
+        ? await onDeleteAudienciaAction(aud.id, bitacoraJuicio.id)
+        : await deleteAudienciaJuicioAction(aud.id, bitacoraJuicio.id);
+
+      if (!resDel.success) {
+        setBitacoraError(resDel.error || "Error al eliminar la audiencia.");
+        return;
       }
 
       const refreshed = await onFetchAction();
@@ -538,6 +567,7 @@ export function JuiciosModuleView({
       if (editingAudienceId === aud.id) {
         setEditingAudienceId(null);
       }
+      router.refresh();
     } catch (err: any) {
       setBitacoraError(err.message || "Error al eliminar la audiencia.");
     } finally {

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   TablePagination,
   GLOBAL_PAGE_SIZE,
@@ -67,6 +68,7 @@ export function ComparendosModuleView({
   initialKpis,
   canManage = true,
 }: ComparendosModuleViewProps) {
+  const router = useRouter();
   const queryClient = useQueryClient();
 
   // Caché dinámico TanStack Query con renders instantáneos (<1ms) y revalidación en segundo plano
@@ -259,7 +261,7 @@ export function ComparendosModuleView({
 
     setIsSubmitting(true);
     try {
-      await upsertLitigioComparendoAction({
+      const res = await upsertLitigioComparendoAction({
         id: editingItem?.id,
         nombre_trabajador: formData.nombre_trabajador.trim(),
         fecha_finiquito: formData.fecha_finiquito || null,
@@ -271,11 +273,17 @@ export function ComparendosModuleView({
         estado: editingItem ? editingItem.estado : "PENDIENTE",
       });
 
+      if (!res.success) {
+        setFormError(res.error || "Error al guardar el comparendo.");
+        return;
+      }
+
       startTransition(async () => {
         await refreshData();
       });
 
       setIsModalOpen(false);
+      router.refresh();
     } catch (err: any) {
       setFormError(err.message || "Error al guardar el comparendo.");
     } finally {
@@ -291,10 +299,15 @@ export function ComparendosModuleView({
     if (!confirmed) return;
 
     try {
-      await deleteLitigioComparendoAction(item.id);
+      const res = await deleteLitigioComparendoAction(item.id);
+      if (!res.success) {
+        alert("Error al eliminar comparendo: " + (res.error || "Error desconocido"));
+        return;
+      }
       startTransition(async () => {
         await refreshData();
       });
+      router.refresh();
     } catch (err: any) {
       alert("Error al eliminar comparendo: " + (err.message || "Error desconocido"));
     }
@@ -993,10 +1006,14 @@ export function ComparendosModuleView({
           }}
           comparendo={acuerdoComparendo}
           onSaveAcuerdo={async (comparendoId, montoTotal, cuotas) => {
-            await saveAcuerdoComparendoAction(comparendoId, montoTotal, cuotas);
+            const res = await saveAcuerdoComparendoAction(comparendoId, montoTotal, cuotas);
+            if (!res.success) {
+              throw new Error(res.error || "Error al guardar el acuerdo.");
+            }
             startTransition(async () => {
               await refreshData();
             });
+            router.refresh();
           }}
           canManage={canManage}
         />

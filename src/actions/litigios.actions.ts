@@ -147,86 +147,93 @@ export async function upsertLitigioMultaAction(input: {
   fecha_pago?: string | null;
   estado: EstadoLitigioMulta;
   observaciones?: string | null;
-}): Promise<LitigioMulta> {
-  const auth = await assertCanManage(["litigios_multas", "reg_litigios"]);
-  if (!auth.authorized) {
-    throw new Error(auth.error || "Acceso denegado.");
-  }
-
-  if (!input.procedencia.trim()) throw new Error("La procedencia o causal es obligatoria.");
-  if (!input.nro_multa.trim()) throw new Error("El N° de Multa es obligatorio.");
-  if (!input.fecha_publicacion) throw new Error("La fecha de publicación es obligatoria.");
-  if (input.monto_sancion === undefined || input.monto_sancion === null || input.monto_sancion < 0) {
-    throw new Error("El monto de sanción debe ser mayor o igual a 0.");
-  }
-
-  const payload = {
-    ...(input.id ? { id: input.id } : {}),
-    procedencia: input.procedencia.trim(),
-    entidad: input.entidad?.trim() || "Dirección del Trabajo",
-    nro_multa: input.nro_multa.trim().toUpperCase(),
-    fecha_publicacion: input.fecha_publicacion,
-    monto_sancion: Number(input.monto_sancion),
-    nro_resolucion: input.nro_resolucion?.trim() || null,
-    fecha_resolucion: input.fecha_resolucion || null,
-    fecha_pago: input.estado === "PAGADA" ? (input.fecha_pago || new Date().toISOString().slice(0, 10)) : null,
-    estado: input.estado || "PENDIENTE",
-    observaciones: input.observaciones?.trim() || null,
-    updated_at: new Date().toISOString(),
-  };
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const { data, error } = await supabase
-      .from("litigios_multas")
-      .upsert(payload)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Error al guardar Multa en Supabase: ${error.message}`);
+}): Promise<{ success: boolean; data?: LitigioMulta; error?: string }> {
+  try {
+    const auth = await assertCanManage(["litigios_multas", "reg_litigios"]);
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
 
-    if (data) {
-      safeRevalidatePath("/reg-litigios/multas");
-      return data as LitigioMulta;
+    if (!input.procedencia.trim()) return { success: false, error: "La procedencia o causal es obligatoria." };
+    if (!input.nro_multa.trim()) return { success: false, error: "El N° de Multa es obligatorio." };
+    if (!input.fecha_publicacion) return { success: false, error: "La fecha de publicación es obligatoria." };
+    if (input.monto_sancion === undefined || input.monto_sancion === null || input.monto_sancion < 0) {
+      return { success: false, error: "El monto de sanción debe ser mayor o igual a 0." };
     }
-  }
 
-  const db = readLocalDb();
-  if (!db.litigios_multas) db.litigios_multas = [];
-
-  const existingIndex = input.id
-    ? db.litigios_multas.findIndex((m) => m.id === input.id)
-    : db.litigios_multas.findIndex((m) => m.nro_multa === payload.nro_multa);
-
-  const nowIso = new Date().toISOString();
-  let savedRecord: LitigioMulta;
-
-  if (existingIndex >= 0) {
-    savedRecord = {
-      ...db.litigios_multas[existingIndex],
-      ...payload,
+    const payload = {
+      ...(input.id ? { id: input.id } : {}),
+      procedencia: input.procedencia.trim(),
+      entidad: input.entidad?.trim() || "Dirección del Trabajo",
+      nro_multa: input.nro_multa.trim().toUpperCase(),
+      fecha_publicacion: input.fecha_publicacion,
+      monto_sancion: Number(input.monto_sancion),
+      nro_resolucion: input.nro_resolucion?.trim() || null,
+      fecha_resolucion: input.fecha_resolucion || null,
+      fecha_pago: input.estado === "PAGADA" ? (input.fecha_pago || new Date().toISOString().slice(0, 10)) : null,
+      estado: input.estado || "PENDIENTE",
+      observaciones: input.observaciones?.trim() || null,
+      updated_at: new Date().toISOString(),
     };
-    db.litigios_multas[existingIndex] = savedRecord;
-  } else {
-    savedRecord = {
-      id: input.id || `mul-${Date.now()}`,
-      ...payload,
-      created_at: nowIso,
-    };
-    db.litigios_multas.push(savedRecord);
-  }
 
-  writeLocalDb(db);
-  safeRevalidatePath("/reg-litigios/multas");
-  return savedRecord;
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { data, error } = await supabase
+        .from("litigios_multas")
+        .upsert(payload)
+        .select()
+        .single();
+
+      if (error) {
+        return { success: false, error: `Error al guardar Multa en Supabase: ${error.message}` };
+      }
+
+      if (data) {
+        safeRevalidatePath("/reg-litigios/multas");
+        safeRevalidatePath("/reg-litigios/calendario");
+        return { success: true, data: data as LitigioMulta };
+      }
+    }
+
+    const db = readLocalDb();
+    if (!db.litigios_multas) db.litigios_multas = [];
+
+    const existingIndex = input.id
+      ? db.litigios_multas.findIndex((m) => m.id === input.id)
+      : db.litigios_multas.findIndex((m) => m.nro_multa === payload.nro_multa);
+
+    const nowIso = new Date().toISOString();
+    let savedRecord: LitigioMulta;
+
+    if (existingIndex >= 0) {
+      savedRecord = {
+        ...db.litigios_multas[existingIndex],
+        ...payload,
+      };
+      db.litigios_multas[existingIndex] = savedRecord;
+    } else {
+      savedRecord = {
+        id: input.id || `mul-${Date.now()}`,
+        ...payload,
+        created_at: nowIso,
+      };
+      db.litigios_multas.push(savedRecord);
+    }
+
+    writeLocalDb(db);
+    safeRevalidatePath("/reg-litigios/multas");
+    safeRevalidatePath("/reg-litigios/calendario");
+    return { success: true, data: savedRecord };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error inesperado al guardar la multa." };
+  }
 }
 
-export async function deleteLitigioMultaAction(_id: string): Promise<void> {
-  throw new Error(
-    "La eliminación de multas está estrictamente prohibida para resguardar la trazabilidad financiera y auditoría legal."
-  );
+export async function deleteLitigioMultaAction(_id: string): Promise<{ success: boolean; error?: string }> {
+  return {
+    success: false,
+    error: "La eliminación de multas está estrictamente prohibida para resguardar la trazabilidad financiera y auditoría legal.",
+  };
 }
 
 // ============================================================================
@@ -271,132 +278,144 @@ export async function upsertAudienciaJuicioAction(input: {
   numero_audiencia?: number;
   fecha_audiencia: string;
   resultado_dictamen?: string | null;
-}): Promise<LitigioAudienciaJuicio> {
-  const auth = await assertCanManage(["litigios_juicios", "reg_litigios"]);
-  if (!auth.authorized) {
-    throw new Error(auth.error || "Acceso denegado.");
-  }
+}): Promise<{ success: boolean; data?: LitigioAudienciaJuicio; error?: string }> {
+  try {
+    const auth = await assertCanManage(["litigios_juicios", "reg_litigios"]);
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
+    }
 
-  if (!input.juicio_id) throw new Error("El ID del juicio es obligatorio.");
-  if (!input.fecha_audiencia) throw new Error("La fecha de la audiencia es obligatoria.");
+    if (!input.juicio_id) return { success: false, error: "El ID del juicio es obligatorio." };
+    if (!input.fecha_audiencia) return { success: false, error: "La fecha de la audiencia es obligatoria." };
 
-  // Calcular correlativo si no viene especificado
-  let numAudiencia = input.numero_audiencia;
-  if (!numAudiencia || numAudiencia <= 0) {
-    const prevList = await getAudienciasByJuicioAction(input.juicio_id);
-    if (input.id) {
-      const existing = prevList.find((a) => a.id === input.id);
-      numAudiencia = existing?.numero_audiencia || prevList.length;
+    let numAudiencia = input.numero_audiencia;
+    if (!numAudiencia || numAudiencia <= 0) {
+      const prevList = await getAudienciasByJuicioAction(input.juicio_id);
+      if (input.id) {
+        const existing = prevList.find((a) => a.id === input.id);
+        numAudiencia = existing?.numero_audiencia || prevList.length;
+      } else {
+        numAudiencia = prevList.length + 1;
+      }
+    }
+
+    const resultadoLimpio = (input.resultado_dictamen || "").trim();
+
+    const payload = {
+      ...(input.id ? { id: input.id } : {}),
+      juicio_id: input.juicio_id,
+      numero_audiencia: numAudiencia,
+      fecha_audiencia: input.fecha_audiencia,
+      resultado_dictamen: resultadoLimpio || "Pendiente de dictamen",
+      updated_at: new Date().toISOString(),
+    };
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { data, error } = await supabase
+        .from("litigios_audiencias_juicio")
+        .upsert(payload)
+        .select()
+        .single();
+
+      if (error) {
+        return { success: false, error: `Error al guardar Audiencia en Supabase: ${error.message}` };
+      }
+
+      if (data) {
+        safeRevalidatePath("/reg-litigios/juicios");
+        safeRevalidatePath("/reg-litigios/calendario");
+        return { success: true, data: data as LitigioAudienciaJuicio };
+      }
+    }
+
+    const db = readLocalDb();
+    if (!db.litigios_audiencias_juicio) db.litigios_audiencias_juicio = [];
+
+    const existingIdx = input.id
+      ? db.litigios_audiencias_juicio.findIndex((a) => a.id === input.id)
+      : -1;
+
+    let savedRecord: LitigioAudienciaJuicio;
+    const nowIso = new Date().toISOString();
+
+    if (existingIdx >= 0) {
+      savedRecord = {
+        ...db.litigios_audiencias_juicio[existingIdx],
+        ...payload,
+      };
+      db.litigios_audiencias_juicio[existingIdx] = savedRecord;
     } else {
-      numAudiencia = prevList.length + 1;
-    }
-  }
-
-  const resultadoLimpio = (input.resultado_dictamen || "").trim();
-
-  const payload = {
-    ...(input.id ? { id: input.id } : {}),
-    juicio_id: input.juicio_id,
-    numero_audiencia: numAudiencia,
-    fecha_audiencia: input.fecha_audiencia,
-    resultado_dictamen: resultadoLimpio || "Pendiente de dictamen",
-    updated_at: new Date().toISOString(),
-  };
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const { data, error } = await supabase
-      .from("litigios_audiencias_juicio")
-      .upsert(payload)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Error al guardar Audiencia en Supabase: ${error.message}`);
+      savedRecord = {
+        id: input.id || `aud-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        ...payload,
+        created_at: nowIso,
+      };
+      db.litigios_audiencias_juicio.push(savedRecord);
     }
 
-    if (data) {
-      safeRevalidatePath("/reg-litigios/juicios");
-      return data as LitigioAudienciaJuicio;
-    }
+    writeLocalDb(db);
+    safeRevalidatePath("/reg-litigios/juicios");
+    safeRevalidatePath("/reg-litigios/calendario");
+    return { success: true, data: savedRecord };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error inesperado al guardar la audiencia." };
   }
-
-  const db = readLocalDb();
-  if (!db.litigios_audiencias_juicio) db.litigios_audiencias_juicio = [];
-
-  const existingIdx = input.id
-    ? db.litigios_audiencias_juicio.findIndex((a) => a.id === input.id)
-    : -1;
-
-  let savedRecord: LitigioAudienciaJuicio;
-  const nowIso = new Date().toISOString();
-
-  if (existingIdx >= 0) {
-    savedRecord = {
-      ...db.litigios_audiencias_juicio[existingIdx],
-      ...payload,
-    };
-    db.litigios_audiencias_juicio[existingIdx] = savedRecord;
-  } else {
-    savedRecord = {
-      id: input.id || `aud-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      ...payload,
-      created_at: nowIso,
-    };
-    db.litigios_audiencias_juicio.push(savedRecord);
-  }
-
-  writeLocalDb(db);
-  safeRevalidatePath("/reg-litigios/juicios");
-  return savedRecord;
 }
 
 export async function deleteAudienciaJuicioAction(
   audienciaId: string,
   juicioId?: string
-): Promise<void> {
-  const auth = await assertCanManage(["litigios_juicios", "reg_litigios"]);
-  if (!auth.authorized) {
-    throw new Error(auth.error || "Acceso denegado.");
-  }
-
-  if (!audienciaId) throw new Error("El ID de la audiencia es obligatorio.");
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const { error } = await supabase
-      .from("litigios_audiencias_juicio")
-      .delete()
-      .eq("id", audienciaId);
-
-    if (error) {
-      throw new Error(`Error al eliminar Audiencia en Supabase: ${error.message}`);
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auth = await assertCanManage(["litigios_juicios", "reg_litigios"]);
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
+
+    if (!audienciaId) return { success: false, error: "El ID de la audiencia es obligatorio." };
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { error } = await supabase
+        .from("litigios_audiencias_juicio")
+        .delete()
+        .eq("id", audienciaId);
+
+      if (error) {
+        return { success: false, error: `Error al eliminar Audiencia en Supabase: ${error.message}` };
+      }
+      safeRevalidatePath("/reg-litigios/juicios");
+      safeRevalidatePath("/reg-litigios/calendario");
+    }
+
+    const db = readLocalDb();
+    if (db.litigios_audiencias_juicio) {
+      const target = db.litigios_audiencias_juicio.find((a) => a.id === audienciaId);
+      const jId = juicioId || target?.juicio_id;
+
+      db.litigios_audiencias_juicio = db.litigios_audiencias_juicio.filter(
+        (a) => a.id !== audienciaId
+      );
+
+      if (jId) {
+        const remaining = db.litigios_audiencias_juicio
+          .filter((a) => a.juicio_id === jId)
+          .sort((a, b) => a.fecha_audiencia.localeCompare(b.fecha_audiencia));
+        remaining.forEach((a, idx) => {
+          a.numero_audiencia = idx + 1;
+        });
+      }
+
+      writeLocalDb(db);
+    }
+
     safeRevalidatePath("/reg-litigios/juicios");
+    safeRevalidatePath("/reg-litigios/calendario");
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error inesperado al eliminar la audiencia." };
   }
-
-  const db = readLocalDb();
-  if (db.litigios_audiencias_juicio) {
-    const target = db.litigios_audiencias_juicio.find((a) => a.id === audienciaId);
-    const jId = juicioId || target?.juicio_id;
-
-    db.litigios_audiencias_juicio = db.litigios_audiencias_juicio.filter(
-      (a) => a.id !== audienciaId
-    );
-
-    if (jId) {
-      const remaining = db.litigios_audiencias_juicio
-        .filter((a) => a.juicio_id === jId)
-        .sort((a, b) => a.fecha_audiencia.localeCompare(b.fecha_audiencia));
-      remaining.forEach((a, idx) => {
-        a.numero_audiencia = idx + 1;
-      });
-    }
-
-    writeLocalDb(db);
-  }
-
-  safeRevalidatePath("/reg-litigios/juicios");
 }
 
 export const deleteAudienciaAction = deleteAudienciaJuicioAction;
@@ -562,138 +581,143 @@ export interface UpsertLitigioJuicioInput {
 
 export async function upsertLitigioJuicioAction(
   input: UpsertLitigioJuicioInput
-): Promise<LitigioJuicio> {
-  const auth = await assertCanManage(["litigios_juicios", "reg_litigios"]);
-  if (!auth.authorized) {
-    throw new Error(auth.error || "Acceso denegado.");
-  }
-
-  if (!input.rit_ruc.trim()) throw new Error("El RIT-RUC de la causa es obligatorio.");
-  if (!input.nombre_trabajador.trim()) throw new Error("El nombre del trabajador/demandante es obligatorio.");
-  if (!input.materia.trim()) throw new Error("La materia de la demanda es obligatoria.");
-
-  const cuantiaVal = Number(input.cuantia_clp !== undefined ? input.cuantia_clp : input.cuantia || 0);
-
-  const payload = {
-    ...(input.id ? { id: input.id } : {}),
-    rit_ruc: input.rit_ruc.trim().toUpperCase(),
-    nombre_trabajador: input.nombre_trabajador.trim(),
-    materia: input.materia.trim(),
-    cuantia: cuantiaVal,
-    cuantia_clp: cuantiaVal,
-    estado: input.estado || "PENDIENTE",
-    observaciones: input.observaciones?.trim() || null,
-    updated_at: new Date().toISOString(),
-  };
-
-  let savedJuicioId = input.id;
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const { data, error } = await supabase
-      .from("litigios_juicios")
-      .upsert(payload)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Error al guardar Juicio en Supabase: ${error.message}`);
+): Promise<{ success: boolean; data?: LitigioJuicio; error?: string }> {
+  try {
+    const auth = await assertCanManage(["litigios_juicios", "reg_litigios"]);
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
 
-    if (data) {
-      savedJuicioId = data.id;
+    if (!input.rit_ruc.trim()) return { success: false, error: "El RIT-RUC de la causa es obligatorio." };
+    if (!input.nombre_trabajador.trim()) return { success: false, error: "El nombre del trabajador/demandante es obligatorio." };
+    if (!input.materia.trim()) return { success: false, error: "La materia de la demanda es obligatoria." };
 
-      // Guardar audiencias asociadas si vienen en el input
-      if (input.audiencias && input.audiencias.length > 0) {
-        for (let i = 0; i < input.audiencias.length; i++) {
-          const a = input.audiencias[i];
-          const { error: audErr } = await supabase.from("litigios_audiencias_juicio").upsert({
-            ...(a.id ? { id: a.id } : {}),
-            juicio_id: savedJuicioId,
-            numero_audiencia: a.numero_audiencia || i + 1,
-            fecha_audiencia: a.fecha_audiencia,
-            resultado_dictamen: (a.resultado_dictamen || "").trim() || "Pendiente de dictamen",
-            updated_at: new Date().toISOString(),
-          });
-          if (audErr) {
-            throw new Error(`Error al guardar Audiencia del juicio en Supabase: ${audErr.message}`);
+    const cuantiaVal = Number(input.cuantia_clp !== undefined ? input.cuantia_clp : input.cuantia || 0);
+
+    const payload = {
+      ...(input.id ? { id: input.id } : {}),
+      rit_ruc: input.rit_ruc.trim().toUpperCase(),
+      nombre_trabajador: input.nombre_trabajador.trim(),
+      materia: input.materia.trim(),
+      cuantia: cuantiaVal,
+      cuantia_clp: cuantiaVal,
+      estado: input.estado || "PENDIENTE",
+      observaciones: input.observaciones?.trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+
+    let savedJuicioId = input.id;
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { data, error } = await supabase
+        .from("litigios_juicios")
+        .upsert(payload)
+        .select()
+        .single();
+
+      if (error) {
+        return { success: false, error: `Error al guardar Juicio en Supabase: ${error.message}` };
+      }
+
+      if (data) {
+        savedJuicioId = data.id;
+
+        if (input.audiencias && input.audiencias.length > 0) {
+          for (let i = 0; i < input.audiencias.length; i++) {
+            const a = input.audiencias[i];
+            const { error: audErr } = await supabase.from("litigios_audiencias_juicio").upsert({
+              ...(a.id ? { id: a.id } : {}),
+              juicio_id: savedJuicioId,
+              numero_audiencia: a.numero_audiencia || i + 1,
+              fecha_audiencia: a.fecha_audiencia,
+              resultado_dictamen: (a.resultado_dictamen || "").trim() || "Pendiente de dictamen",
+              updated_at: new Date().toISOString(),
+            });
+            if (audErr) {
+              return { success: false, error: `Error al guardar Audiencia del juicio en Supabase: ${audErr.message}` };
+            }
           }
         }
+
+        safeRevalidatePath("/reg-litigios/juicios");
+        safeRevalidatePath("/reg-litigios/calendario");
+        return { success: true, data: data as LitigioJuicio };
       }
-
-      safeRevalidatePath("/reg-litigios/juicios");
-      return data as LitigioJuicio;
     }
-  }
 
-  const db = readLocalDb();
-  if (!db.litigios_juicios) db.litigios_juicios = [];
-  if (!db.litigios_audiencias_juicio) db.litigios_audiencias_juicio = [];
+    const db = readLocalDb();
+    if (!db.litigios_juicios) db.litigios_juicios = [];
+    if (!db.litigios_audiencias_juicio) db.litigios_audiencias_juicio = [];
 
-  const existingIndex = input.id
-    ? db.litigios_juicios.findIndex((j) => j.id === input.id)
-    : db.litigios_juicios.findIndex((j) => j.rit_ruc === payload.rit_ruc);
+    const existingIndex = input.id
+      ? db.litigios_juicios.findIndex((j) => j.id === input.id)
+      : db.litigios_juicios.findIndex((j) => j.rit_ruc === payload.rit_ruc);
 
-  const nowIso = new Date().toISOString();
-  let savedRecord: LitigioJuicio;
+    const nowIso = new Date().toISOString();
+    let savedRecord: LitigioJuicio;
 
-  if (existingIndex >= 0) {
-    savedRecord = {
-      ...db.litigios_juicios[existingIndex],
-      ...payload,
-    };
-    db.litigios_juicios[existingIndex] = savedRecord;
-    savedJuicioId = savedRecord.id;
-  } else {
-    savedRecord = {
-      id: input.id || `jui-${Date.now()}`,
-      ...payload,
-      created_at: nowIso,
-    };
-    db.litigios_juicios.push(savedRecord);
-    savedJuicioId = savedRecord.id;
-  }
-
-  // Guardar audiencias asociadas en local DB
-  if (input.audiencias && input.audiencias.length > 0) {
-    const list: AudienciaInputItem[] = input.audiencias;
-    for (let i = 0; i < list.length; i++) {
-      const audItem: AudienciaInputItem = list[i];
-      const targetId: string | undefined = audItem.id;
-      const audIdx: number = targetId
-        ? db.litigios_audiencias_juicio.findIndex((item) => item.id === targetId)
-        : -1;
-
-      const audPayload: LitigioAudienciaJuicio = {
-        id: targetId || `aud-${Date.now()}-${i}`,
-        juicio_id: savedJuicioId!,
-        numero_audiencia: audItem.numero_audiencia || i + 1,
-        fecha_audiencia: audItem.fecha_audiencia,
-        resultado_dictamen: (audItem.resultado_dictamen || "").trim() || "Pendiente de dictamen",
-        created_at: nowIso,
-        updated_at: nowIso,
+    if (existingIndex >= 0) {
+      savedRecord = {
+        ...db.litigios_juicios[existingIndex],
+        ...payload,
       };
+      db.litigios_juicios[existingIndex] = savedRecord;
+      savedJuicioId = savedRecord.id;
+    } else {
+      savedRecord = {
+        id: input.id || `jui-${Date.now()}`,
+        ...payload,
+        created_at: nowIso,
+      };
+      db.litigios_juicios.push(savedRecord);
+      savedJuicioId = savedRecord.id;
+    }
 
-      if (audIdx >= 0) {
-        db.litigios_audiencias_juicio[audIdx] = {
-          ...db.litigios_audiencias_juicio[audIdx],
-          ...audPayload,
+    if (input.audiencias && input.audiencias.length > 0) {
+      const list: AudienciaInputItem[] = input.audiencias;
+      for (let i = 0; i < list.length; i++) {
+        const audItem: AudienciaInputItem = list[i];
+        const targetId: string | undefined = audItem.id;
+        const audIdx: number = targetId
+          ? db.litigios_audiencias_juicio.findIndex((item) => item.id === targetId)
+          : -1;
+
+        const audPayload: LitigioAudienciaJuicio = {
+          id: targetId || `aud-${Date.now()}-${i}`,
+          juicio_id: savedJuicioId!,
+          numero_audiencia: audItem.numero_audiencia || i + 1,
+          fecha_audiencia: audItem.fecha_audiencia,
+          resultado_dictamen: (audItem.resultado_dictamen || "").trim() || "Pendiente de dictamen",
+          created_at: nowIso,
+          updated_at: nowIso,
         };
-      } else {
-        db.litigios_audiencias_juicio.push(audPayload);
+
+        if (audIdx >= 0) {
+          db.litigios_audiencias_juicio[audIdx] = {
+            ...db.litigios_audiencias_juicio[audIdx],
+            ...audPayload,
+          };
+        } else {
+          db.litigios_audiencias_juicio.push(audPayload);
+        }
       }
     }
-  }
 
-  writeLocalDb(db);
-  safeRevalidatePath("/reg-litigios/juicios");
-  return savedRecord;
+    writeLocalDb(db);
+    safeRevalidatePath("/reg-litigios/juicios");
+    safeRevalidatePath("/reg-litigios/calendario");
+    return { success: true, data: savedRecord };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error inesperado al guardar el juicio." };
+  }
 }
 
-export async function deleteLitigioJuicioAction(_id: string): Promise<void> {
-  throw new Error(
-    "La eliminación de causas o juicios está estrictamente prohibida por políticas de auditoría y trazabilidad legal."
-  );
+export async function deleteLitigioJuicioAction(_id: string): Promise<{ success: boolean; error?: string }> {
+  return {
+    success: false,
+    error: "La eliminación de causas o juicios está estrictamente prohibida por políticas de auditoría y trazabilidad legal.",
+  };
 }
 
 // ============================================================================
@@ -1023,199 +1047,204 @@ export async function getLitigiosComparendosAction(
 
 export async function upsertLitigioComparendoAction(
   data: Partial<LitigioComparendo>
-): Promise<LitigioComparendo> {
-  const auth = await assertCanManage(["litigios_comparendos", "reg_litigios"]);
-  if (!auth.authorized) {
-    throw new Error(auth.error || "Acceso denegado.");
-  }
-
-  const now = new Date().toISOString();
-  const id = data.id || `comp-${Date.now()}`;
-
-  const payload: LitigioComparendo = {
-    id,
-    nombre_trabajador: data.nombre_trabajador || "",
-    fecha_finiquito: data.fecha_finiquito || null,
-    reserva_derechos: Boolean(data.reserva_derechos),
-    causal_termino: data.causal_termino || "",
-    fecha_comparendo: data.fecha_comparendo || now.slice(0, 10),
-    asistencia_empresa:
-      data.asistencia_empresa !== undefined ? Boolean(data.asistencia_empresa) : true,
-    motivo_observacion: data.motivo_observacion?.trim() || null,
-    monto_acuerdo_total: Number(data.monto_acuerdo_total || 0),
-    estado: data.estado || "PENDIENTE",
-    created_at: data.created_at || now,
-    updated_at: now,
-  };
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const { data: saved, error } = await supabase
-      .from("litigios_comparendos")
-      .upsert({
-        id: payload.id,
-        nombre_trabajador: payload.nombre_trabajador,
-        fecha_finiquito: payload.fecha_finiquito,
-        reserva_derechos: payload.reserva_derechos,
-        causal_termino: payload.causal_termino,
-        fecha_comparendo: payload.fecha_comparendo,
-        asistencia_empresa: payload.asistencia_empresa,
-        motivo_observacion: payload.motivo_observacion,
-        monto_acuerdo_total: payload.monto_acuerdo_total,
-        estado: payload.estado,
-        updated_at: now,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Error al guardar Comparendo en Supabase: ${error.message}`);
+): Promise<{ success: boolean; data?: LitigioComparendo; error?: string }> {
+  try {
+    const auth = await assertCanManage(["litigios_comparendos", "reg_litigios"]);
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
 
-    if (saved) {
-      safeRevalidatePath("/reg-litigios/comparendos");
-      safeRevalidatePath("/reg-litigios/calendario");
-      return saved as LitigioComparendo;
-    }
-  }
+    const now = new Date().toISOString();
+    const id = data.id || `comp-${Date.now()}`;
 
-  // Fallback Local DB
-  const db = readLocalDb();
-  if (!db.litigios_comparendos) {
-    db.litigios_comparendos = [];
-  }
-  const idx = db.litigios_comparendos.findIndex((c) => c.id === id);
-  if (idx >= 0) {
-    db.litigios_comparendos[idx] = {
-      ...db.litigios_comparendos[idx],
-      ...payload,
+    const payload: LitigioComparendo = {
+      id,
+      nombre_trabajador: data.nombre_trabajador || "",
+      fecha_finiquito: data.fecha_finiquito || null,
+      reserva_derechos: Boolean(data.reserva_derechos),
+      causal_termino: data.causal_termino || "",
+      fecha_comparendo: data.fecha_comparendo || now.slice(0, 10),
+      asistencia_empresa:
+        data.asistencia_empresa !== undefined ? Boolean(data.asistencia_empresa) : true,
+      motivo_observacion: data.motivo_observacion?.trim() || null,
+      monto_acuerdo_total: Number(data.monto_acuerdo_total || 0),
+      estado: data.estado || "PENDIENTE",
+      created_at: data.created_at || now,
+      updated_at: now,
     };
-  } else {
-    db.litigios_comparendos.unshift(payload);
-  }
-  writeLocalDb(db);
 
-  safeRevalidatePath("/reg-litigios/comparendos");
-  safeRevalidatePath("/reg-litigios/calendario");
-  return payload;
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { data: saved, error } = await supabase
+        .from("litigios_comparendos")
+        .upsert({
+          id: payload.id,
+          nombre_trabajador: payload.nombre_trabajador,
+          fecha_finiquito: payload.fecha_finiquito,
+          reserva_derechos: payload.reserva_derechos,
+          causal_termino: payload.causal_termino,
+          fecha_comparendo: payload.fecha_comparendo,
+          asistencia_empresa: payload.asistencia_empresa,
+          motivo_observacion: payload.motivo_observacion,
+          monto_acuerdo_total: payload.monto_acuerdo_total,
+          estado: payload.estado,
+          updated_at: now,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        return { success: false, error: `Error al guardar Comparendo en Supabase: ${error.message}` };
+      }
+
+      if (saved) {
+        safeRevalidatePath("/reg-litigios/comparendos");
+        safeRevalidatePath("/reg-litigios/calendario");
+        return { success: true, data: saved as LitigioComparendo };
+      }
+    }
+
+    const db = readLocalDb();
+    if (!db.litigios_comparendos) {
+      db.litigios_comparendos = [];
+    }
+    const idx = db.litigios_comparendos.findIndex((c) => c.id === id);
+    if (idx >= 0) {
+      db.litigios_comparendos[idx] = {
+        ...db.litigios_comparendos[idx],
+        ...payload,
+      };
+    } else {
+      db.litigios_comparendos.unshift(payload);
+    }
+    writeLocalDb(db);
+
+    safeRevalidatePath("/reg-litigios/comparendos");
+    safeRevalidatePath("/reg-litigios/calendario");
+    return { success: true, data: payload };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error inesperado al guardar el comparendo." };
+  }
 }
 
 export async function saveAcuerdoComparendoAction(
   comparendoId: string,
   montoTotal: number,
   cuotas: Array<Partial<CuotaComparendo>>
-): Promise<LitigioComparendo> {
-  const auth = await assertCanManage(["litigios_comparendos", "reg_litigios"]);
-  if (!auth.authorized) {
-    throw new Error(auth.error || "Acceso denegado.");
-  }
-
-  const now = new Date().toISOString();
-
-  // Calcular estado del comparendo según las cuotas
-  let nuevoEstado: EstadoComparendo = "PENDIENTE";
-  if (cuotas.length > 0) {
-    const allPaid = cuotas.every((q) => q.estado_cuota === "PAGADA");
-    nuevoEstado = allPaid ? "PAGADO" : "ACUERDO_EN_PAGO";
-  }
-
-  const formattedCuotas: CuotaComparendo[] = cuotas.map((q, idx) => ({
-    id: q.id || `cuota-${comparendoId}-${idx + 1}-${Date.now()}`,
-    comparendo_id: comparendoId,
-    numero_cuota: q.numero_cuota || idx + 1,
-    monto_cuota: Number(q.monto_cuota || 0),
-    fecha_vencimiento_cuota: q.fecha_vencimiento_cuota || now.slice(0, 10),
-    estado_cuota: q.estado_cuota || "PENDIENTE",
-    fecha_pago_real:
-      q.estado_cuota === "PAGADA" ? q.fecha_pago_real || now.slice(0, 10) : null,
-    created_at: q.created_at || now,
-    updated_at: now,
-  }));
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    // 1. Actualizar comparendo
-    const { error: errComp } = await supabase
-      .from("litigios_comparendos")
-      .update({
-        monto_acuerdo_total: montoTotal,
-        estado: nuevoEstado,
-        updated_at: now,
-      })
-      .eq("id", comparendoId);
-
-    if (errComp) {
-      throw new Error(`Error al actualizar acuerdo de comparendo en Supabase: ${errComp.message}`);
+): Promise<{ success: boolean; data?: LitigioComparendo; error?: string }> {
+  try {
+    const auth = await assertCanManage(["litigios_comparendos", "reg_litigios"]);
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
 
-    // 2. Eliminar cuotas previas y reinsertar las cuotas pactadas
-    const { error: errDel } = await supabase
-      .from("litigios_cuotas_comparendo")
-      .delete()
-      .eq("comparendo_id", comparendoId);
+    const now = new Date().toISOString();
 
-    if (errDel) {
-      throw new Error(`Error al limpiar cuotas previas de comparendo en Supabase: ${errDel.message}`);
+    let nuevoEstado: EstadoComparendo = "PENDIENTE";
+    if (cuotas.length > 0) {
+      const allPaid = cuotas.every((q) => q.estado_cuota === "PAGADA");
+      nuevoEstado = allPaid ? "PAGADO" : "ACUERDO_EN_PAGO";
     }
 
-    if (formattedCuotas.length > 0) {
-      const { error: errIns } = await supabase.from("litigios_cuotas_comparendo").insert(
-        formattedCuotas.map((q) => ({
-          id: q.id,
-          comparendo_id: q.comparendo_id,
-          numero_cuota: q.numero_cuota,
-          monto_cuota: q.monto_cuota,
-          fecha_vencimiento_cuota: q.fecha_vencimiento_cuota,
-          estado_cuota: q.estado_cuota,
-          fecha_pago_real: q.fecha_pago_real,
+    const formattedCuotas: CuotaComparendo[] = cuotas.map((q, idx) => ({
+      id: q.id || `cuota-${comparendoId}-${idx + 1}-${Date.now()}`,
+      comparendo_id: comparendoId,
+      numero_cuota: q.numero_cuota || idx + 1,
+      monto_cuota: Number(q.monto_cuota || 0),
+      fecha_vencimiento_cuota: q.fecha_vencimiento_cuota || now.slice(0, 10),
+      estado_cuota: q.estado_cuota || "PENDIENTE",
+      fecha_pago_real:
+        q.estado_cuota === "PAGADA" ? q.fecha_pago_real || now.slice(0, 10) : null,
+      created_at: q.created_at || now,
+      updated_at: now,
+    }));
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { error: errComp } = await supabase
+        .from("litigios_comparendos")
+        .update({
+          monto_acuerdo_total: montoTotal,
+          estado: nuevoEstado,
           updated_at: now,
-        }))
-      );
-      if (errIns) {
-        throw new Error(`Error al insertar cuotas de comparendo en Supabase: ${errIns.message}`);
+        })
+        .eq("id", comparendoId);
+
+      if (errComp) {
+        return { success: false, error: `Error al actualizar acuerdo de comparendo en Supabase: ${errComp.message}` };
+      }
+
+      const { error: errDel } = await supabase
+        .from("litigios_cuotas_comparendo")
+        .delete()
+        .eq("comparendo_id", comparendoId);
+
+      if (errDel) {
+        return { success: false, error: `Error al limpiar cuotas previas de comparendo en Supabase: ${errDel.message}` };
+      }
+
+      if (formattedCuotas.length > 0) {
+        const { error: errIns } = await supabase.from("litigios_cuotas_comparendo").insert(
+          formattedCuotas.map((q) => ({
+            id: q.id,
+            comparendo_id: q.comparendo_id,
+            numero_cuota: q.numero_cuota,
+            monto_cuota: q.monto_cuota,
+            fecha_vencimiento_cuota: q.fecha_vencimiento_cuota,
+            estado_cuota: q.estado_cuota,
+            fecha_pago_real: q.fecha_pago_real,
+            updated_at: now,
+          }))
+        );
+        if (errIns) {
+          return { success: false, error: `Error al insertar cuotas de comparendo en Supabase: ${errIns.message}` };
+        }
       }
     }
+
+    const db = readLocalDb();
+    if (!db.litigios_comparendos) db.litigios_comparendos = [];
+    if (!db.litigios_cuotas_comparendo) db.litigios_cuotas_comparendo = [];
+
+    const compIdx = db.litigios_comparendos.findIndex((c) => c.id === comparendoId);
+    if (compIdx >= 0) {
+      db.litigios_comparendos[compIdx].monto_acuerdo_total = montoTotal;
+      db.litigios_comparendos[compIdx].estado = nuevoEstado;
+      db.litigios_comparendos[compIdx].updated_at = now;
+    }
+
+    db.litigios_cuotas_comparendo = db.litigios_cuotas_comparendo.filter(
+      (q) => q.comparendo_id !== comparendoId
+    );
+    db.litigios_cuotas_comparendo.push(...formattedCuotas);
+
+    writeLocalDb(db);
+
+    safeRevalidatePath("/reg-litigios/comparendos");
+    safeRevalidatePath("/reg-litigios/calendario");
+
+    const updatedComp = db.litigios_comparendos[compIdx] || {
+      id: comparendoId,
+      nombre_trabajador: "",
+      reserva_derechos: false,
+      causal_termino: "",
+      fecha_comparendo: now.slice(0, 10),
+      asistencia_empresa: true,
+      monto_acuerdo_total: montoTotal,
+      estado: nuevoEstado,
+      created_at: now,
+    };
+
+    return {
+      success: true,
+      data: {
+        ...updatedComp,
+        cuotas: formattedCuotas,
+      },
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error inesperado al guardar acuerdo de comparendo." };
   }
-
-  // Fallback Local DB
-  const db = readLocalDb();
-  if (!db.litigios_comparendos) db.litigios_comparendos = [];
-  if (!db.litigios_cuotas_comparendo) db.litigios_cuotas_comparendo = [];
-
-  const compIdx = db.litigios_comparendos.findIndex((c) => c.id === comparendoId);
-  if (compIdx >= 0) {
-    db.litigios_comparendos[compIdx].monto_acuerdo_total = montoTotal;
-    db.litigios_comparendos[compIdx].estado = nuevoEstado;
-    db.litigios_comparendos[compIdx].updated_at = now;
-  }
-
-  // Reemplazar cuotas asociadas al comparendo
-  db.litigios_cuotas_comparendo = db.litigios_cuotas_comparendo.filter(
-    (q) => q.comparendo_id !== comparendoId
-  );
-  db.litigios_cuotas_comparendo.push(...formattedCuotas);
-
-  writeLocalDb(db);
-
-  safeRevalidatePath("/reg-litigios/comparendos");
-  safeRevalidatePath("/reg-litigios/calendario");
-
-  const updatedComp = db.litigios_comparendos[compIdx] || {
-    id: comparendoId,
-    nombre_trabajador: "",
-    reserva_derechos: false,
-    causal_termino: "",
-    fecha_comparendo: now.slice(0, 10),
-    asistencia_empresa: true,
-    monto_acuerdo_total: montoTotal,
-    estado: nuevoEstado,
-    created_at: now,
-  };
-
-  return {
-    ...updatedComp,
-    cuotas: formattedCuotas,
-  };
 }
 
 export async function togglePagoCuotaComparendoAction(
@@ -1223,118 +1252,128 @@ export async function togglePagoCuotaComparendoAction(
   comparendoId: string,
   nuevoEstado: EstadoCuotaComparendo,
   fechaPagoReal?: string | null
-): Promise<{ cuota: CuotaComparendo; comparendo: LitigioComparendo }> {
-  const auth = await assertCanManage(["litigios_comparendos", "reg_litigios"]);
-  if (!auth.authorized) {
-    throw new Error(auth.error || "Acceso denegado.");
-  }
-
-  const now = new Date().toISOString();
-  const db = readLocalDb();
-  if (!db.litigios_cuotas_comparendo) db.litigios_cuotas_comparendo = [];
-  if (!db.litigios_comparendos) db.litigios_comparendos = [];
-
-  const cuotaIdx = db.litigios_cuotas_comparendo.findIndex((q) => q.id === cuotaId);
-  if (cuotaIdx >= 0) {
-    db.litigios_cuotas_comparendo[cuotaIdx].estado_cuota = nuevoEstado;
-    db.litigios_cuotas_comparendo[cuotaIdx].fecha_pago_real =
-      nuevoEstado === "PAGADA" ? fechaPagoReal || now.slice(0, 10) : null;
-    db.litigios_cuotas_comparendo[cuotaIdx].updated_at = now;
-  }
-
-  // Recalcular estado de comparendo
-  const siblingCuotas = db.litigios_cuotas_comparendo.filter(
-    (q) => q.comparendo_id === comparendoId
-  );
-  const allPaid =
-    siblingCuotas.length > 0 &&
-    siblingCuotas.every((q) => q.estado_cuota === "PAGADA");
-  const compEstado: EstadoComparendo = allPaid ? "PAGADO" : "ACUERDO_EN_PAGO";
-
-  const compIdx = db.litigios_comparendos.findIndex((c) => c.id === comparendoId);
-  if (compIdx >= 0) {
-    db.litigios_comparendos[compIdx].estado = compEstado;
-    db.litigios_comparendos[compIdx].updated_at = now;
-  }
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const { error: errCuota } = await supabase
-      .from("litigios_cuotas_comparendo")
-      .update({
-        estado_cuota: nuevoEstado,
-        fecha_pago_real:
-          nuevoEstado === "PAGADA" ? fechaPagoReal || now.slice(0, 10) : null,
-        updated_at: now,
-      })
-      .eq("id", cuotaId);
-
-    if (errCuota) {
-      throw new Error(`Error al actualizar cuota de comparendo en Supabase: ${errCuota.message}`);
+): Promise<{ success: boolean; data?: { cuota: CuotaComparendo; comparendo: LitigioComparendo }; error?: string }> {
+  try {
+    const auth = await assertCanManage(["litigios_comparendos", "reg_litigios"]);
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
 
-    const { error: errComp } = await supabase
-      .from("litigios_comparendos")
-      .update({
-        estado: compEstado,
-        updated_at: now,
-      })
-      .eq("id", comparendoId);
+    const now = new Date().toISOString();
+    const db = readLocalDb();
+    if (!db.litigios_cuotas_comparendo) db.litigios_cuotas_comparendo = [];
+    if (!db.litigios_comparendos) db.litigios_comparendos = [];
 
-    if (errComp) {
-      throw new Error(`Error al actualizar estado de comparendo en Supabase: ${errComp.message}`);
+    const cuotaIdx = db.litigios_cuotas_comparendo.findIndex((q) => q.id === cuotaId);
+    if (cuotaIdx >= 0) {
+      db.litigios_cuotas_comparendo[cuotaIdx].estado_cuota = nuevoEstado;
+      db.litigios_cuotas_comparendo[cuotaIdx].fecha_pago_real =
+        nuevoEstado === "PAGADA" ? fechaPagoReal || now.slice(0, 10) : null;
+      db.litigios_cuotas_comparendo[cuotaIdx].updated_at = now;
     }
+
+    const siblingCuotas = db.litigios_cuotas_comparendo.filter(
+      (q) => q.comparendo_id === comparendoId
+    );
+    const allPaid =
+      siblingCuotas.length > 0 &&
+      siblingCuotas.every((q) => q.estado_cuota === "PAGADA");
+    const compEstado: EstadoComparendo = allPaid ? "PAGADO" : "ACUERDO_EN_PAGO";
+
+    const compIdx = db.litigios_comparendos.findIndex((c) => c.id === comparendoId);
+    if (compIdx >= 0) {
+      db.litigios_comparendos[compIdx].estado = compEstado;
+      db.litigios_comparendos[compIdx].updated_at = now;
+    }
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { error: errCuota } = await supabase
+        .from("litigios_cuotas_comparendo")
+        .update({
+          estado_cuota: nuevoEstado,
+          fecha_pago_real:
+            nuevoEstado === "PAGADA" ? fechaPagoReal || now.slice(0, 10) : null,
+          updated_at: now,
+        })
+        .eq("id", cuotaId);
+
+      if (errCuota) {
+        return { success: false, error: `Error al actualizar cuota de comparendo en Supabase: ${errCuota.message}` };
+      }
+
+      const { error: errComp } = await supabase
+        .from("litigios_comparendos")
+        .update({
+          estado: compEstado,
+          updated_at: now,
+        })
+        .eq("id", comparendoId);
+
+      if (errComp) {
+        return { success: false, error: `Error al actualizar estado de comparendo en Supabase: ${errComp.message}` };
+      }
+    }
+
+    writeLocalDb(db);
+    safeRevalidatePath("/reg-litigios/comparendos");
+    safeRevalidatePath("/reg-litigios/calendario");
+
+    return {
+      success: true,
+      data: {
+        cuota: db.litigios_cuotas_comparendo[cuotaIdx],
+        comparendo: {
+          ...db.litigios_comparendos[compIdx],
+          cuotas: siblingCuotas,
+        },
+      },
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error inesperado al actualizar cuota." };
   }
-
-  writeLocalDb(db);
-  safeRevalidatePath("/reg-litigios/comparendos");
-  safeRevalidatePath("/reg-litigios/calendario");
-
-  return {
-    cuota: db.litigios_cuotas_comparendo[cuotaIdx],
-    comparendo: {
-      ...db.litigios_comparendos[compIdx],
-      cuotas: siblingCuotas,
-    },
-  };
 }
 
-export async function deleteLitigioComparendoAction(id: string): Promise<void> {
-  const auth = await assertCanManage(["litigios_comparendos", "reg_litigios"]);
-  if (!auth.authorized) {
-    throw new Error(auth.error || "Acceso denegado.");
-  }
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const { error: errCuotas } = await supabase
-      .from("litigios_cuotas_comparendo")
-      .delete()
-      .eq("comparendo_id", id);
-    if (errCuotas) {
-      throw new Error(`Error al eliminar cuotas de comparendo en Supabase: ${errCuotas.message}`);
+export async function deleteLitigioComparendoAction(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auth = await assertCanManage(["litigios_comparendos", "reg_litigios"]);
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
-    const { error: errComp } = await supabase
-      .from("litigios_comparendos")
-      .delete()
-      .eq("id", id);
-    if (errComp) {
-      throw new Error(`Error al eliminar comparendo en Supabase: ${errComp.message}`);
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { error: errCuotas } = await supabase
+        .from("litigios_cuotas_comparendo")
+        .delete()
+        .eq("comparendo_id", id);
+      if (errCuotas) {
+        return { success: false, error: `Error al eliminar cuotas de comparendo en Supabase: ${errCuotas.message}` };
+      }
+      const { error: errComp } = await supabase
+        .from("litigios_comparendos")
+        .delete()
+        .eq("id", id);
+      if (errComp) {
+        return { success: false, error: `Error al eliminar comparendo en Supabase: ${errComp.message}` };
+      }
     }
-  }
 
-  const db = readLocalDb();
-  if (db.litigios_comparendos) {
-    db.litigios_comparendos = db.litigios_comparendos.filter((c) => c.id !== id);
+    const db = readLocalDb();
+    if (db.litigios_comparendos) {
+      db.litigios_comparendos = db.litigios_comparendos.filter((c) => c.id !== id);
+    }
+    if (db.litigios_cuotas_comparendo) {
+      db.litigios_cuotas_comparendo = db.litigios_cuotas_comparendo.filter(
+        (q) => q.comparendo_id !== id
+      );
+    }
+    writeLocalDb(db);
+    safeRevalidatePath("/reg-litigios/comparendos");
+    safeRevalidatePath("/reg-litigios/calendario");
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error inesperado al eliminar comparendo." };
   }
-  if (db.litigios_cuotas_comparendo) {
-    db.litigios_cuotas_comparendo = db.litigios_cuotas_comparendo.filter(
-      (q) => q.comparendo_id !== id
-    );
-  }
-  writeLocalDb(db);
-
-  safeRevalidatePath("/reg-litigios/comparendos");
-  safeRevalidatePath("/reg-litigios/calendario");
 }
 
