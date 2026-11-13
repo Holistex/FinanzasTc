@@ -74,7 +74,8 @@ export interface CarteraCobranzaData {
 }
 
 /**
- * Obtiene el número de semana ISO y las fechas de lunes a domingo para una fecha dada.
+ * Obtiene el número de semana ISO y las fechas de lunes a domingo para una fecha dada
+ * convirtiendo primero a fecha local de Chile (America/Santiago) sin desfase UTC.
  */
 function getIsoWeekInfo(dateInput: Date | string): {
   semanaKey: string;
@@ -84,9 +85,23 @@ function getIsoWeekInfo(dateInput: Date | string): {
   fechaFinCL: string;
   tituloSemana: string;
 } {
-  const d = new Date(dateInput);
-  // UTC adjustments to avoid local timezone shifts
-  const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const rawDate = new Date(dateInput);
+  const safeDate = isNaN(rawDate.getTime()) ? new Date() : rawDate;
+
+  // Fecha local exacta en Chile ("YYYY-MM-DD")
+  const fechaRegistroLocal = safeDate.toLocaleDateString("en-CA", {
+    timeZone: "America/Santiago",
+  });
+  const [yStr, mStr, dStr] = fechaRegistroLocal.split("-");
+  const y = parseInt(yStr, 10);
+  const m = parseInt(mStr, 10);
+  const day = parseInt(dStr, 10);
+
+  // Construir fecha calendario pura en UTC (sin desplazamiento horario)
+  const calDate = new Date(Date.UTC(y, m - 1, day));
+
+  // Semana ISO
+  const target = new Date(Date.UTC(y, m - 1, day));
   const dayNr = (target.getUTCDay() + 6) % 7; // Monday = 0, Sunday = 6
   target.setUTCDate(target.getUTCDate() - dayNr + 3); // Thursday of same week
   const firstThursday = target.getTime();
@@ -97,19 +112,18 @@ function getIsoWeekInfo(dateInput: Date | string): {
   const weekNumber = 1 + Math.ceil((firstThursday - target.getTime()) / 604800000);
   const anio = new Date(firstThursday).getUTCFullYear();
 
-  // Calculate Monday (start) and Sunday (end) of this ISO week
-  const dateObj = new Date(dateInput);
-  const currentDay = (dateObj.getDay() + 6) % 7;
-  const monday = new Date(dateObj);
-  monday.setDate(dateObj.getDate() - currentDay);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
+  // Calcular Lunes (inicio) y Domingo (fin) de esta semana en calendario puro
+  const currentDay = (calDate.getUTCDay() + 6) % 7;
+  const monday = new Date(calDate.getTime());
+  monday.setUTCDate(calDate.getUTCDate() - currentDay);
+  const sunday = new Date(monday.getTime());
+  sunday.setUTCDate(monday.getUTCDate() + 6);
 
   const formatCL = (dt: Date) => {
-    const day = String(dt.getDate()).padStart(2, "0");
-    const month = String(dt.getMonth() + 1).padStart(2, "0");
-    const year = dt.getFullYear();
-    return `${day}-${month}-${year}`;
+    const dd = String(dt.getUTCDate()).padStart(2, "0");
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+    const yyyy = dt.getUTCFullYear();
+    return `${dd}-${mm}-${yyyy}`;
   };
 
   const fechaInicioCL = formatCL(monday);
@@ -183,12 +197,15 @@ export async function getCarteraCobranzaAction(): Promise<CarteraCobranzaData> {
 
     const { data: gestionesData, error: gestionesErr } = gestionesRes;
 
-    if (!gestionesErr && gestionesData) {
+    if (gestionesErr) {
+      console.warn("[GestionCobranza] Error consultando gestiones_cobranza:", gestionesErr.message);
+    } else if (gestionesData) {
       for (const g of gestionesData as Array<Record<string, unknown>>) {
+        const fid = String(g.factura_id || "");
         const item: GestionCobranza = {
           id: String(g.id),
-          factura_id: String(g.factura_id),
-          tipo_gestion: (g.tipo_gestion as TipoGestionCobranza) || "LLAMADA",
+          factura_id: fid,
+          tipo_gestion: (String(g.tipo_gestion || "LLAMADA").toUpperCase() as TipoGestionCobranza),
           fecha_compromiso_pago: g.fecha_compromiso_pago ? String(g.fecha_compromiso_pago) : null,
           observaciones: String(g.observaciones || ""),
           contacto_nombre: g.contacto_nombre ? String(g.contacto_nombre) : null,
@@ -198,9 +215,9 @@ export async function getCarteraCobranzaAction(): Promise<CarteraCobranzaData> {
           created_at: String(g.created_at || new Date().toISOString()),
         };
         allGestionesList.push(item);
-        const list = gestionesMap.get(item.factura_id) || [];
+        const list = gestionesMap.get(fid) || [];
         list.push(item);
-        gestionesMap.set(item.factura_id, list);
+        gestionesMap.set(fid, list);
       }
     }
 
@@ -254,18 +271,20 @@ export async function getCarteraCobranzaAction(): Promise<CarteraCobranzaData> {
 
     // Solo incorporar si tiene saldo adeudado
     if (deuda > 0) {
-      const gestiones = gestionesMap.get(f.id) || [];
+      const fIdStr = String(f.id);
+      const gestiones = gestionesMap.get(fIdStr) || [];
       // Ordenar gestiones de la más reciente a la más antigua
       gestiones.sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
       const facturaEnriquecida: FacturaVenta = {
         ...f,
+        id: fIdStr,
         deuda_cliente: deuda,
         gestiones_cobranza: gestiones,
       };
       pendingFacturas.push(facturaEnriquecida);
-      facturasById.set(f.id, facturaEnriquecida);
+      facturasById.set(fIdStr, facturaEnriquecida);
     }
   }
 
@@ -446,25 +465,22 @@ export async function registrarGestionCobranzaAction(
       const { data, error } = await supabase
         .from("gestiones_cobranza")
         .insert({
-          factura_id: input.facturaId,
-          tipo_gestion: input.tipoGestion,
+          factura_id: String(input.facturaId),
+          tipo_gestion: String(input.tipoGestion).toUpperCase(),
           fecha_compromiso_pago: cleanCompromiso,
           observaciones: input.observaciones.trim(),
           contacto_nombre: input.contactoNombre?.trim() || null,
           contacto_telefono_email: input.contactoTelefonoEmail?.trim() || null,
           usuario_id: activeUserId,
           usuario_nombre: defaultUser,
+          created_at: nowIso,
         })
         .select()
         .single();
 
       if (error) {
-        console.warn("Supabase insert gestiones_cobranza falló, guardando en local:", error.message);
-        // Persistir en local fallback
-        const db = readLocalDb();
-        if (!db.gestiones_cobranza) db.gestiones_cobranza = [];
-        db.gestiones_cobranza.unshift(newGestion);
-        writeLocalDb(db);
+        console.error("[GestionCobranza] Error insertando:", error.message);
+        throw new Error(`Error al guardar gestión: ${error.message}`);
       } else if (data) {
         newGestion.id = String(data.id);
         newGestion.created_at = String(data.created_at || nowIso);
@@ -545,14 +561,15 @@ export async function registrarGestionCobranzaLoteAction(
     if (isServerSupabaseConfigured()) {
       const supabase = await createServerSupabaseClient();
       const recordsToInsert = input.facturaIds.map((facturaId) => ({
-        factura_id: facturaId,
-        tipo_gestion: input.tipoGestion,
+        factura_id: String(facturaId),
+        tipo_gestion: String(input.tipoGestion).toUpperCase(),
         fecha_compromiso_pago: cleanCompromiso,
         observaciones: input.observaciones.trim(),
         contacto_nombre: input.contactoNombre?.trim() || null,
         contacto_telefono_email: input.contactoTelefonoEmail?.trim() || null,
         usuario_id: activeUserId,
         usuario_nombre: activeUserName,
+        created_at: nowIso,
       }));
 
       const { data, error } = await supabase

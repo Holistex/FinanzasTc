@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useTransition, useMemo } from "react";
+import React, { useState, useTransition, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Search,
   Filter,
@@ -58,6 +59,7 @@ interface GestionCobranzaViewProps {
 }
 
 export function GestionCobranzaView({ initialData }: GestionCobranzaViewProps) {
+  const router = useRouter();
   const queryClient = useQueryClient();
 
   // Caché dinámico de TanStack Query para render instantáneo (<1ms) y revalidación en segundo plano
@@ -65,10 +67,15 @@ export function GestionCobranzaView({ initialData }: GestionCobranzaViewProps) {
     queryKey: QUERY_KEYS.gestionCobranza,
     queryFn: () => getCarteraCobranzaAction(),
     initialData,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
   });
 
   const [localData, setLocalData] = useState<CarteraCobranzaData>(initialData);
+
+  useEffect(() => {
+    setLocalData(initialData);
+    queryClient.setQueryData(QUERY_KEYS.gestionCobranza, initialData);
+  }, [initialData, queryClient]);
   const data = cachedData ?? localData;
   const [activeTab, setActiveTab] = useState<TabCobranza>("CARTERA");
   const [isPending, startTransition] = useTransition();
@@ -148,7 +155,9 @@ export function GestionCobranzaView({ initialData }: GestionCobranzaViewProps) {
     startTransition(async () => {
       const fresh = await getCarteraCobranzaAction();
       queryClient.setQueryData(QUERY_KEYS.gestionCobranza, fresh);
+      await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.gestionCobranza });
       setLocalData(fresh);
+      router.refresh();
     });
   };
 

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   X,
   PhoneCall,
@@ -49,6 +50,7 @@ export function RegistrarGestionModal({
   const [contactoTelefonoEmail, setContactoTelefonoEmail] = useState(
     factura.empresa_factoring_cliente?.contacto_email || ""
   );
+  const router = useRouter();
   const [observaciones, setObservaciones] = useState("");
   const [usuarioNombre, setUsuarioNombre] = useState("Cedrix Vargas");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -65,21 +67,30 @@ export function RegistrarGestionModal({
     setErrorMsg(null);
 
     startTransition(async () => {
-      const result = await registrarGestionCobranzaAction({
-        facturaId: factura.id,
-        tipoGestion,
-        fechaCompromisoPago: fechaCompromisoPago || null,
-        observaciones: observaciones.trim(),
-        contactoNombre: contactoNombre.trim() || null,
-        contactoTelefonoEmail: contactoTelefonoEmail.trim() || null,
-        usuarioNombre: usuarioNombre.trim() || "Cedrix Vargas",
-      });
+      try {
+        const result = await registrarGestionCobranzaAction({
+          facturaId: factura.id,
+          tipoGestion,
+          fechaCompromisoPago: fechaCompromisoPago || null,
+          observaciones: observaciones.trim(),
+          contactoNombre: contactoNombre.trim() || null,
+          contactoTelefonoEmail: contactoTelefonoEmail.trim() || null,
+          usuarioNombre: usuarioNombre.trim() || "Cedrix Vargas",
+        });
 
-      if (!result.success) {
-        setErrorMsg(result.error || "Error al registrar la gestión");
-      } else {
-        onSuccess();
-        onClose();
+        if (!result.success) {
+          setErrorMsg(result.error || "Error al registrar la gestión");
+        } else {
+          router.refresh();
+          onSuccess();
+          onClose();
+        }
+      } catch (err: unknown) {
+        setErrorMsg(
+          err instanceof Error
+            ? err.message
+            : "Error inesperado al registrar la gestión"
+        );
       }
     });
   };

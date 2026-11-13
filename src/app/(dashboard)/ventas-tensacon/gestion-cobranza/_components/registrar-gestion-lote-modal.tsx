@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   X,
   PhoneCall,
@@ -41,6 +42,7 @@ export function RegistrarGestionLoteModal({
   const [contactoTelefonoEmail, setContactoTelefonoEmail] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [usuarioNombre, setUsuarioNombre] = useState("Cedrix Vargas");
+  const router = useRouter();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -85,22 +87,31 @@ export function RegistrarGestionLoteModal({
     setErrorMsg(null);
 
     startTransition(async () => {
-      const facturaIds = facturas.map((f) => f.id);
-      const result = await registrarGestionCobranzaLoteAction({
-        facturaIds,
-        tipoGestion,
-        fechaCompromisoPago: fechaCompromisoPago || null,
-        observaciones: observaciones.trim(),
-        contactoNombre: contactoNombre.trim() || null,
-        contactoTelefonoEmail: contactoTelefonoEmail.trim() || null,
-        usuarioNombre: usuarioNombre.trim() || "Cedrix Vargas",
-      });
+      try {
+        const facturaIds = facturas.map((f) => f.id);
+        const result = await registrarGestionCobranzaLoteAction({
+          facturaIds,
+          tipoGestion,
+          fechaCompromisoPago: fechaCompromisoPago || null,
+          observaciones: observaciones.trim(),
+          contactoNombre: contactoNombre.trim() || null,
+          contactoTelefonoEmail: contactoTelefonoEmail.trim() || null,
+          usuarioNombre: usuarioNombre.trim() || "Cedrix Vargas",
+        });
 
-      if (!result.success) {
-        setErrorMsg(result.error || "Error al registrar la gestión en lote.");
-      } else {
-        onSuccess();
-        onClose();
+        if (!result.success) {
+          setErrorMsg(result.error || "Error al registrar la gestión en lote.");
+        } else {
+          router.refresh();
+          onSuccess();
+          onClose();
+        }
+      } catch (err: unknown) {
+        setErrorMsg(
+          err instanceof Error
+            ? err.message
+            : "Error inesperado al registrar la gestión en lote."
+        );
       }
     });
   };
