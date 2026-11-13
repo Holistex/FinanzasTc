@@ -26,6 +26,7 @@ import { registrarGestionCobranzaLoteAction } from "@/actions/gestion-cobranza.a
 interface RegistrarGestionLoteModalProps {
   facturas: FacturaVenta[];
   isOpen: boolean;
+  currentUserName?: string;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -33,6 +34,7 @@ interface RegistrarGestionLoteModalProps {
 export function RegistrarGestionLoteModal({
   facturas,
   isOpen,
+  currentUserName = "Usuario Sistema",
   onClose,
   onSuccess,
 }: RegistrarGestionLoteModalProps) {
@@ -41,7 +43,7 @@ export function RegistrarGestionLoteModal({
   const [contactoNombre, setContactoNombre] = useState("");
   const [contactoTelefonoEmail, setContactoTelefonoEmail] = useState("");
   const [observaciones, setObservaciones] = useState("");
-  const [usuarioNombre, setUsuarioNombre] = useState("Cedrix Vargas");
+  const [usuarioNombre, setUsuarioNombre] = useState(currentUserName);
   const router = useRouter();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -96,7 +98,7 @@ export function RegistrarGestionLoteModal({
           observaciones: observaciones.trim(),
           contactoNombre: contactoNombre.trim() || null,
           contactoTelefonoEmail: contactoTelefonoEmail.trim() || null,
-          usuarioNombre: usuarioNombre.trim() || "Cedrix Vargas",
+          usuarioNombre: usuarioNombre.trim() || currentUserName,
         });
 
         if (!result.success) {

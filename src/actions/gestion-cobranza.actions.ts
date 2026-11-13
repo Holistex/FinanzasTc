@@ -21,15 +21,24 @@ async function getCurrentSessionUser(): Promise<{ id?: string; nombre: string }>
     const raw = cookieStore.get("tensacon_session")?.value;
     if (raw) {
       const parsed = JSON.parse(decodeURIComponent(raw));
+      const nombreGestor = String(
+        parsed.nombre_completo ||
+          parsed.nombre ||
+          parsed.name ||
+          parsed.username ||
+          parsed.usuario ||
+          parsed.email ||
+          "Usuario Sistema"
+      ).trim();
       return {
         id: parsed.id ? String(parsed.id) : undefined,
-        nombre: String(parsed.nombre || parsed.usuario || "Cedrix Vargas"),
+        nombre: nombreGestor || "Usuario Sistema",
       };
     }
   } catch {
     // fallback
   }
-  return { nombre: "Cedrix Vargas" };
+  return { nombre: "Usuario Sistema" };
 }
 
 function safeRevalidate(path: string) {
@@ -205,13 +214,13 @@ export async function getCarteraCobranzaAction(): Promise<CarteraCobranzaData> {
         const item: GestionCobranza = {
           id: String(g.id),
           factura_id: fid,
-          tipo_gestion: (String(g.tipo_gestion || "LLAMADA").toUpperCase() as TipoGestionCobranza),
+          tipo_gestion: (String(g.tipo_gestion || "LLAMADA").trim().toUpperCase() as TipoGestionCobranza),
           fecha_compromiso_pago: g.fecha_compromiso_pago ? String(g.fecha_compromiso_pago) : null,
           observaciones: String(g.observaciones || ""),
           contacto_nombre: g.contacto_nombre ? String(g.contacto_nombre) : null,
           contacto_telefono_email: g.contacto_telefono_email ? String(g.contacto_telefono_email) : null,
           usuario_id: g.usuario_id ? String(g.usuario_id) : null,
-          usuario_nombre: g.usuario_nombre ? String(g.usuario_nombre) : null,
+          usuario_nombre: g.usuario_nombre ? String(g.usuario_nombre).trim() : "Usuario Sistema",
           created_at: String(g.created_at || new Date().toISOString()),
         };
         allGestionesList.push(item);
@@ -442,7 +451,10 @@ export async function registrarGestionCobranzaAction(
 
     const sessionUser = await getCurrentSessionUser();
     const activeUserId = input.usuarioId || sessionUser.id || null;
-    const defaultUser = input.usuarioNombre?.trim() || sessionUser.nombre || "Cedrix Vargas";
+    const defaultUser =
+      sessionUser.nombre && sessionUser.nombre !== "Usuario Sistema"
+        ? sessionUser.nombre
+        : input.usuarioNombre?.trim() || "Usuario Sistema";
 
     const nowIso = new Date().toISOString();
     const cleanCompromiso = input.fechaCompromisoPago?.trim() || null;
@@ -541,7 +553,10 @@ export async function registrarGestionCobranzaLoteAction(
 
     const sessionUser = await getCurrentSessionUser();
     const activeUserId = input.usuarioId || sessionUser.id || null;
-    const activeUserName = input.usuarioNombre?.trim() || sessionUser.nombre || "Cedrix Vargas";
+    const activeUserName =
+      sessionUser.nombre && sessionUser.nombre !== "Usuario Sistema"
+        ? sessionUser.nombre
+        : input.usuarioNombre?.trim() || "Usuario Sistema";
     const nowIso = new Date().toISOString();
     const cleanCompromiso = input.fechaCompromisoPago?.trim() || null;
 

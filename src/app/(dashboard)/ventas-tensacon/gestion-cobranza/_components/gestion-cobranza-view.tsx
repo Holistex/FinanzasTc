@@ -56,9 +56,13 @@ type TabCobranza = "CARTERA" | "COBRANZAS" | "SEMANAL" | "POR_CLIENTE";
 
 interface GestionCobranzaViewProps {
   initialData: CarteraCobranzaData;
+  currentUserName?: string;
 }
 
-export function GestionCobranzaView({ initialData }: GestionCobranzaViewProps) {
+export function GestionCobranzaView({
+  initialData,
+  currentUserName = "Usuario Sistema",
+}: GestionCobranzaViewProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -776,14 +780,21 @@ export function GestionCobranzaView({ initialData }: GestionCobranzaViewProps) {
                                       <Mail className="h-2.5 w-2.5" /> CORREO
                                     </span>
                                   )}
-                                  {ultima.tipo_gestion === "WHATSAPP" && (
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
-                                      <MessageSquare className="h-2.5 w-2.5" /> WHATSAPP
+                                    {ultima.tipo_gestion === "WHATSAPP" && (
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
+                                        <MessageSquare className="h-2.5 w-2.5" /> WHATSAPP
+                                      </span>
+                                    )}
+                                    {ultima.tipo_gestion !== "LLAMADA" &&
+                                      ultima.tipo_gestion !== "CORREO" &&
+                                      ultima.tipo_gestion !== "WHATSAPP" && (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-800 border border-slate-300">
+                                          {ultima.tipo_gestion || "GESTIÓN"}
+                                        </span>
+                                      )}
+                                    <span className="text-[10px] font-mono text-slate-600">
+                                      {formatDateCL(ultima.created_at)} ({ultima.usuario_nombre || "Usuario Sistema"})
                                     </span>
-                                  )}
-                                  <span className="text-[10px] font-mono text-slate-600">
-                                    {formatDateCL(ultima.created_at)} ({ultima.usuario_nombre || "Sistema"})
-                                  </span>
                                 </div>
                                 <p
                                   className="text-[11px] text-slate-600 truncate max-w-[340px]"
@@ -856,10 +867,10 @@ export function GestionCobranzaView({ initialData }: GestionCobranzaViewProps) {
                                       <div className="flex items-center justify-between text-[11px]">
                                         <div className="flex items-center gap-2 font-medium">
                                           <span className="font-bold text-slate-800 font-mono">
-                                            [{g.tipo_gestion}]
+                                            [{g.tipo_gestion || "GESTIÓN"}]
                                           </span>
                                           <span className="text-slate-600">
-                                            por {g.usuario_nombre}
+                                            por {g.usuario_nombre || "Usuario Sistema"}
                                           </span>
                                           {g.contacto_nombre && (
                                             <span className="text-slate-600">
@@ -1159,6 +1170,7 @@ export function GestionCobranzaView({ initialData }: GestionCobranzaViewProps) {
         <RegistrarGestionModal
           factura={selectedFacturaModal}
           isOpen={Boolean(selectedFacturaModal)}
+          currentUserName={currentUserName}
           onClose={() => setSelectedFacturaModal(null)}
           onSuccess={handleRefresh}
         />
@@ -1169,6 +1181,7 @@ export function GestionCobranzaView({ initialData }: GestionCobranzaViewProps) {
         <RegistrarGestionLoteModal
           facturas={selectedFacturasList}
           isOpen={isLoteModalOpen}
+          currentUserName={currentUserName}
           onClose={() => setIsLoteModalOpen(false)}
           onSuccess={() => {
             setSelectedFacturaIds([]);

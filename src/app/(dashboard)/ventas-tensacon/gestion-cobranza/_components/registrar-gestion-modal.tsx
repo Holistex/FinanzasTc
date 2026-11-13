@@ -32,6 +32,7 @@ import { registrarGestionCobranzaAction } from "@/actions/gestion-cobranza.actio
 interface RegistrarGestionModalProps {
   factura: FacturaVenta;
   isOpen: boolean;
+  currentUserName?: string;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -39,6 +40,7 @@ interface RegistrarGestionModalProps {
 export function RegistrarGestionModal({
   factura,
   isOpen,
+  currentUserName = "Usuario Sistema",
   onClose,
   onSuccess,
 }: RegistrarGestionModalProps) {
@@ -52,7 +54,7 @@ export function RegistrarGestionModal({
   );
   const router = useRouter();
   const [observaciones, setObservaciones] = useState("");
-  const [usuarioNombre, setUsuarioNombre] = useState("Cedrix Vargas");
+  const [usuarioNombre, setUsuarioNombre] = useState(currentUserName);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -75,7 +77,7 @@ export function RegistrarGestionModal({
           observaciones: observaciones.trim(),
           contactoNombre: contactoNombre.trim() || null,
           contactoTelefonoEmail: contactoTelefonoEmail.trim() || null,
-          usuarioNombre: usuarioNombre.trim() || "Cedrix Vargas",
+          usuarioNombre: usuarioNombre.trim() || currentUserName,
         });
 
         if (!result.success) {
