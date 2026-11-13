@@ -434,7 +434,7 @@ export function UsuariosView({
           <div className="w-full overflow-x-auto">
             <table className="min-w-[850px] lg:min-w-full table-auto text-left border-collapse">
             <thead>
-              <tr className="bg-[#0F172A] text-slate-200 text-[10px] font-semibold uppercase tracking-wider border-b border-[#1E293B]">
+              <tr className="bg-slate-50 text-slate-600 text-[10px] font-bold uppercase tracking-wider border-b border-slate-200">
                 <th className="py-2.5 px-3">Nombre Completo</th>
                 <th className="py-2.5 px-3 w-[140px]">Usuario</th>
                 <th className="py-2.5 px-3 w-[170px]">

@@ -868,7 +868,7 @@ export function CartolasBancariasClient({
         <div className="overflow-x-auto">
           <table className="min-w-[850px] lg:min-w-full text-left border-collapse">
             <thead>
-              <tr className="bg-[#0B1528] text-slate-200 text-[11px] font-bold uppercase tracking-wider border-b border-[#1E293B]">
+              <tr className="bg-slate-50 text-slate-600 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200">
                 {/* Checkbox Maestro (Solo Giros / Cargos válidos) */}
                 {canManage && (
                   <th className="py-3 px-3 w-12 text-center whitespace-nowrap">
@@ -878,7 +878,7 @@ export function CartolasBancariasClient({
                       checked={allPageSelected}
                       onChange={handleToggleSelectAll}
                       disabled={selectableLineas.length === 0 || activeTab === "ABONOS"}
-                      className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-[#E05A10] focus:ring-[#E05A10] focus:ring-offset-slate-950 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="h-4 w-4 rounded border-slate-300 bg-white text-[#E05A10] focus:ring-[#E05A10] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     />
                   </th>
                 )}

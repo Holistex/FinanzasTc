@@ -569,16 +569,16 @@ export function FacturasVentasTable({
           </div>
         </div>
 
-        <div className="bg-[#0F172A] text-white border border-[#1E293B] border-l-4 border-l-[#E05A10] rounded-md px-3 py-2 shadow-sm flex items-center justify-between">
+        <div className="bg-white border border-slate-200 border-l-4 border-l-[#E05A10] rounded-md px-3 py-2 shadow-sm flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
               Deuda Total Pendiente
             </div>
-            <div className="text-sm font-bold font-mono tabular-nums text-white mt-0.5">
+            <div className="text-sm font-bold font-mono tabular-nums text-[#0F172A] mt-0.5">
               {formatCLP(response.kpis.totalSaldoNeto)}
             </div>
           </div>
-          <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-[#E05A10]/20 text-orange-300 border border-[#E05A10]/40">
+          <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-orange-50 text-[#E05A10] border border-orange-200">
             Por Cobrar
           </span>
         </div>
@@ -799,7 +799,7 @@ export function FacturasVentasTable({
             <div className="w-full overflow-x-auto">
               <table className="min-w-[820px] lg:min-w-full table-auto text-left border-collapse">
                 <thead>
-                  <tr className="bg-[#0F172A] text-slate-200 text-[10px] font-semibold uppercase tracking-wider border-b border-[#1E293B]">
+                  <tr className="bg-slate-50 text-slate-600 text-[10px] font-bold uppercase tracking-wider border-b border-slate-200">
                     <th className="py-2.5 px-3 w-[135px]">RUT Cliente</th>
                     <th className="py-2.5 px-3">Razón Social</th>
                     <th className="py-2.5 px-3 text-center w-[90px]">Docs.</th>
@@ -1012,7 +1012,7 @@ export function FacturasVentasTable({
                 </tbody>
                 {resumenClientes.length > 0 && (
                   <tfoot>
-                    <tr className="bg-[#0F172A] text-white text-xs font-bold border-t-2 border-[#E05A10]">
+                    <tr className="bg-slate-100 text-slate-900 text-xs font-bold border-t-2 border-slate-300">
                       <td colSpan={2} className="py-2.5 px-3 uppercase tracking-wider">
                         TOTAL GENERAL VISTA FILTRADA ({resumenClientes.length} clientes)
                       </td>
@@ -1022,10 +1022,10 @@ export function FacturasVentasTable({
                       <td className="py-2.5 px-3 text-right font-mono">
                         {formatCLP(resumenTotales.totalEmitido)}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-emerald-400">
+                      <td className="py-2.5 px-3 text-right font-mono text-emerald-700">
                         {formatCLP(resumenTotales.totalPagado)}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-orange-400">
+                      <td className="py-2.5 px-3 text-right font-mono text-[#E05A10]">
                         {formatCLP(resumenTotales.saldoPendiente)}
                       </td>
                     </tr>
@@ -1210,7 +1210,7 @@ export function FacturasVentasTable({
         <div className="w-full overflow-x-auto">
           <table className="min-w-[850px] lg:min-w-full table-auto text-left border-collapse">
           <thead>
-            <tr className="bg-[#0F172A] text-slate-200 text-[10px] font-semibold uppercase tracking-wider border-b border-[#1E293B]">
+            <tr className="bg-slate-50 text-slate-600 text-[10px] font-bold uppercase tracking-wider border-b border-slate-200">
               <th className="py-2 px-3 w-[135px]">Folio / Documento</th>
               <th className="py-2 px-3 w-[110px]">RUT Cliente</th>
               <th className="py-2 px-3">Razón Social</th>

@@ -255,7 +255,7 @@ export function TiposPagoTab({ initialTiposPago }: TiposPagoTabProps) {
         <div className="overflow-x-auto">
           <table className="min-w-[650px] lg:min-w-full text-left border-collapse">
             <thead>
-              <tr className="bg-[#0B1528] text-slate-200 text-[11px] font-bold uppercase tracking-wider border-b border-[#1E293B]">
+              <tr className="bg-slate-50 text-slate-600 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200">
                 <th className="py-3 px-4">NOMBRE TIPO DE PAGO</th>
                 <th className="py-3 px-4">DESCRIPCIÓN / OBSERVACIÓN</th>
                 <th className="py-3 px-4 w-36 text-center">CREACIÓN</th>

@@ -587,7 +587,7 @@ export function PagosTesoreriaClient({
         <div className="overflow-x-auto">
           <table className="min-w-[850px] lg:min-w-full text-left border-collapse">
             <thead>
-              <tr className="bg-[#0B1528] text-slate-200 text-[11px] font-bold uppercase tracking-wider border-b border-[#1E293B]">
+              <tr className="bg-slate-50 text-slate-600 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200">
                 {/* Columna 1: Clasificación (Fijada a la izquierda con ancho cómodo) */}
                 <th className="py-3 px-4 whitespace-nowrap min-w-[220px]">
                   1. CLASIFICACIÓN
@@ -707,10 +707,10 @@ export function PagosTesoreriaClient({
               )}
             </tbody>
 
-            {/* C. Fila de Totales Semanales (tfoot en azul marino corporativo) */}
+            {/* C. Fila de Totales Semanales */}
             <tfoot>
-              <tr className="bg-[#0B1528] text-white font-bold text-xs border-t-2 border-[#1E293B]">
-                <td className="py-3.5 px-4 whitespace-nowrap uppercase tracking-wider font-extrabold text-slate-100">
+              <tr className="bg-slate-100 text-slate-900 font-bold text-xs border-t-2 border-slate-300">
+                <td className="py-3.5 px-4 whitespace-nowrap uppercase tracking-wider font-extrabold text-slate-800">
                   TOTAL EGRESOS SEMANALES
                 </td>
 
@@ -725,8 +725,8 @@ export function PagosTesoreriaClient({
                       className={cn(
                         "py-3.5 px-3.5 text-right whitespace-nowrap font-mono font-black transition-colors",
                         isHighlighted
-                          ? "bg-[#c84e0c] text-white font-black border-x-2 border-orange-400"
-                          : "text-white"
+                          ? "bg-orange-50 text-[#E05A10] font-black border-x-2 border-orange-300"
+                          : "text-slate-900"
                       )}
                     >
                       {totalSem > 0 ? (
