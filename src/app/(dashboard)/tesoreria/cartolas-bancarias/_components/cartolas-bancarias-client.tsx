@@ -46,7 +46,9 @@ interface CartolasBancariasClientProps {
   isAdmin?: boolean;
 }
 
-type ActiveTab = "PENDIENTES" | "CLASIFICADOS";
+type ActiveTab = "PENDIENTES" | "CLASIFICADOS" | "ABONOS";
+
+const ITEMS_PER_PAGE = 30;
 
 export function CartolasBancariasClient({
   initialData,
@@ -136,20 +138,63 @@ export function CartolasBancariasClient({
     searchTerm,
   ]);
 
-  // Contadores en tiempo real para las dos pestañas
+  // Contadores en tiempo real para las tres pestañas (Giros vs Abonos)
   const lineasPorClasificar = useMemo(
-    () => baseFilteredLineas.filter((l) => !l.tipo_pago_id),
+    () =>
+      baseFilteredLineas.filter(
+        (l) => Number(l.giro || 0) > 0 && !l.tipo_pago_id
+      ),
     [baseFilteredLineas]
   );
 
   const movimientosClasificados = useMemo(
-    () => baseFilteredLineas.filter((l) => Boolean(l.tipo_pago_id)),
+    () =>
+      baseFilteredLineas.filter(
+        (l) => Number(l.giro || 0) > 0 && Boolean(l.tipo_pago_id)
+      ),
+    [baseFilteredLineas]
+  );
+
+  const abonosLineas = useMemo(
+    () =>
+      baseFilteredLineas.filter(
+        (l) => Number(l.abono || 0) > 0 && Number(l.giro || 0) === 0
+      ),
     [baseFilteredLineas]
   );
 
   // Líneas visibles según la pestaña activa
   const filteredLineas =
-    activeTab === "PENDIENTES" ? lineasPorClasificar : movimientosClasificados;
+    activeTab === "PENDIENTES"
+      ? lineasPorClasificar
+      : activeTab === "CLASIFICADOS"
+      ? movimientosClasificados
+      : abonosLineas;
+
+  // Paginación (bloques de 30 registros)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    activeTab,
+    searchTerm,
+    selectedBanco,
+    selectedNumeroCartola,
+    fechaDesde,
+    fechaHasta,
+  ]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredLineas.length / ITEMS_PER_PAGE)
+  );
+  const safePage = Math.min(currentPage, totalPages);
+
+  const paginatedLineas = useMemo(() => {
+    const startIndex = (safePage - 1) * ITEMS_PER_PAGE;
+    return filteredLineas.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredLineas, safePage]);
 
   // KPIs ejecutivos reactivos
   const kpis = useMemo(() => {
@@ -168,12 +213,14 @@ export function CartolasBancariasClient({
       totalAbonos,
       sinClasificar: lineasPorClasificar.length,
       clasificados: movimientosClasificados.length,
+      abonosCount: abonosLineas.length,
     };
   }, [
     filteredLineas,
     cartolas.length,
     lineasPorClasificar.length,
     movimientosClasificados.length,
+    abonosLineas.length,
   ]);
 
   const handleRefresh = () => {
@@ -309,31 +356,38 @@ export function CartolasBancariasClient({
   const [bulkTipoPagoId, setBulkTipoPagoId] = useState<string>("");
   const [isAssigningBulk, setIsAssigningBulk] = useState<boolean>(false);
 
-  // Solo los giros / cargos válidos son seleccionables para clasificar como pagos
+  // Solo los giros / cargos válidos de la página actual son seleccionables para clasificar como pagos
   const selectableLineas = useMemo(
-    () => filteredLineas.filter((l) => Number(l.giro || 0) > 0),
-    [filteredLineas]
+    () =>
+      activeTab === "ABONOS"
+        ? []
+        : paginatedLineas.filter((l) => Number(l.giro || 0) > 0),
+    [paginatedLineas, activeTab]
   );
+
+  const allPageSelected =
+    selectableLineas.length > 0 &&
+    selectableLineas.every((l) => selectedRowIds.includes(l.id));
 
   // Toggle individual de fila (solo Giros / Cargos)
   const handleToggleRow = (id: string) => {
-    const linea = filteredLineas.find((l) => l.id === id);
-    if (!linea || Number(linea.giro || 0) <= 0) return;
+    const linea = paginatedLineas.find((l) => l.id === id);
+    if (!linea || Number(linea.giro || 0) <= 0 || activeTab === "ABONOS") return;
 
     setSelectedRowIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
 
-  // Toggle seleccionar todo / deseleccionar todo sobre los Giros válidos de la pestaña activa
+  // Toggle seleccionar todo / deseleccionar todo sobre los Giros válidos de la página actual
   const handleToggleSelectAll = () => {
-    if (
-      selectableLineas.length > 0 &&
-      selectedRowIds.length === selectableLineas.length
-    ) {
-      setSelectedRowIds([]);
+    if (selectableLineas.length === 0) return;
+    const pageIds = selectableLineas.map((l) => l.id);
+    if (allPageSelected) {
+      const pageIdSet = new Set(pageIds);
+      setSelectedRowIds((prev) => prev.filter((id) => !pageIdSet.has(id)));
     } else {
-      setSelectedRowIds(selectableLineas.map((l) => l.id));
+      setSelectedRowIds((prev) => Array.from(new Set([...prev, ...pageIds])));
     }
   };
 
@@ -500,39 +554,39 @@ export function CartolasBancariasClient({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <Link
-            href="/tesoreria/pagos"
-            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-semibold text-xs px-3.5 py-2 rounded-lg flex items-center gap-1.5 shadow-xs transition-colors"
-          >
-            <Banknote className="h-3.5 w-3.5 text-emerald-600" />
-            Consolidado de Pagos
-          </Link>
+        {isAdmin && (
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Link
+              href="/tesoreria/pagos"
+              className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-semibold text-xs px-3.5 py-2 rounded-lg flex items-center gap-1.5 shadow-xs transition-colors"
+            >
+              <Banknote className="h-3.5 w-3.5 text-emerald-600" />
+              Consolidado de Pagos
+            </Link>
 
-          <Link
-            href="/configuracion/colaboradores"
-            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-semibold text-xs px-3.5 py-2 rounded-lg flex items-center gap-1.5 shadow-xs transition-colors"
-          >
-            <Tags className="h-3.5 w-3.5 text-[#E05A10]" />
-            Catálogo Tipos de Pago
-          </Link>
+            <Link
+              href="/configuracion/colaboradores"
+              className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-semibold text-xs px-3.5 py-2 rounded-lg flex items-center gap-1.5 shadow-xs transition-colors"
+            >
+              <Tags className="h-3.5 w-3.5 text-[#E05A10]" />
+              Catálogo Tipos de Pago
+            </Link>
 
-          <button
-            type="button"
-            onClick={handleVaciarTesoreria}
-            disabled={isWiping}
-            className="bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 font-semibold text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-50"
-            title="Vaciar todos los movimientos bancarios y reiniciar a cero"
-          >
-            {isWiping ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-rose-600" />
-            ) : (
-              <Trash2 className="h-3.5 w-3.5 text-rose-600" />
-            )}
-            Vaciar Datos
-          </button>
+            <button
+              type="button"
+              onClick={handleVaciarTesoreria}
+              disabled={isWiping}
+              className="bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 font-semibold text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-50"
+              title="Vaciar todos los movimientos bancarios y reiniciar a cero"
+            >
+              {isWiping ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-rose-600" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+              )}
+              Vaciar Datos
+            </button>
 
-          {isAdmin && (
             <button
               type="button"
               onClick={openImportModal}
@@ -541,8 +595,8 @@ export function CartolasBancariasClient({
               <FileSpreadsheet className="h-4 w-4" />
               Importar Saldos Bancarios
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* 2. TARJETAS KPI EJECUTIVAS */}
@@ -616,7 +670,7 @@ export function CartolasBancariasClient({
 
       {/* 3. PESTAÑAS DE NAVEGACIÓN SUPERIOR (TABS CON CONTADORES EN TIEMPO REAL) */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
-        <div className="inline-flex items-center gap-1.5 bg-white p-1.5 rounded-xl border border-slate-200 shadow-xs">
+        <div className="inline-flex items-center gap-1.5 bg-white p-1.5 rounded-xl border border-slate-200 shadow-xs overflow-x-auto max-w-full">
           <button
             type="button"
             onClick={() => {
@@ -624,7 +678,7 @@ export function CartolasBancariasClient({
               setSelectedRowIds([]);
             }}
             className={cn(
-              "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all",
+              "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
               activeTab === "PENDIENTES"
                 ? "bg-[#E05A10] text-white shadow-xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
@@ -651,7 +705,7 @@ export function CartolasBancariasClient({
               setSelectedRowIds([]);
             }}
             className={cn(
-              "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all",
+              "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
               activeTab === "CLASIFICADOS"
                 ? "bg-[#0B1528] text-white shadow-xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
@@ -670,6 +724,33 @@ export function CartolasBancariasClient({
               {movimientosClasificados.length}
             </span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("ABONOS");
+              setSelectedRowIds([]);
+            }}
+            className={cn(
+              "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
+              activeTab === "ABONOS"
+                ? "bg-emerald-600 text-white shadow-xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            )}
+          >
+            <ArrowUpRight className="h-3.5 w-3.5" />
+            <span>Abonos</span>
+            <span
+              className={cn(
+                "px-2 py-0.5 rounded-full text-[11px] font-mono font-extrabold",
+                activeTab === "ABONOS"
+                  ? "bg-white/20 text-white"
+                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+              )}
+            >
+              {abonosLineas.length}
+            </span>
+          </button>
         </div>
 
         <div className="text-xs text-slate-500">
@@ -678,10 +759,14 @@ export function CartolasBancariasClient({
               Al asignar un <strong>Tipo de Movimiento</strong>, la línea se guarda y pasa automáticamente a{" "}
               <strong className="text-slate-800">Movimientos Clasificados</strong>.
             </span>
-          ) : (
+          ) : activeTab === "CLASIFICADOS" ? (
             <span>
               Puedes pulsar <strong className="text-rose-600">↺ Reversar</strong> en cualquier fila para devolverla a{" "}
               <strong className="text-slate-800">Líneas por clasificar</strong>.
+            </span>
+          ) : (
+            <span>
+              Ingresos y depósitos bancarios separados automáticamente para control de abonos.
             </span>
           )}
         </div>
@@ -839,13 +924,10 @@ export function CartolasBancariasClient({
                 <th className="py-3 px-3 w-12 text-center whitespace-nowrap">
                   <input
                     type="checkbox"
-                    aria-label="Seleccionar todos los giros"
-                    checked={
-                      selectableLineas.length > 0 &&
-                      selectedRowIds.length === selectableLineas.length
-                    }
+                    aria-label="Seleccionar todos los giros de esta página"
+                    checked={allPageSelected}
                     onChange={handleToggleSelectAll}
-                    disabled={selectableLineas.length === 0}
+                    disabled={selectableLineas.length === 0 || activeTab === "ABONOS"}
                     className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-[#E05A10] focus:ring-[#E05A10] focus:ring-offset-slate-950 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   />
                 </th>
@@ -867,7 +949,7 @@ export function CartolasBancariasClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200/80 text-xs bg-white">
-              {filteredLineas.length === 0 ? (
+              {paginatedLineas.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-14 text-center text-slate-500">
                     <div className="flex flex-col items-center justify-center gap-2">
@@ -877,20 +959,24 @@ export function CartolasBancariasClient({
                           ? "Aún no se han importado saldos bancarios"
                           : activeTab === "PENDIENTES"
                           ? "¡Excelente! No hay líneas pendientes por clasificar con estos filtros"
-                          : "No hay movimientos clasificados para los filtros seleccionados"}
+                          : activeTab === "CLASIFICADOS"
+                          ? "No hay movimientos clasificados para los filtros seleccionados"
+                          : "No hay depósitos o abonos registrados para los filtros seleccionados"}
                       </p>
                       <p className="text-xs text-slate-400 max-w-md">
                         {lineas.length === 0
                           ? "Haz clic en 'Importar Saldos Bancarios' para cargar tus archivos Excel (.xlsx / .xls) de Banco Itaú o Banco Santander."
                           : activeTab === "PENDIENTES"
                           ? "Cambia a la pestaña 'Movimientos Clasificados' para revisar o reversar las líneas ya asignadas."
-                          : "Clasifica líneas desde la pestaña 'Líneas por clasificar' para visualizarlas aquí."}
+                          : activeTab === "CLASIFICADOS"
+                          ? "Clasifica líneas desde la pestaña 'Líneas por clasificar' para visualizarlas aquí."
+                          : "Los depósitos y abonos importados en cartolas aparecerán automáticamente en esta pestaña."}
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredLineas.map((linea) => {
+                paginatedLineas.map((linea) => {
                   const isSavingThis = savingLineaId === linea.id;
                   const esGiroValido = Number(linea.giro || 0) > 0;
                   const isSelected = esGiroValido && selectedRowIds.includes(linea.id);
@@ -1021,7 +1107,7 @@ export function CartolasBancariasClient({
                               Depósito / Ingreso (Bloqueado)
                             </span>
                           )
-                        ) : (
+                        ) : activeTab === "CLASIFICADOS" ? (
                           <div className="flex items-center justify-between gap-2">
                             <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] font-bold text-emerald-800">
                               <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
@@ -1040,6 +1126,11 @@ export function CartolasBancariasClient({
                               {isSavingThis ? "..." : "↺ Reversar"}
                             </button>
                           </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                            <ArrowUpRight className="h-3 w-3 text-emerald-600 shrink-0" />
+                            Depósito / Abono
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -1050,32 +1141,83 @@ export function CartolasBancariasClient({
           </table>
         </div>
 
-        {/* Footer Resumen */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-slate-200 bg-slate-50/80 px-4 py-3 text-xs text-slate-600">
-          <div>
-            Mostrando{" "}
-            <span className="font-bold text-slate-900">
-              {filteredLineas.length}
-            </span>{" "}
-            movimientos en{" "}
-            <span className="font-bold text-slate-900">
-              {activeTab === "PENDIENTES"
-                ? "Líneas por clasificar"
-                : "Movimientos Clasificados"}
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-4">
-            <div>
-              Total Giros:{" "}
-              <span className="font-mono font-bold text-rose-600">
-                -{formatCLP(kpis.totalGiros)}
-              </span>
+        {/* Paginación y Footer Resumen */}
+        <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/80 px-4 py-3 text-xs text-slate-600">
+          {filteredLineas.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2.5 border-b border-slate-200/80">
+              <div>
+                Mostrando{" "}
+                <span className="font-bold text-slate-900">
+                  {(safePage - 1) * ITEMS_PER_PAGE + 1}
+                </span>
+                –
+                <span className="font-bold text-slate-900">
+                  {Math.min(safePage * ITEMS_PER_PAGE, filteredLineas.length)}
+                </span>{" "}
+                de{" "}
+                <span className="font-bold text-slate-900">
+                  {filteredLineas.length}
+                </span>{" "}
+                registros (Página{" "}
+                <span className="font-bold text-slate-900">{safePage}</span> de{" "}
+                <span className="font-bold text-slate-900">{totalPages}</span>)
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  ← Anterior
+                </button>
+                <span className="px-2 py-1 font-mono font-bold text-slate-700">
+                  {safePage} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  }
+                  disabled={safePage >= totalPages}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Siguiente →
+                </button>
+              </div>
             </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
-              Total Abonos:{" "}
-              <span className="font-mono font-bold text-emerald-600">
-                +{formatCLP(kpis.totalAbonos)}
+              Total en pestaña{" "}
+              <span className="font-bold text-slate-900">
+                {activeTab === "PENDIENTES"
+                  ? "Líneas por clasificar"
+                  : activeTab === "CLASIFICADOS"
+                  ? "Movimientos Clasificados"
+                  : "Abonos"}
               </span>
+              :{" "}
+              <span className="font-bold text-slate-900">
+                {filteredLineas.length}
+              </span>{" "}
+              movimientos
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <div>
+                Total Giros:{" "}
+                <span className="font-mono font-bold text-rose-600">
+                  -{formatCLP(kpis.totalGiros)}
+                </span>
+              </div>
+              <div>
+                Total Abonos:{" "}
+                <span className="font-mono font-bold text-emerald-600">
+                  +{formatCLP(kpis.totalAbonos)}
+                </span>
+              </div>
             </div>
           </div>
         </div>

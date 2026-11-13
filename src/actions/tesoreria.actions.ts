@@ -1468,6 +1468,14 @@ export async function vaciarTesoreriaAction(): Promise<{
   success: boolean;
   error?: string;
 }> {
+  const auth = await assertIsAdmin();
+  if (auth.error) {
+    return {
+      success: false,
+      error: auth.error,
+    };
+  }
+
   try {
     // 1. Vaciar Base de Datos Local
     const db = readLocalDb();
