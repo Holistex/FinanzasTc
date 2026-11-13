@@ -558,7 +558,6 @@ export async function asignarTipoPagoLineaCartolaAction(
         .update({
           tipo_pago_id:
             cleanTipoId && !cleanTipoId.startsWith("mtp-") ? cleanTipoId : null,
-          updated_at: new Date().toISOString(),
         })
         .eq("id", lineaId);
 
@@ -635,7 +634,6 @@ export async function asignarTipoMovimientoMasivoAction(
           .from("cartolas_lineas")
           .update({
             tipo_pago_id: finalSupaTipoId,
-            updated_at: new Date().toISOString(),
           })
           .in("id", validSupaIds);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useTransition } from "react";
+import React, { useState, useMemo, useRef, useTransition, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -185,6 +185,12 @@ export function CartolasBancariasClient({
     });
   };
 
+  useEffect(() => {
+    setLineas(initialData.lineas);
+    setCartolas(initialData.cartolas);
+    setTiposPago(initialData.tiposPago);
+  }, [initialData]);
+
   const handleResetFilters = () => {
     setSelectedRowIds([]);
     setSelectedBanco("TODOS");
@@ -205,6 +211,9 @@ export function CartolasBancariasClient({
   // Clasificar línea (Traslada automáticamente de "Líneas por clasificar" a "Movimientos Clasificados")
   const handleClasificarLinea = async (lineaId: string, nuevoTipoId: string) => {
     if (!nuevoTipoId) return;
+    const targetLinea = lineas.find((l) => l.id === lineaId);
+    if (!targetLinea || Number(targetLinea.giro || 0) <= 0) return;
+
     const tipoObj = tiposPago.find((t) => t.id === nuevoTipoId) || null;
 
     setSavingLineaId(lineaId);
@@ -218,7 +227,18 @@ export function CartolasBancariasClient({
     );
 
     try {
-      await clasificarLineaCartolaAction(lineaId, nuevoTipoId);
+      const res = await clasificarLineaCartolaAction(lineaId, nuevoTipoId);
+      if (!res.success) {
+        alert(res.error || "Error al clasificar el movimiento.");
+        const fresh = await getCartolasBancariasAction();
+        setLineas(fresh.lineas);
+      } else {
+        router.refresh();
+      }
+    } catch (err) {
+      alert("Error: " + (err instanceof Error ? err.message : String(err)));
+      const fresh = await getCartolasBancariasAction();
+      setLineas(fresh.lineas);
     } finally {
       setSavingLineaId(null);
     }
@@ -241,7 +261,18 @@ export function CartolasBancariasClient({
     );
 
     try {
-      await reversarLineaCartolaAction(linea.id);
+      const res = await reversarLineaCartolaAction(linea.id);
+      if (!res.success) {
+        alert(res.error || "Error al reversar la clasificación.");
+        const fresh = await getCartolasBancariasAction();
+        setLineas(fresh.lineas);
+      } else {
+        router.refresh();
+      }
+    } catch (err) {
+      alert("Error: " + (err instanceof Error ? err.message : String(err)));
+      const fresh = await getCartolasBancariasAction();
+      setLineas(fresh.lineas);
     } finally {
       setSavingLineaId(null);
     }
@@ -254,19 +285,31 @@ export function CartolasBancariasClient({
   const [bulkTipoPagoId, setBulkTipoPagoId] = useState<string>("");
   const [isAssigningBulk, setIsAssigningBulk] = useState<boolean>(false);
 
-  // Toggle individual de fila
+  // Solo los giros / cargos válidos son seleccionables para clasificar como pagos
+  const selectableLineas = useMemo(
+    () => filteredLineas.filter((l) => Number(l.giro || 0) > 0),
+    [filteredLineas]
+  );
+
+  // Toggle individual de fila (solo Giros / Cargos)
   const handleToggleRow = (id: string) => {
+    const linea = filteredLineas.find((l) => l.id === id);
+    if (!linea || Number(linea.giro || 0) <= 0) return;
+
     setSelectedRowIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
 
-  // Toggle seleccionar todo / deseleccionar todo sobre las líneas de la pestaña activa
+  // Toggle seleccionar todo / deseleccionar todo sobre los Giros válidos de la pestaña activa
   const handleToggleSelectAll = () => {
-    if (selectedRowIds.length === filteredLineas.length) {
+    if (
+      selectableLineas.length > 0 &&
+      selectedRowIds.length === selectableLineas.length
+    ) {
       setSelectedRowIds([]);
     } else {
-      setSelectedRowIds(filteredLineas.map((l) => l.id));
+      setSelectedRowIds(selectableLineas.map((l) => l.id));
     }
   };
 
@@ -307,6 +350,8 @@ export function CartolasBancariasClient({
         // Si falló, refrescar datos reales
         const fresh = await getCartolasBancariasAction();
         setLineas(fresh.lineas);
+      } else {
+        router.refresh();
       }
     } catch (err) {
       alert("Error: " + (err instanceof Error ? err.message : String(err)));
@@ -740,18 +785,18 @@ export function CartolasBancariasClient({
           <table className="min-w-[850px] lg:min-w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#0B1528] text-slate-200 text-[11px] font-bold uppercase tracking-wider border-b border-[#1E293B]">
-                {/* Checkbox Maestro (Solo en PENDIENTES o siempre activo) */}
+                {/* Checkbox Maestro (Solo Giros / Cargos válidos) */}
                 <th className="py-3 px-3 w-12 text-center whitespace-nowrap">
                   <input
                     type="checkbox"
-                    aria-label="Seleccionar todos los movimientos"
+                    aria-label="Seleccionar todos los giros"
                     checked={
-                      filteredLineas.length > 0 &&
-                      selectedRowIds.length === filteredLineas.length
+                      selectableLineas.length > 0 &&
+                      selectedRowIds.length === selectableLineas.length
                     }
                     onChange={handleToggleSelectAll}
-                    disabled={filteredLineas.length === 0}
-                    className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-[#E05A10] focus:ring-[#E05A10] focus:ring-offset-slate-950 cursor-pointer"
+                    disabled={selectableLineas.length === 0}
+                    className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-[#E05A10] focus:ring-[#E05A10] focus:ring-offset-slate-950 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   />
                 </th>
                 <th className="py-3 px-3.5 whitespace-nowrap">1. BANCO</th>
@@ -797,7 +842,8 @@ export function CartolasBancariasClient({
               ) : (
                 filteredLineas.map((linea) => {
                   const isSavingThis = savingLineaId === linea.id;
-                  const isSelected = selectedRowIds.includes(linea.id);
+                  const esGiroValido = Number(linea.giro || 0) > 0;
+                  const isSelected = esGiroValido && selectedRowIds.includes(linea.id);
                   const tipoAsignado =
                     linea.tipo_pago ||
                     tiposPago.find((t) => t.id === linea.tipo_pago_id) ||
@@ -813,14 +859,20 @@ export function CartolasBancariasClient({
                           : "hover:bg-slate-50/80"
                       )}
                     >
-                      {/* Checkbox Individual */}
+                      {/* Checkbox Individual (Solo Giros / Cargos válidos) */}
                       <td className="py-2.5 px-3 w-12 text-center whitespace-nowrap">
                         <input
                           type="checkbox"
                           aria-label={`Seleccionar movimiento ${linea.descripcion}`}
                           checked={isSelected}
+                          disabled={!esGiroValido}
                           onChange={() => handleToggleRow(linea.id)}
-                          className="h-4 w-4 rounded border-slate-300 text-[#E05A10] focus:ring-[#E05A10] cursor-pointer"
+                          title={
+                            esGiroValido
+                              ? "Seleccionar giro para clasificación masiva"
+                              : "Los depósitos / abonos no se clasifican como pagos"
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-[#E05A10] focus:ring-[#E05A10] cursor-pointer disabled:opacity-35 disabled:cursor-not-allowed"
                         />
                       </td>
 
@@ -890,26 +942,35 @@ export function CartolasBancariasClient({
                       {/* 9. TIPO DE MOVIMIENTO / ACCIÓN DE REVERSA */}
                       <td className="py-2 px-4 whitespace-nowrap">
                         {activeTab === "PENDIENTES" ? (
-                          <div className="relative flex items-center gap-1.5">
-                            <select
-                              value={linea.tipo_pago_id || ""}
-                              onChange={(e) =>
-                                handleClasificarLinea(linea.id, e.target.value)
-                              }
-                              disabled={isSavingThis}
-                              className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:border-[#E05A10] transition-colors focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20"
+                          esGiroValido ? (
+                            <div className="relative flex items-center gap-1.5">
+                              <select
+                                value={linea.tipo_pago_id || ""}
+                                onChange={(e) =>
+                                  handleClasificarLinea(linea.id, e.target.value)
+                                }
+                                disabled={isSavingThis}
+                                className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 hover:border-[#E05A10] transition-colors focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20"
+                              >
+                                <option value="">Seleccionar tipo...</option>
+                                {tiposPagoActivos.map((tp) => (
+                                  <option key={tp.id} value={tp.id}>
+                                    {tp.nombre}
+                                  </option>
+                                ))}
+                              </select>
+                              {isSavingThis && (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-[#E05A10] shrink-0" />
+                              )}
+                            </div>
+                          ) : (
+                            <span
+                              className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 border border-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-500 cursor-not-allowed"
+                              title="Los depósitos o abonos no se clasifican como pagos"
                             >
-                              <option value="">Seleccionar tipo...</option>
-                              {tiposPagoActivos.map((tp) => (
-                                <option key={tp.id} value={tp.id}>
-                                  {tp.nombre}
-                                </option>
-                              ))}
-                            </select>
-                            {isSavingThis && (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#E05A10] shrink-0" />
-                            )}
-                          </div>
+                              Depósito / Ingreso (Bloqueado)
+                            </span>
+                          )
                         ) : (
                           <div className="flex items-center justify-between gap-2">
                             <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-[11px] font-bold text-emerald-800">

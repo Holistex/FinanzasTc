@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useTransition } from "react";
+import React, { useState, useMemo, useTransition, useEffect } from "react";
 import {
   Calendar,
   Clock,
@@ -73,7 +73,8 @@ function normalizarFechaISO(raw: unknown): string {
   return str.slice(0, 10);
 }
 
-// Genera las semanas (Lunes a Domingo) que intersecan o componen un mes dado
+// Genera las semanas (Viernes a Jueves) que intersecan o componen un mes dado
+// Ej: Noviembre 2026 -> 30/10 al 05/11, 06/11 al 12/11, 13/11 al 19/11...
 function calcularSemanasDelMes(year: number, month: number): SemanaPeriodo[] {
   const semanas: SemanaPeriodo[] = [];
 
@@ -82,17 +83,17 @@ function calcularSemanasDelMes(year: number, month: number): SemanaPeriodo[] {
   // Último día del mes
   const ultimoDia = new Date(Date.UTC(year, month, 0));
 
-  // Ajustar al lunes de la semana que contiene el primer día del mes
-  // getUTCDay(): 0 es domingo, 1 lunes, ..., 6 sábado
-  const diaSemanaPrimerDia = primerDia.getUTCDay() || 7;
-  const cursorLunes = new Date(primerDia.getTime());
-  cursorLunes.setUTCDate(primerDia.getUTCDate() - (diaSemanaPrimerDia - 1));
+  // Ajustar al viernes de la semana que contiene el primer día del mes
+  // getUTCDay(): 0=domingo, 1=lunes, ..., 5=viernes, 6=sábado
+  const diasDesdeViernes = (primerDia.getUTCDay() - 5 + 7) % 7;
+  const cursorViernes = new Date(primerDia.getTime());
+  cursorViernes.setUTCDate(primerDia.getUTCDate() - diasDesdeViernes);
 
   let index = 1;
-  while (cursorLunes <= ultimoDia) {
-    const inicioSemana = new Date(cursorLunes.getTime());
-    const finSemana = new Date(cursorLunes.getTime());
-    finSemana.setUTCDate(cursorLunes.getUTCDate() + 6);
+  while (cursorViernes <= ultimoDia) {
+    const inicioSemana = new Date(cursorViernes.getTime());
+    const finSemana = new Date(cursorViernes.getTime());
+    finSemana.setUTCDate(cursorViernes.getUTCDate() + 6);
 
     const yInicio = inicioSemana.getUTCFullYear();
     const mesInicio = String(inicioSemana.getUTCMonth() + 1).padStart(2, "0");
@@ -115,7 +116,7 @@ function calcularSemanasDelMes(year: number, month: number): SemanaPeriodo[] {
 
     index++;
     // Avanzar 7 días estrictos
-    cursorLunes.setUTCDate(cursorLunes.getUTCDate() + 7);
+    cursorViernes.setUTCDate(cursorViernes.getUTCDate() + 7);
   }
 
   return semanas;
@@ -129,6 +130,11 @@ export function PagosTesoreriaClient({
     initialData.tiposPago
   );
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    setLineas(initialData.lineas);
+    setTiposPago(initialData.tiposPago);
+  }, [initialData]);
 
   // Filtros Superiores
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
