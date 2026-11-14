@@ -778,6 +778,7 @@ export async function cambiarEstadoCompraAction(input: {
       payload.fecha_vencimiento_cheque = null;
       payload.banco_emisor = null;
       payload.colaborador_id = input.colaboradorId || null;
+      payload.pagado_por = auth.session?.nombre || auth.session?.usuario || "Sistema";
       payload.on_proyecto = input.onProyecto || null;
       payload.observacion_tc = input.observacionTc?.trim() || null;
       payload.monto_saldo = 0;
@@ -894,6 +895,7 @@ export async function cambiarEstadoCompraAction(input: {
           delete safePayload.on_proyecto;
           delete safePayload.observacion_tc;
           delete safePayload.deuda_proveedor;
+          delete safePayload.pagado_por;
           let { error: err2 } = await supabase
             .from("facturas_compras")
             .update(safePayload)
@@ -965,11 +967,16 @@ export async function cambiarEstadoCompraAction(input: {
       const pagoTcId = `pago-tc-${fac.id}`;
 
       if (input.estado === "COMPRA_TC") {
+        const nombreUsuario =
+          auth.session?.nombre || auth.session?.usuario || "Sistema";
+        const usuarioId = auth.session?.id || null;
         const colab = db.mantenedor_colaboradores.find((c) => c.id === input.colaboradorId);
         const colabLabel = colab ? `${colab.nombre} (${colab.rut})` : `ID: ${input.colaboradorId}`;
         const obsParts = [`Compra TC — Colaborador: ${colabLabel}`];
         if (input.onProyecto) obsParts.push(`ON ${input.onProyecto}`);
         if (input.observacionTc?.trim()) obsParts.push(input.observacionTc.trim());
+
+        (db.facturas_compras[idx] as unknown as Record<string, unknown>).pagado_por = nombreUsuario;
 
         const nuevoPagoTc: PagoCompraHistorico = {
           id: pagoTcId,
@@ -983,6 +990,9 @@ export async function cambiarEstadoCompraAction(input: {
           modalidad_pago: "COMPRA_TC",
           comprobante_ref: `TC-${fac.folio}`,
           observacion: obsParts.join(" · "),
+          usuario_id: usuarioId,
+          usuario_nombre: nombreUsuario,
+          pagado_por: nombreUsuario,
           created_at: new Date().toISOString(),
         };
 
@@ -1712,6 +1722,9 @@ export async function registrarPagoFacturaCompraAction(
     const nuevoSaldo = Math.max(0, Math.round(saldoActual - montoPago));
     const estaSaldada = nuevoSaldo === 0;
     const nowIso = new Date().toISOString();
+    const nombreUsuario =
+      auth.session?.nombre || auth.session?.usuario || "Sistema";
+    const usuarioId = auth.session?.id || null;
 
     // Glosa compuesta de observación
     const compParts = [
@@ -1733,6 +1746,9 @@ export async function registrarPagoFacturaCompraAction(
       fecha_real_pago: fechaPago,
       observacion: glosaFinal,
       comprobante_ref: numeroComprobante?.trim() || `PAGO-${targetFactura.folio}`,
+      usuario_id: usuarioId,
+      usuario_nombre: nombreUsuario,
+      pagado_por: nombreUsuario,
       created_at: nowIso,
     };
 
@@ -1794,7 +1810,7 @@ export async function registrarPagoFacturaCompraAction(
         }
 
         // 4.1 Insertar pago en tabla pagos_facturas_compras o pagos_compras
-        const pagoPayload = {
+        const pagoPayloadBase = {
           id: nuevoPago.id,
           factura_id: targetFactura.id,
           rut_proveedor: targetFactura.rut_proveedor,
@@ -1808,17 +1824,34 @@ export async function registrarPagoFacturaCompraAction(
           comprobante_ref: numeroComprobante?.trim() || `PAGO-${targetFactura.folio}`,
           created_at: nowIso,
         };
+        const pagoPayloadConUsuario = {
+          ...pagoPayloadBase,
+          usuario_id: usuarioId,
+          usuario_nombre: nombreUsuario,
+        };
 
-        const { error: errPagosFac } = await supabase
+        let { error: errPagosFac } = await supabase
           .from("pagos_facturas_compras")
-          .insert(pagoPayload);
+          .insert(pagoPayloadConUsuario);
+
+        if (errPagosFac) {
+          const retryBase = await supabase
+            .from("pagos_facturas_compras")
+            .insert(pagoPayloadBase);
+          errPagosFac = retryBase.error;
+        }
 
         if (errPagosFac) {
           // Intentar en pagos_compras si pagos_facturas_compras no existe o arrojó error
-          await supabase.from("pagos_compras").insert(pagoPayload);
+          const { error: errPagosCompras } = await supabase
+            .from("pagos_compras")
+            .insert(pagoPayloadConUsuario);
+          if (errPagosCompras) {
+            await supabase.from("pagos_compras").insert(pagoPayloadBase);
+          }
         }
 
-        // 4.2 Actualizar factura en Supabase (sincronizando monto_saldo, saldo_pendiente, estado y modalidad_pago)
+        // 4.2 Actualizar factura en Supabase (sincronizando monto_saldo, saldo_pendiente, estado, modalidad_pago y pagado_por)
         const updateFacturaPayload: Record<string, unknown> = {
           monto_saldo: nuevoSaldo,
           saldo_pendiente: nuevoSaldo,
@@ -1826,6 +1859,7 @@ export async function registrarPagoFacturaCompraAction(
           estado: estaSaldada ? "PAGADA" : targetFactura.estado,
           modalidad_pago: estaSaldada ? "PAGADA" : (targetFactura as unknown as Record<string, unknown>).modalidad_pago || targetFactura.estado,
           modalidad: estaSaldada ? "PAGADA" : (targetFactura as unknown as Record<string, unknown>).modalidad || targetFactura.estado,
+          pagado_por: nombreUsuario,
           updated_at: nowIso,
         };
 

@@ -41,21 +41,26 @@ export async function getHistoricoPagosComprasAction(params?: {
   const db = readLocalDb();
   let rawPagos: PagoCompraHistorico[] = [];
 
-  // 1. Obtener pagos directos registrados localmente
+  // 1. Obtener pagos directos registrados localmente (solo montos efectivos > 0)
   if (db.pagos_compras && db.pagos_compras.length > 0) {
-    rawPagos.push(...db.pagos_compras);
+    rawPagos.push(
+      ...db.pagos_compras.filter((p) => Number(p.monto_pagado || 0) > 0)
+    );
   }
 
-  // 2. Extraer pagos derivados de facturas saldadas en DB local (excluyendo cheques emitidos aún no cobrados)
+  // 2. Extraer pagos derivados de facturas saldadas con gestión explícita en DB local
+  // (excluyendo facturas en $ 0 sin gestión y cheques aún no cobrados)
   const facturasSaldadasLocal = (db.facturas_compras || []).filter((f) => {
     if (f.tipo_doc === 61) return false;
-    if (f.estado === "PAGADA" || f.estado === "COMPRA_TC") return true;
-    if (f.condicion_pago === "CONTADO" && f.monto_saldo === 0) return true;
+    if (Number(f.monto_total || 0) <= 0) return false;
+    if (f.estado === "PAGADA" || f.estado === "COMPRA_TC" || f.estado === "NETEO_NC") {
+      return true;
+    }
     if (f.estado === "CHEQUE") {
       const chks = (db.cheques_compras || []).filter((c) => c.factura_id === f.id);
       return chks.length > 0 && chks.every((c) => c.estado === "COBRADO");
     }
-    return f.monto_saldo === 0 && f.estado !== "DEUDA_PROVEEDOR";
+    return false;
   });
 
   const foliosRegistrados = new Set(rawPagos.map((p) => p.folio));
@@ -105,6 +110,12 @@ export async function getHistoricoPagosComprasAction(params?: {
           : fc.numero_cheque
           ? `CHK-${fc.numero_cheque}`
           : `FAC-${fc.folio}`,
+        usuario_nombre:
+          ((fc as unknown as Record<string, unknown>).pagado_por as string | null) ||
+          null,
+        pagado_por:
+          ((fc as unknown as Record<string, unknown>).pagado_por as string | null) ||
+          null,
         created_at: fc.created_at,
       });
       foliosRegistrados.add(fc.folio);
@@ -116,17 +127,22 @@ export async function getHistoricoPagosComprasAction(params?: {
     try {
       const supabase = await createServerSupabaseClient();
 
-      // 3.1 Consultar pagos_facturas_compras
+      // 3.1 Consultar pagos_facturas_compras (solo monto_pagado > 0)
       const { data: supaPagosFac } = await supabase
         .from("pagos_facturas_compras")
         .select("*")
+        .gt("monto_pagado", 0)
         .order("fecha_real_pago", { ascending: false });
 
       const facturasIdRegistrados = new Set(rawPagos.map((p) => p.factura_id).filter(Boolean));
 
       if (supaPagosFac && supaPagosFac.length > 0) {
         for (const p of supaPagosFac as PagoCompraHistorico[]) {
-          if (!foliosRegistrados.has(p.folio) && (!p.factura_id || !facturasIdRegistrados.has(p.factura_id))) {
+          if (
+            Number(p.monto_pagado || 0) > 0 &&
+            !foliosRegistrados.has(p.folio) &&
+            (!p.factura_id || !facturasIdRegistrados.has(p.factura_id))
+          ) {
             rawPagos.unshift(p);
             foliosRegistrados.add(p.folio);
             if (p.factura_id) facturasIdRegistrados.add(p.factura_id);
@@ -134,15 +150,20 @@ export async function getHistoricoPagosComprasAction(params?: {
         }
       }
 
-      // 3.2 Consultar pagos_compras
+      // 3.2 Consultar pagos_compras (solo monto_pagado > 0)
       const { data: supaPagos } = await supabase
         .from("pagos_compras")
         .select("*")
+        .gt("monto_pagado", 0)
         .order("fecha_real_pago", { ascending: false });
 
       if (supaPagos && supaPagos.length > 0) {
         for (const p of supaPagos as PagoCompraHistorico[]) {
-          if (!foliosRegistrados.has(p.folio) && (!p.factura_id || !facturasIdRegistrados.has(p.factura_id))) {
+          if (
+            Number(p.monto_pagado || 0) > 0 &&
+            !foliosRegistrados.has(p.folio) &&
+            (!p.factura_id || !facturasIdRegistrados.has(p.factura_id))
+          ) {
             rawPagos.unshift(p);
             foliosRegistrados.add(p.folio);
             if (p.factura_id) facturasIdRegistrados.add(p.factura_id);
@@ -150,21 +171,20 @@ export async function getHistoricoPagosComprasAction(params?: {
         }
       }
 
-      // 3.3 Consultar facturas saldadas o con modalidades especiales en Supabase (evitando duplicar)
+      // 3.3 Consultar facturas saldadas con modalidad explícita en Supabase (excluyendo $0 sin gestión)
       const { data: supaFacs } = await supabase
         .from("facturas_compras")
         .select("*")
-        .neq("tipo_doc", 61);
+        .neq("tipo_doc", 61)
+        .gt("monto_total", 0);
 
       if (supaFacs && supaFacs.length > 0) {
         for (const sFac of supaFacs) {
           const folioNum = Number(sFac.folio || 0);
           const facId = String(sFac.id);
-          const saldo = Number(
-            sFac.monto_saldo !== undefined && sFac.monto_saldo !== null
-              ? sFac.monto_saldo
-              : sFac.monto_total
-          );
+          const montoTotalNum = Number(sFac.monto_total || 0);
+          if (montoTotalNum <= 0) continue;
+
           const mods = [
             sFac.estado,
             (sFac as unknown as Record<string, unknown>).modalidad_pago,
@@ -174,8 +194,7 @@ export async function getHistoricoPagosComprasAction(params?: {
           const esSaldada =
             mods.includes("PAGADA") ||
             mods.includes("COMPRA_TC") ||
-            (sFac.condicion_pago === "CONTADO" && saldo === 0) ||
-            (saldo === 0 && !mods.includes("CHEQUE") && !mods.includes("FACTORING") && !mods.includes("CONFIRMING"));
+            mods.includes("NETEO_NC");
 
           if (
             esSaldada &&
@@ -191,6 +210,10 @@ export async function getHistoricoPagosComprasAction(params?: {
             else if (mods.includes("COMPRA_TC")) mod = "COMPRA_TC";
             else mod = "DIRECTO";
 
+            const pagadoPorVal = (sFac as unknown as Record<string, unknown>).pagado_por
+              ? String((sFac as unknown as Record<string, unknown>).pagado_por)
+              : null;
+
             rawPagos.push({
               id: `pago-supa-${sFac.id}`,
               factura_id: facId,
@@ -199,7 +222,7 @@ export async function getHistoricoPagosComprasAction(params?: {
               folio: folioNum,
               tipo_doc: Number(sFac.tipo_doc || 33),
               modalidad_pago: mod,
-              monto_pagado: Number(sFac.monto_total || 0),
+              monto_pagado: montoTotalNum,
               fecha_real_pago:
                 sFac.fecha_vencimiento_cheque ||
                 (sFac.updated_at
@@ -219,6 +242,8 @@ export async function getHistoricoPagosComprasAction(params?: {
                 : sFac.numero_cheque
                 ? `CHK-${sFac.numero_cheque}`
                 : `FAC-${folioNum}`,
+              usuario_nombre: pagadoPorVal,
+              pagado_por: pagadoPorVal,
               created_at: String(sFac.created_at || new Date().toISOString()),
             });
             foliosRegistrados.add(folioNum);

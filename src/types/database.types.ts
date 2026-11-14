@@ -83,6 +83,7 @@ export interface FacturaCompra {
   fecha_acuse_recibo?: string | null; // YYYY-MM-DD (Columna I SII)
   condicion_pago?: CondicionPago; // CONTADO o CREDITO
   periodo_libro?: string | null; // YYYY-MM (Período tributario del libro SII)
+  pagado_por?: string | null;
   monto_total: number;
   monto_saldo?: number; // Saldo deudor pendiente tras posibles neteos o cheques parciales
   deuda_proveedor?: number | null; // Para facturas CONTADO o COMPRA_TC = 0
@@ -523,6 +524,9 @@ export interface PagoCompraHistorico {
   fecha_real_pago: string;
   observacion?: string | null;
   comprobante_ref?: string | null;
+  usuario_id?: string | null;
+  usuario_nombre?: string | null;
+  pagado_por?: string | null;
   created_at: string;
 }
 
