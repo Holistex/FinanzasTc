@@ -46,7 +46,7 @@ export interface MatchFlexlineCorrectaRow {
 
 export type MotivoMalIngresada =
   | "Diferencia de Monto"
-  | "No existe en SII"
+  | "Error de Folio / No existe en SII"
   | "Duplicado en Flexline";
 
 export interface MatchFlexlineMalIngresadaRow {
@@ -475,6 +475,8 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
   const malIngresadas: MatchFlexlineMalIngresadaRow[] = [];
   const periodosSet = new Set<string>();
 
+  const UMBRAL_DIFERENCIA_MONTO = 1000; // Solo observar diferencias >= $1.000 CLP
+
   let totalMontoSii = 0;
 
   // 1. Recorrer universo SII (facturas_compras)
@@ -488,6 +490,7 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
 
     const matchedFlex = key ? flexMap.get(key) : undefined;
     if (!matchedFlex || matchedFlex.length === 0) {
+      // 1. No existe en Flexline -> Faltan por Ingresar a Flexline
       faltantes.push({
         id: doc.id,
         key: key || `${normalizeRut(doc.rut_proveedor)}|${doc.folio}`,
@@ -500,95 +503,89 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
         monto_total: montoSii,
         periodo,
       });
-      continue;
-    }
-
-    const primaryFlex = matchedFlex[0];
-    const montoFlex = Math.round(Number(primaryFlex.monto_total || 0));
-    const diff = montoSii - montoFlex;
-
-    if (Math.abs(diff) <= 1) {
-      correctas.push({
-        id: doc.id,
-        key,
-        tipo_doc: Number(doc.tipo_doc || 33),
-        folio: Number(doc.folio || 0),
-        rut_proveedor: doc.rut_proveedor,
-        razon_social: doc.razon_social,
-        fecha_docto: doc.fecha_docto,
-        monto_sii: montoSii,
-        monto_flexline: montoFlex,
-        periodo_flexline: primaryFlex.periodo_libro || "-",
-        periodo,
-      });
-    } else {
-      malIngresadas.push({
-        id: `${doc.id}-diff-${primaryFlex.id || "0"}`,
-        key2: primaryFlex.key2_original || key,
-        motivo: "Diferencia de Monto",
-        folio: String(doc.folio),
-        rut_proveedor: doc.rut_proveedor,
-        proveedor: doc.razon_social || primaryFlex.nombre_proveedor,
-        fecha_emision: doc.fecha_docto || primaryFlex.fecha_emision || "",
-        monto_sii: montoSii,
-        monto_flexline: montoFlex,
-        diferencia: diff,
-        periodo_flexline: primaryFlex.periodo_libro || "-",
-        periodo,
-      });
-    }
-  }
-
-  // 2. Recorrer registros de Flexline para detectar "No existe en SII" y "Duplicado en Flexline"
-  for (const [key, flexRows] of flexMap.entries()) {
-    const existsInSii = siiMap.has(key);
-    const siiRef = existsInSii ? siiMap.get(key)![0] : null;
-
-    if (!existsInSii) {
-      flexRows.forEach((row, idx) => {
-        const periodo = extractPeriodo(row.fecha_emision, row.periodo_libro);
-        if (periodo) periodosSet.add(periodo);
-        const montoFlex = Math.round(Number(row.monto_total || 0));
-
+    } else if (matchedFlex.length > 1) {
+      // 2. Duplicado en Flexline -> 100% a Mal Ingresadas
+      matchedFlex.forEach((dupRow, idx) => {
+        const montoFlex = Math.round(Number(dupRow.monto_total || 0));
         malIngresadas.push({
-          id: `flex-nosii-${row.id || key}-${idx}`,
-          key2: row.key2_original || key,
-          motivo: idx > 0 ? "Duplicado en Flexline" : "No existe en SII",
-          folio: row.folio_flexline || "-",
-          rut_proveedor: row.rut_proveedor || "-",
-          proveedor: row.nombre_proveedor || "Sin Nombre",
-          fecha_emision: row.fecha_emision || "",
-          monto_sii: null,
+          id: `${doc.id}-dup-${dupRow.id || idx}`,
+          key2: dupRow.key2_original || key,
+          motivo: "Duplicado en Flexline",
+          folio: String(doc.folio),
+          rut_proveedor: doc.rut_proveedor,
+          proveedor: doc.razon_social || dupRow.nombre_proveedor,
+          fecha_emision: doc.fecha_docto || dupRow.fecha_emision || "",
+          monto_sii: montoSii,
           monto_flexline: montoFlex,
-          diferencia: -montoFlex,
-          periodo_flexline: row.periodo_libro || "-",
+          diferencia: montoSii - montoFlex,
+          periodo_flexline: dupRow.periodo_libro || "-",
           periodo,
         });
       });
-    } else if (flexRows.length > 1) {
-      for (let idx = 1; idx < flexRows.length; idx++) {
-        const row = flexRows[idx];
-        const periodo = extractPeriodo(row.fecha_emision, row.periodo_libro);
-        if (periodo) periodosSet.add(periodo);
-        const montoFlex = Math.round(Number(row.monto_total || 0));
-        const montoSii = siiRef ? Math.round(Number(siiRef.monto_total || 0)) : null;
+    } else {
+      // 3. Match 1 a 1 por RUT + Folio -> Evaluar diferencia de monto
+      const primaryFlex = matchedFlex[0];
+      const montoFlex = Math.round(Number(primaryFlex.monto_total || 0));
+      const diff = montoSii - montoFlex;
 
+      if (Math.abs(diff) >= UMBRAL_DIFERENCIA_MONTO) {
         malIngresadas.push({
-          id: `flex-dup-${row.id || key}-${idx}`,
-          key2: row.key2_original || key,
-          motivo: "Duplicado en Flexline",
-          folio: row.folio_flexline || String(siiRef?.folio || "-"),
-          rut_proveedor: row.rut_proveedor || siiRef?.rut_proveedor || "-",
-          proveedor: row.nombre_proveedor || siiRef?.razon_social || "Sin Nombre",
-          fecha_emision: row.fecha_emision || siiRef?.fecha_docto || "",
+          id: `${doc.id}-diff-${primaryFlex.id || "0"}`,
+          key2: primaryFlex.key2_original || key,
+          motivo: "Diferencia de Monto",
+          folio: String(doc.folio),
+          rut_proveedor: doc.rut_proveedor,
+          proveedor: doc.razon_social || primaryFlex.nombre_proveedor,
+          fecha_emision: doc.fecha_docto || primaryFlex.fecha_emision || "",
           monto_sii: montoSii,
           monto_flexline: montoFlex,
-          diferencia: montoSii !== null ? montoSii - montoFlex : -montoFlex,
-          periodo_flexline: row.periodo_libro || "-",
+          diferencia: diff,
+          periodo_flexline: primaryFlex.periodo_libro || "-",
+          periodo,
+        });
+      } else {
+        correctas.push({
+          id: doc.id,
+          key,
+          tipo_doc: Number(doc.tipo_doc || 33),
+          folio: Number(doc.folio || 0),
+          rut_proveedor: doc.rut_proveedor,
+          razon_social: doc.razon_social,
+          fecha_docto: doc.fecha_docto,
+          monto_sii: montoSii,
+          monto_flexline: montoFlex,
+          periodo_flexline: primaryFlex.periodo_libro || "-",
           periodo,
         });
       }
     }
+  }
+
+  // 2. Registros en Flexline cuya llave (RUT + Folio) NO existe en SII (errores de folio/RUT)
+  // -> Mantener el 100% en Mal Ingresadas
+  for (const [key, flexRows] of flexMap.entries()) {
+    if (siiMap.has(key)) continue;
+
+    flexRows.forEach((row, idx) => {
+      const periodo = extractPeriodo(row.fecha_emision, row.periodo_libro);
+      if (periodo) periodosSet.add(periodo);
+      const montoFlex = Math.round(Number(row.monto_total || 0));
+
+      malIngresadas.push({
+        id: `flex-nosii-${row.id || key}-${idx}`,
+        key2: row.key2_original || key,
+        motivo: idx > 0 ? "Duplicado en Flexline" : "Error de Folio / No existe en SII",
+        folio: row.folio_flexline || "-",
+        rut_proveedor: row.rut_proveedor || "-",
+        proveedor: row.nombre_proveedor || "Sin Nombre",
+        fecha_emision: row.fecha_emision || "",
+        monto_sii: null,
+        monto_flexline: montoFlex,
+        diferencia: -montoFlex,
+        periodo_flexline: row.periodo_libro || "-",
+        periodo,
+      });
+    });
   }
 
   faltantes.sort((a, b) => (b.fecha_docto || "").localeCompare(a.fecha_docto || ""));
