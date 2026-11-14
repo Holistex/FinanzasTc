@@ -12,6 +12,7 @@ import {
   buildCanonicalCompraKey,
   normalizeFolio,
   normalizeKey2ToCanonical,
+  normalizePeriodoLibro,
   normalizeRut,
   parseExcelAmount,
   parseExcelDate,
@@ -80,6 +81,7 @@ export interface MatchFlexlineResponse {
   correctas: MatchFlexlineCorrectaRow[];
   malIngresadas: MatchFlexlineMalIngresadaRow[];
   kpis: MatchFlexlineKPIs;
+  kpisPorPeriodo: Record<string, MatchFlexlineKPIs>;
   totalFlexlineRows: number;
   ultimaCarga: string | null;
   periodosDisponibles: string[];
@@ -92,6 +94,7 @@ interface FacturaCompraMatchSource {
   rut_proveedor: string;
   razon_social: string;
   fecha_docto: string;
+  periodo_libro?: string | null;
   condicion_pago: string | null;
   monto_total: number;
 }
@@ -111,16 +114,6 @@ export interface FlexlineImportRow {
   observacion: string;
   es_duplicado_excel?: boolean;
   fecha_carga: string;
-}
-
-function extractPeriodo(fechaIso?: string | null, periodoLibro?: string | null): string {
-  if (fechaIso && /^\d{4}-\d{2}/.test(fechaIso)) {
-    return fechaIso.slice(0, 7);
-  }
-  const pl = String(periodoLibro || "").trim();
-  const ymMatch = pl.match(/^(\d{4})[-/]?(\d{2})$/);
-  if (ymMatch) return `${ymMatch[1]}-${ymMatch[2]}`;
-  return "";
 }
 
 /**
@@ -260,8 +253,16 @@ export async function importarMatchFlexlineChunkAction(
     const supabase = await createServerSupabaseClient();
 
     const BATCH_SIZE = 500;
-    for (let start = 0; start < rows.length; start += BATCH_SIZE) {
-      const batch = rows.slice(start, start + BATCH_SIZE);
+    const normalizedRows = rows.map((r) => ({
+      ...r,
+      periodo_libro:
+        normalizePeriodoLibro(r.periodo_libro, r.fecha_emision) ||
+        r.periodo_libro ||
+        "",
+    }));
+
+    for (let start = 0; start < normalizedRows.length; start += BATCH_SIZE) {
+      const batch = normalizedRows.slice(start, start + BATCH_SIZE);
       const { error: upsertError } = await supabase
         .from("compras_flexline_import")
         .upsert(batch, {
@@ -433,6 +434,7 @@ export async function importarMatchFlexlineAction(formData: FormData): Promise<{
       const montoG = parseExcelAmount(rawTotalG);
       const montoP = parseExcelAmount(rawTotalP);
       const montoFinal = montoG !== 0 ? montoG : montoP;
+      const fechaEmisionIso = parseExcelDate(rawFechaEmision);
 
       nuevosRegistrosParaInsertar.push({
         key2_original: rawKey2 || canonicalKey,
@@ -441,10 +443,12 @@ export async function importarMatchFlexlineAction(formData: FormData): Promise<{
         rut_proveedor: rutLimpio,
         nombre_proveedor: rawProveedor,
         folio_flexline: folioLimpio,
-        fecha_emision: parseExcelDate(rawFechaEmision),
+        fecha_emision: fechaEmisionIso,
         fecha_vencimiento: parseExcelDate(rawFechaVence),
         monto_total: montoFinal,
-        periodo_libro: rawPeriodoLibro,
+        periodo_libro:
+          normalizePeriodoLibro(rawPeriodoLibro, fechaEmisionIso) ||
+          rawPeriodoLibro,
         observacion: rawObservacion,
         es_duplicado_excel: false,
         fecha_carga: ahoraIso,
@@ -508,6 +512,7 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
       malIngresadasCount: 0,
       malIngresadasDiferenciaMonto: 0,
     },
+    kpisPorPeriodo: {},
     totalFlexlineRows: 0,
     ultimaCarga: null,
     periodosDisponibles: [],
@@ -520,7 +525,7 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
   const [siiDocs, flexDocs] = await Promise.all([
     fetchAllTableRows<FacturaCompraMatchSource>(
       "facturas_compras",
-      "id, tipo_doc, folio, rut_proveedor, razon_social, fecha_docto, condicion_pago, monto_total"
+      "id, tipo_doc, folio, rut_proveedor, razon_social, fecha_docto, periodo_libro, condicion_pago, monto_total"
     ),
     fetchAllTableRows<FlexlineImportRow>(
       "compras_flexline_import",
@@ -556,6 +561,7 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
   const correctas: MatchFlexlineCorrectaRow[] = [];
   const malIngresadas: MatchFlexlineMalIngresadaRow[] = [];
   const periodosSet = new Set<string>();
+  const siiTotalsByPeriodo = new Map<string, { count: number; monto: number }>();
 
   const UMBRAL_DIFERENCIA_MONTO = 1000; // Solo observar diferencias >= $1.000 CLP
 
@@ -567,8 +573,15 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
     const montoSii = Math.round(Number(doc.monto_total || 0));
     totalMontoSii += montoSii;
 
-    const periodo = extractPeriodo(doc.fecha_docto);
-    if (periodo) periodosSet.add(periodo);
+    const periodo = normalizePeriodoLibro(doc.periodo_libro, doc.fecha_docto);
+    if (periodo) {
+      periodosSet.add(periodo);
+      const prev = siiTotalsByPeriodo.get(periodo) || { count: 0, monto: 0 };
+      siiTotalsByPeriodo.set(periodo, {
+        count: prev.count + 1,
+        monto: prev.monto + montoSii,
+      });
+    }
 
     const matchedFlex = key ? flexMap.get(key) : undefined;
     if (!matchedFlex || matchedFlex.length === 0) {
@@ -649,7 +662,7 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
     if (siiMap.has(key)) continue;
 
     flexRows.forEach((row, idx) => {
-      const periodo = extractPeriodo(row.fecha_emision, row.periodo_libro);
+      const periodo = normalizePeriodoLibro(row.periodo_libro, row.fecha_emision);
       if (periodo) periodosSet.add(periodo);
       const montoFlex = Math.round(Number(row.monto_total || 0));
 
@@ -689,6 +702,32 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
     0
   );
 
+  const periodosDisponibles = Array.from(periodosSet).sort((a, b) =>
+    b.localeCompare(a)
+  );
+
+  const kpisPorPeriodo: Record<string, MatchFlexlineKPIs> = {};
+  for (const p of periodosDisponibles) {
+    const siiTotal = siiTotalsByPeriodo.get(p) || { count: 0, monto: 0 };
+    const faltantesP = faltantes.filter((r) => r.periodo === p);
+    const correctasP = correctas.filter((r) => r.periodo === p);
+    const malP = malIngresadas.filter((r) => r.periodo === p);
+
+    kpisPorPeriodo[p] = {
+      totalDocumentosSii: siiTotal.count,
+      totalMontoSii: siiTotal.monto,
+      faltanPorIngresarCount: faltantesP.length,
+      faltanPorIngresarMonto: faltantesP.reduce((s, r) => s + r.monto_total, 0),
+      ingresadasCorrectamenteCount: correctasP.length,
+      ingresadasCorrectamenteMonto: correctasP.reduce((s, r) => s + r.monto_sii, 0),
+      malIngresadasCount: malP.length,
+      malIngresadasDiferenciaMonto: malP.reduce(
+        (s, r) => s + Math.abs(r.diferencia),
+        0
+      ),
+    };
+  }
+
   return {
     faltantes,
     correctas,
@@ -703,10 +742,9 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
       malIngresadasCount: malIngresadas.length,
       malIngresadasDiferenciaMonto,
     },
+    kpisPorPeriodo,
     totalFlexlineRows: flexDocs.length,
     ultimaCarga,
-    periodosDisponibles: Array.from(periodosSet).sort((a, b) =>
-      b.localeCompare(a)
-    ),
+    periodosDisponibles,
   };
 }

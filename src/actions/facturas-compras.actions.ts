@@ -460,7 +460,8 @@ export async function getFacturasComprasAction(
  * Procesa la importación de un CSV del Registro de Compras SII
  */
 export async function importarComprasCsvAction(
-  csvContent: string
+  csvContent: string,
+  periodoLibro?: string
 ): Promise<SiiComprasValidationSummary> {
   // Validación de permisos de Administrador
   const auth = await assertIsAdmin();
@@ -468,19 +469,25 @@ export async function importarComprasCsvAction(
     throw new Error(auth.error || "Acceso denegado: Se requiere rol de ADMINISTRADOR para importar archivos CSV.");
   }
 
+  const normalizedPeriodoLibro =
+    periodoLibro && /^\d{4}-\d{2}$/.test(periodoLibro.trim())
+      ? periodoLibro.trim()
+      : null;
+
   let existingKeys = new Set<string>();
+  const existingIdByKey = new Map<string, string>();
 
   if (isServerSupabaseConfigured()) {
     const supabase = await createServerSupabaseClient();
     const { data } = await supabase
       .from("facturas_compras")
-      .select("rut_proveedor, folio");
+      .select("id, rut_proveedor, folio");
     if (data) {
-      existingKeys = new Set(
-        (data as Array<{ rut_proveedor: string; folio: number }>).map(
-          (r) => `${normalizeRut(r.rut_proveedor)}_${r.folio}`
-        )
-      );
+      for (const r of data as Array<{ id: string; rut_proveedor: string; folio: number }>) {
+        const key = `${normalizeRut(r.rut_proveedor)}_${r.folio}`;
+        existingKeys.add(key);
+        if (r.id) existingIdByKey.set(key, r.id);
+      }
     }
   } else {
     const localDb = readLocalDb();
@@ -530,6 +537,7 @@ export async function importarComprasCsvAction(
         monto_saldo: row.condicion_pago === "CONTADO" ? 0 : row.monto_saldo,
         deuda_proveedor: row.condicion_pago === "CONTADO" ? 0 : row.monto_saldo,
         estado: row.estado,
+        periodo_libro: normalizedPeriodoLibro || row.fecha_docto?.slice(0, 7) || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
@@ -555,6 +563,7 @@ export async function importarComprasCsvAction(
           monto_saldo: r.monto_saldo,
           deuda_proveedor: r.deuda_proveedor,
           estado: r.estado,
+          periodo_libro: r.periodo_libro ?? null,
         };
         return row;
       });
@@ -592,8 +601,56 @@ export async function importarComprasCsvAction(
     writeLocalDb(db);
   }
 
+  // Si se confirmó un Período de Libro y hubo documentos ya existentes en BD,
+  // actualizamos su `periodo_libro` para que queden asignados al Libro SII correcto.
+  if (normalizedPeriodoLibro && summary.omitidasPorDuplicidad.length > 0) {
+    const existingDuplicateKeys = new Set(
+      summary.omitidasPorDuplicidad
+        .filter((item) => item.motivo === "EXISTE_EN_BD")
+        .map((item) => `${normalizeRut(item.rut_proveedor)}_${item.folio}`)
+    );
+
+    if (existingDuplicateKeys.size > 0) {
+      if (isServerSupabaseConfigured()) {
+        const supabase = await createServerSupabaseClient();
+        const idsToUpdate: string[] = [];
+        for (const key of existingDuplicateKeys) {
+          const id = existingIdByKey.get(key);
+          if (id) idsToUpdate.push(id);
+        }
+
+        const CHUNK_SIZE = 200;
+        for (let i = 0; i < idsToUpdate.length; i += CHUNK_SIZE) {
+          const chunk = idsToUpdate.slice(i, i + CHUNK_SIZE);
+          const { error: updateErr } = await supabase
+            .from("facturas_compras")
+            .update({ periodo_libro: normalizedPeriodoLibro })
+            .in("id", chunk);
+          if (updateErr) {
+            console.error("Error actualizando periodo_libro en duplicadas:", updateErr.message);
+          }
+        }
+      }
+
+      const db = readLocalDb();
+      if (db.facturas_compras && db.facturas_compras.length > 0) {
+        let changed = false;
+        db.facturas_compras = db.facturas_compras.map((f) => {
+          const k = `${normalizeRut(f.rut_proveedor)}_${f.folio}`;
+          if (existingDuplicateKeys.has(k) && f.periodo_libro !== normalizedPeriodoLibro) {
+            changed = true;
+            return { ...f, periodo_libro: normalizedPeriodoLibro };
+          }
+          return f;
+        });
+        if (changed) writeLocalDb(db);
+      }
+    }
+  }
+
   revalidatePath("/compras-tensacon/facturas-compras");
   revalidatePath("/compras-tensacon/historico-pagos");
+  revalidatePath("/compras-tensacon/match-flexline");
   return summary;
 }
 

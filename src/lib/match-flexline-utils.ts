@@ -116,3 +116,81 @@ export function parseExcelAmount(val: unknown): number {
   const num = Number(cleaned);
   return Number.isFinite(num) ? Math.round(num) : 0;
 }
+
+const MESES_ES_LARGO = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+];
+
+/**
+ * Normaliza un período tributario a formato `YYYY-MM`.
+ * Soporta formatos como "2026-09", "202609", "2026/09", "09-2026", "2026-09-15".
+ * Si no es válido, usa `fallbackFechaIso` (ej. fecha_docto / fecha_emision).
+ */
+export function normalizePeriodoLibro(
+  rawPeriodo: unknown,
+  fallbackFechaIso?: string | null
+): string {
+  const tryParse = (val: unknown): string => {
+    const str = String(val ?? "").trim();
+    if (!str) return "";
+
+    const isoYm = str.match(/^(\d{4})[-/](\d{1,2})(?:[-/]\d{1,2})?$/);
+    if (isoYm) {
+      const m = Number(isoYm[2]);
+      if (m >= 1 && m <= 12) {
+        return `${isoYm[1]}-${String(m).padStart(2, "0")}`;
+      }
+    }
+
+    const compactYm = str.match(/^(\d{4})(\d{2})$/);
+    if (compactYm) {
+      const m = Number(compactYm[2]);
+      if (m >= 1 && m <= 12) {
+        return `${compactYm[1]}-${compactYm[2]}`;
+      }
+    }
+
+    const clMy = str.match(/^(\d{1,2})[-/](\d{4})$/);
+    if (clMy) {
+      const m = Number(clMy[1]);
+      if (m >= 1 && m <= 12) {
+        return `${clMy[2]}-${String(m).padStart(2, "0")}`;
+      }
+    }
+
+    return "";
+  };
+
+  return tryParse(rawPeriodo) || tryParse(fallbackFechaIso) || "";
+}
+
+/**
+ * Formatea `YYYY-MM` como "Septiembre 2026".
+ */
+export function formatPeriodoLibroLabel(yyyyMm: string): string {
+  const match = String(yyyyMm || "").match(/^(\d{4})-(\d{2})$/);
+  if (!match) return yyyyMm || "Sin Período";
+  const mesIdx = Number(match[2]) - 1;
+  const mesNombre = MESES_ES_LARGO[mesIdx] ?? match[2];
+  return `${mesNombre} ${match[1]}`;
+}
+
+/**
+ * Formatea `YYYY-MM` como "09-2026".
+ */
+export function formatPeriodoLibroShort(yyyyMm: string): string {
+  const match = String(yyyyMm || "").match(/^(\d{4})-(\d{2})$/);
+  if (!match) return yyyyMm || "";
+  return `${match[2]}-${match[1]}`;
+}

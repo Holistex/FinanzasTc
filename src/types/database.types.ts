@@ -82,6 +82,7 @@ export interface FacturaCompra {
   fecha_recepcion?: string | null; // YYYY-MM-DD (Columna H SII)
   fecha_acuse_recibo?: string | null; // YYYY-MM-DD (Columna I SII)
   condicion_pago?: CondicionPago; // CONTADO o CREDITO
+  periodo_libro?: string | null; // YYYY-MM (Período tributario del libro SII)
   monto_total: number;
   monto_saldo?: number; // Saldo deudor pendiente tras posibles neteos o cheques parciales
   deuda_proveedor?: number | null; // Para facturas CONTADO o COMPRA_TC = 0

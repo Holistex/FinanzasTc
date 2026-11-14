@@ -46,6 +46,11 @@ import {
   MantenedorON,
 } from "@/types/database.types";
 import {
+  formatPeriodoLibroLabel,
+  formatPeriodoLibroShort,
+  normalizePeriodoLibro,
+} from "@/lib/match-flexline-utils";
+import {
   ComprasKPIs,
   getFacturasComprasAction,
 } from "@/actions/facturas-compras.actions";
@@ -167,11 +172,21 @@ export function FacturasComprasTable({
   // Filtros
   const [search, setSearch] = useState("");
   const [tipoDocFilter, setTipoDocFilter] = useState<"TODOS" | "33" | "61">("TODOS");
+  const [periodoLibroFilter, setPeriodoLibroFilter] = useState<string>("TODOS");
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, subTabFacNc, search, tipoDocFilter]);
+  }, [activeTab, subTabFacNc, search, tipoDocFilter, periodoLibroFilter]);
+
+  const periodosLibroDisponibles = useMemo(() => {
+    const set = new Set<string>();
+    for (const f of data) {
+      const p = normalizePeriodoLibro(f.periodo_libro, f.fecha_docto);
+      if (p) set.add(p);
+    }
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [data]);
 
   // Modales
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -308,9 +323,15 @@ export function FacturasComprasTable({
         if (!matchFolio && !matchRut && !matchRazon && !matchColab) return false;
       }
       if (tipoDocFilter !== "TODOS" && f.tipo_doc.toString() !== tipoDocFilter) return false;
+      if (
+        periodoLibroFilter !== "TODOS" &&
+        normalizePeriodoLibro(f.periodo_libro, f.fecha_docto) !== periodoLibroFilter
+      ) {
+        return false;
+      }
       return true;
     });
-  }, [currentTabFacturas, search, tipoDocFilter]);
+  }, [currentTabFacturas, search, tipoDocFilter, periodoLibroFilter]);
 
   // Filtrado de FAC / NC según subpestaña y búsqueda
   const filteredFacNc = useMemo(() => {
@@ -324,9 +345,15 @@ export function FacturasComprasTable({
       }
       if (subTabFacNc === "SOLO_NC" && f.tipo_doc !== 61) return false;
       if (subTabFacNc === "SOLO_FAC" && f.tipo_doc === 61) return false;
+      if (
+        periodoLibroFilter !== "TODOS" &&
+        normalizePeriodoLibro(f.periodo_libro, f.fecha_docto) !== periodoLibroFilter
+      ) {
+        return false;
+      }
       return true;
     });
-  }, [facturasFacNc, search, subTabFacNc]);
+  }, [facturasFacNc, search, subTabFacNc, periodoLibroFilter]);
 
   // Filtrado de Historial de Neteos
   const filteredNeteos = useMemo(() => {
@@ -556,6 +583,24 @@ export function FacturasComprasTable({
             )}
           </div>
 
+          {/* Filtro Período Libro SII */}
+          <div className="relative flex items-center">
+            <Calendar className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-slate-400" />
+            <select
+              value={periodoLibroFilter}
+              onChange={(e) => setPeriodoLibroFilter(e.target.value)}
+              aria-label="Filtrar por Período del Libro SII"
+              className="rounded-lg border border-slate-200 bg-slate-50/70 pl-8 pr-7 py-1.5 text-xs font-semibold text-slate-700 focus:border-[#E05A10] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#E05A10] transition-colors"
+            >
+              <option value="TODOS">Libro: Todos los Períodos</option>
+              {periodosLibroDisponibles.map((p) => (
+                <option key={p} value={p}>
+                  Libro: {formatPeriodoLibroLabel(p)}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Subpestañas para FAC / NC */}
           {activeTab === "FAC_NC" && (
             <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 text-xs">
@@ -783,6 +828,18 @@ export function FacturasComprasTable({
                                     : "—"}
                                 </span>
                               </div>
+                              {factura.periodo_libro &&
+                                factura.fecha_docto &&
+                                factura.periodo_libro !== factura.fecha_docto.slice(0, 7) && (
+                                  <div className="mt-1">
+                                    <span
+                                      className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200"
+                                      title={`Documento emitido en ${factura.fecha_docto.slice(0, 7)} con acuse de recibo en Libro ${formatPeriodoLibroLabel(factura.periodo_libro)}`}
+                                    >
+                                      Libro: {formatPeriodoLibroShort(factura.periodo_libro)}
+                                    </span>
+                                  </div>
+                                )}
                             </div>
 
                             {dueDateInfo && (

@@ -10,10 +10,28 @@ import {
   Loader2,
   AlertCircle,
   FileText,
+  Calendar,
 } from "lucide-react";
 import { SiiComprasValidationSummary } from "@/services/sii-compras-csv-parser";
 import { importarComprasCsvAction } from "@/actions/facturas-compras.actions";
 import { formatCLP, formatRutDisplay } from "@/lib/utils";
+
+const MESES_OPCIONES = [
+  { value: "01", label: "Enero" },
+  { value: "02", label: "Febrero" },
+  { value: "03", label: "Marzo" },
+  { value: "04", label: "Abril" },
+  { value: "05", label: "Mayo" },
+  { value: "06", label: "Junio" },
+  { value: "07", label: "Julio" },
+  { value: "08", label: "Agosto" },
+  { value: "09", label: "Septiembre" },
+  { value: "10", label: "Octubre" },
+  { value: "11", label: "Noviembre" },
+  { value: "12", label: "Diciembre" },
+];
+
+const ANIOS_OPCIONES = ["2025", "2026", "2027"];
 
 interface CsvImportComprasModalProps {
   isOpen: boolean;
@@ -26,8 +44,17 @@ export function CsvImportComprasModal({
   onClose,
   onImportSuccess,
 }: CsvImportComprasModalProps) {
+  const now = new Date();
+  const defaultMes = String(now.getMonth() + 1).padStart(2, "0");
+  const defaultAnio = ANIOS_OPCIONES.includes(String(now.getFullYear()))
+    ? String(now.getFullYear())
+    : "2026";
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
+  const [selectedMes, setSelectedMes] = useState<string>(defaultMes);
+  const [selectedAnio, setSelectedAnio] = useState<string>(defaultAnio);
+  const [autoDetectedPeriodo, setAutoDetectedPeriodo] = useState<string | null>(null);
   const [summary, setSummary] = useState<SiiComprasValidationSummary | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -38,6 +65,7 @@ export function CsvImportComprasModal({
   const handleReset = () => {
     setSelectedFile(null);
     setFileContent(null);
+    setAutoDetectedPeriodo(null);
     setSummary(null);
     setErrorMessage(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -55,6 +83,20 @@ export function CsvImportComprasModal({
     setSelectedFile(file);
     setErrorMessage(null);
     setSummary(null);
+
+    // Autodetección inteligente de _YYYYMM en el nombre del archivo (ej. RCV_COMPRA_REGISTRO_99510510-1_202609.csv)
+    const periodMatch = file.name.match(/_(\d{4})(0[1-9]|1[0-2])(?:[._-]|$)/);
+    if (periodMatch) {
+      const detectedAnio = periodMatch[1];
+      const detectedMes = periodMatch[2];
+      if (ANIOS_OPCIONES.includes(detectedAnio)) {
+        setSelectedAnio(detectedAnio);
+      }
+      setSelectedMes(detectedMes);
+      setAutoDetectedPeriodo(`${detectedAnio}-${detectedMes}`);
+    } else {
+      setAutoDetectedPeriodo(null);
+    }
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -82,12 +124,13 @@ export function CsvImportComprasModal({
   const handleProcessImport = () => {
     if (!fileContent) return;
     setErrorMessage(null);
+    const periodoLibro = `${selectedAnio}-${selectedMes}`;
 
     startTransition(async () => {
       try {
-        const result = await importarComprasCsvAction(fileContent);
+        const result = await importarComprasCsvAction(fileContent, periodoLibro);
         setSummary(result);
-        if (result.nuevasAInyectar.length > 0) {
+        if (result.nuevasAInyectar.length > 0 || result.omitidasPorDuplicidad.length > 0) {
           onImportSuccess();
         }
       } catch (err: unknown) {
@@ -178,6 +221,76 @@ export function CsvImportComprasModal({
                   className="hidden"
                 />
               </label>
+
+              {/* Selector de Período Tributario del Libro SII */}
+              <div className="rounded-lg border border-slate-200 bg-slate-50/90 p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                    <Calendar className="h-3.5 w-3.5 text-[#E05A10]" />
+                    Período Tributario del Libro SII
+                  </label>
+                  {autoDetectedPeriodo && (
+                    <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+                      Autodetectado del archivo ({autoDetectedPeriodo})
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label
+                      htmlFor="compras-periodo-mes"
+                      className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1"
+                    >
+                      Mes del Libro
+                    </label>
+                    <select
+                      id="compras-periodo-mes"
+                      value={selectedMes}
+                      onChange={(e) => {
+                        setSelectedMes(e.target.value);
+                        setAutoDetectedPeriodo(null);
+                      }}
+                      className="w-full h-9 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800 focus:border-[#E05A10] focus:outline-none focus:ring-1 focus:ring-[#E05A10]/30"
+                    >
+                      {MESES_OPCIONES.map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="compras-periodo-anio"
+                      className="block text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1"
+                    >
+                      Año
+                    </label>
+                    <select
+                      id="compras-periodo-anio"
+                      value={selectedAnio}
+                      onChange={(e) => {
+                        setSelectedAnio(e.target.value);
+                        setAutoDetectedPeriodo(null);
+                      }}
+                      className="w-full h-9 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800 focus:border-[#E05A10] focus:outline-none focus:ring-1 focus:ring-[#E05A10]/30"
+                    >
+                      {ANIOS_OPCIONES.map((anio) => (
+                        <option key={anio} value={anio}>
+                          {anio}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Todos los documentos de este CSV quedarán asignados al Libro{" "}
+                  <strong className="text-slate-700 font-semibold">
+                    {MESES_OPCIONES.find((m) => m.value === selectedMes)?.label} {selectedAnio}
+                  </strong>{" "}
+                  ({selectedAnio}-{selectedMes}), respetando sus fechas de emisión originales para el cálculo de vencimiento.
+                </p>
+              </div>
 
               {errorMessage && (
                 <div className="rounded-md border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-700 flex items-center gap-2">
@@ -324,7 +437,7 @@ export function CsvImportComprasModal({
               ) : (
                 <>
                   <UploadCloud className="h-3.5 w-3.5" />
-                  <span>Procesar e Importar</span>
+                  <span>Importar al Libro Seleccionado</span>
                 </>
               )}
             </button>

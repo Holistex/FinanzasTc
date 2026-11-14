@@ -35,8 +35,10 @@ import {
 } from "@/actions/match-flexline.actions";
 import {
   buildCanonicalCompraKey,
+  formatPeriodoLibroLabel,
   normalizeFolio,
   normalizeKey2ToCanonical,
+  normalizePeriodoLibro,
   normalizeRut,
   parseExcelAmount,
   parseExcelDate,
@@ -270,6 +272,7 @@ export function MatchFlexlineClient({
           const montoG = parseExcelAmount(rawTotalG);
           const montoP = parseExcelAmount(rawTotalP);
           const montoFinal = montoG !== 0 ? montoG : montoP;
+          const fechaEmisionIso = parseExcelDate(rawFechaEmision);
 
           nuevosRegistrosParaInsertar.push({
             key2_original: rawKey2 || canonicalKey,
@@ -278,10 +281,12 @@ export function MatchFlexlineClient({
             rut_proveedor: rutLimpio,
             nombre_proveedor: rawProveedor,
             folio_flexline: folioLimpio,
-            fecha_emision: parseExcelDate(rawFechaEmision),
+            fecha_emision: fechaEmisionIso,
             fecha_vencimiento: parseExcelDate(rawFechaVence),
             monto_total: montoFinal,
-            periodo_libro: rawPeriodoLibro,
+            periodo_libro:
+              normalizePeriodoLibro(rawPeriodoLibro, fechaEmisionIso) ||
+              rawPeriodoLibro,
             observacion: rawObservacion,
             es_duplicado_excel: false,
             fecha_carga: ahoraIso,
@@ -582,6 +587,22 @@ export function MatchFlexlineClient({
     [filteredMalIngresadas, currentPage]
   );
 
+  const activeKpis = useMemo(() => {
+    if (periodoFilter === "TODOS") return data.kpis;
+    return (
+      data.kpisPorPeriodo?.[periodoFilter] || {
+        totalDocumentosSii: 0,
+        totalMontoSii: 0,
+        faltanPorIngresarCount: 0,
+        faltanPorIngresarMonto: 0,
+        ingresadasCorrectamenteCount: 0,
+        ingresadasCorrectamenteMonto: 0,
+        malIngresadasCount: 0,
+        malIngresadasDiferenciaMonto: 0,
+      }
+    );
+  }, [data.kpis, data.kpisPorPeriodo, periodoFilter]);
+
   return (
     <div className="space-y-4">
       {/* 1. Cabecera Corporativa + Botón Importar Excel (Solo ADMINISTRADOR) */}
@@ -684,11 +705,11 @@ export function MatchFlexlineClient({
               TOTAL DOCUMENTOS SII
             </span>
             <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
-              {data.kpis.totalDocumentosSii.toLocaleString("es-CL")} docs
+              {activeKpis.totalDocumentosSii.toLocaleString("es-CL")} docs
             </span>
           </div>
           <div className="text-lg font-black text-slate-900 font-mono tabular-nums mt-1.5">
-            {formatCLP(data.kpis.totalMontoSii)}
+            {formatCLP(activeKpis.totalMontoSii)}
           </div>
         </div>
 
@@ -698,11 +719,11 @@ export function MatchFlexlineClient({
               FALTAN POR INGRESAR
             </span>
             <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-orange-50 text-[#E05A10] border border-orange-200">
-              {data.kpis.faltanPorIngresarCount.toLocaleString("es-CL")} docs
+              {activeKpis.faltanPorIngresarCount.toLocaleString("es-CL")} docs
             </span>
           </div>
           <div className="text-lg font-black text-[#E05A10] font-mono tabular-nums mt-1.5">
-            {formatCLP(data.kpis.faltanPorIngresarMonto)}
+            {formatCLP(activeKpis.faltanPorIngresarMonto)}
           </div>
         </div>
 
@@ -712,11 +733,11 @@ export function MatchFlexlineClient({
               INGRESADAS CORRECTAMENTE
             </span>
             <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              {data.kpis.ingresadasCorrectamenteCount.toLocaleString("es-CL")} docs
+              {activeKpis.ingresadasCorrectamenteCount.toLocaleString("es-CL")} docs
             </span>
           </div>
           <div className="text-lg font-black text-emerald-700 font-mono tabular-nums mt-1.5">
-            {formatCLP(data.kpis.ingresadasCorrectamenteMonto)}
+            {formatCLP(activeKpis.ingresadasCorrectamenteMonto)}
           </div>
         </div>
 
@@ -726,11 +747,11 @@ export function MatchFlexlineClient({
               MAL INGRESADAS / OBSERVADAS
             </span>
             <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-rose-50 text-rose-700 border border-rose-200">
-              {data.kpis.malIngresadasCount.toLocaleString("es-CL")} obs
+              {activeKpis.malIngresadasCount.toLocaleString("es-CL")} obs
             </span>
           </div>
           <div className="text-lg font-black text-rose-700 font-mono tabular-nums mt-1.5">
-            {formatCLP(data.kpis.malIngresadasDiferenciaMonto)}
+            {formatCLP(activeKpis.malIngresadasDiferenciaMonto)}
           </div>
         </div>
       </div>
@@ -786,7 +807,7 @@ export function MatchFlexlineClient({
               <option value="TODOS">Todos los Períodos</option>
               {data.periodosDisponibles.map((p) => (
                 <option key={p} value={p}>
-                  {p}
+                  {formatPeriodoLibroLabel(p)}
                 </option>
               ))}
             </select>
