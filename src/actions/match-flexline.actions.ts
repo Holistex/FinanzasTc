@@ -8,6 +8,14 @@ import {
 } from "@/lib/supabase/server";
 import { assertIsAdmin, getServerUserSession } from "@/lib/auth/session";
 import { getModuleAccess } from "@/lib/permissions";
+import {
+  buildCanonicalCompraKey,
+  normalizeFolio,
+  normalizeKey2ToCanonical,
+  normalizeRut,
+  parseExcelAmount,
+  parseExcelDate,
+} from "@/lib/match-flexline-utils";
 
 export interface MatchFlexlineFaltanteRow {
   id: string;
@@ -88,7 +96,7 @@ interface FacturaCompraMatchSource {
   monto_total: number;
 }
 
-interface FlexlineImportRow {
+export interface FlexlineImportRow {
   id?: string;
   key2_original: string;
   key2_normalizada: string;
@@ -101,98 +109,8 @@ interface FlexlineImportRow {
   monto_total: number;
   periodo_libro: string;
   observacion: string;
+  es_duplicado_excel?: boolean;
   fecha_carga: string;
-}
-
-/**
- * Normaliza (rut_proveedor + folio) de facturas_compras:
- * Ej: "77.954.732-9" + "0000000059" => "77954732-959"
- */
-function buildKey(rut: string, folio: string | number): string {
-  const rutLimpio = String(rut || "")
-    .replace(/\./g, "")
-    .trim()
-    .toUpperCase();
-  const folioStr = String(folio || "").trim().replace(/^0+/, "") || "0";
-  return `${rutLimpio}${folioStr}`;
-}
-
-/**
- * Normaliza la Columna S (KEY2) de Flexline:
- * Si viene como "77954732-90403", quita ceros sobrantes después del dígito verificador.
- */
-function normalizeKey2(rawKey2: string): string {
-  const clean = String(rawKey2 || "")
-    .replace(/\./g, "")
-    .trim()
-    .toUpperCase();
-  const match = clean.match(/^(\d+-[0-9K])0*(\d+)$/);
-  return match ? `${match[1]}${match[2]}` : clean;
-}
-
-function parseExcelDate(val: unknown): string | null {
-  if (val === null || val === undefined || val === "") return null;
-
-  if (typeof val === "number" && Number.isFinite(val) && val > 10000) {
-    const parsed = XLSX.SSF.parse_date_code(val);
-    if (parsed && parsed.y && parsed.m && parsed.d) {
-      const y = String(parsed.y).padStart(4, "0");
-      const m = String(parsed.m).padStart(2, "0");
-      const d = String(parsed.d).padStart(2, "0");
-      return `${y}-${m}-${d}`;
-    }
-  }
-
-  if (val instanceof Date && !Number.isNaN(val.getTime())) {
-    const y = val.getFullYear();
-    const m = String(val.getMonth() + 1).padStart(2, "0");
-    const d = String(val.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
-
-  const str = String(val).trim();
-  if (!str) return null;
-
-  // ISO YYYY-MM-DD
-  const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-  if (isoMatch) {
-    return `${isoMatch[1]}-${isoMatch[2].padStart(2, "0")}-${isoMatch[3].padStart(2, "0")}`;
-  }
-
-  // CL DD/MM/YYYY o DD-MM-YYYY
-  const clMatch = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
-  if (clMatch) {
-    const year = clMatch[3].length === 2 ? `20${clMatch[3]}` : clMatch[3];
-    return `${year}-${clMatch[2].padStart(2, "0")}-${clMatch[1].padStart(2, "0")}`;
-  }
-
-  return null;
-}
-
-function parseExcelAmount(val: unknown): number {
-  if (typeof val === "number" && Number.isFinite(val)) {
-    return Math.round(val);
-  }
-  const str = String(val ?? "").trim();
-  if (!str) return 0;
-
-  // Quitar símbolo moneda y espacios
-  let cleaned = str.replace(/[$\s]/g, "");
-  // Si tiene formato chileno con puntos de miles y coma decimal (ej. 1.234.567,89)
-  if (cleaned.includes(",") && cleaned.includes(".")) {
-    cleaned = cleaned.replace(/\./g, "").replace(",", ".");
-  } else if (cleaned.includes(",") && !cleaned.includes(".")) {
-    cleaned = cleaned.replace(",", ".");
-  } else {
-    // Solo puntos: si hay más de un punto o 3 dígitos después del punto, son miles
-    const parts = cleaned.split(".");
-    if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) {
-      cleaned = cleaned.replace(/\./g, "");
-    }
-  }
-
-  const num = Number(cleaned);
-  return Number.isFinite(num) ? Math.round(num) : 0;
 }
 
 function extractPeriodo(fechaIso?: string | null, periodoLibro?: string | null): string {
@@ -205,6 +123,10 @@ function extractPeriodo(fechaIso?: string | null, periodoLibro?: string | null):
   return "";
 }
 
+/**
+ * Lectura paginada sin límite de 1.000 filas de Supabase PostgREST.
+ * Ordena por `id` ascendente para garantizar paginación determinista.
+ */
 async function fetchAllTableRows<T>(
   tableName: string,
   columns: string
@@ -218,6 +140,7 @@ async function fetchAllTableRows<T>(
     const { data, error } = await supabase
       .from(tableName)
       .select(columns)
+      .order("id", { ascending: true })
       .range(from, from + pageSize - 1);
 
     if (error) {
@@ -235,13 +158,97 @@ async function fetchAllTableRows<T>(
 }
 
 /**
- * Importa la planilla Excel de Flexline (solo perfil ADMINISTRADOR),
- * normaliza KEY2 (Columna S) y reemplaza los datos en `compras_flexline_import`
- * en lotes de 500 filas.
+ * Inserta un bloque de filas ya parseadas en `compras_flexline_import` (en lotes de 500),
+ * evitando límites de tamaño de payload HTTP en Vercel para planillas de 6.000+ filas.
+ */
+export async function importarMatchFlexlineChunkAction(
+  rows: FlexlineImportRow[],
+  options: { replaceExisting: boolean; isFinalChunk: boolean }
+): Promise<{
+  success: boolean;
+  insertedInChunk?: number;
+  totalSavedInDb?: number;
+  error?: string;
+}> {
+  try {
+    await assertIsAdmin();
+
+    if (!isServerSupabaseConfigured()) {
+      return {
+        success: false,
+        error: "Supabase no está configurado en el servidor.",
+      };
+    }
+
+    const supabase = await createServerSupabaseClient();
+
+    if (options.replaceExisting) {
+      const { error: deleteError } = await supabase
+        .from("compras_flexline_import")
+        .delete()
+        .not("id", "is", null);
+
+      if (deleteError) {
+        return {
+          success: false,
+          error: `Error al limpiar la carga anterior: ${deleteError.message}`,
+        };
+      }
+    }
+
+    const BATCH_SIZE = 500;
+    for (let start = 0; start < rows.length; start += BATCH_SIZE) {
+      const batch = rows.slice(start, start + BATCH_SIZE);
+      const { error: insertError } = await supabase
+        .from("compras_flexline_import")
+        .insert(batch);
+
+      if (insertError) {
+        return {
+          success: false,
+          error: `Error insertando lote (${start + 1}-${start + batch.length}): ${insertError.message}`,
+        };
+      }
+    }
+
+    let totalSavedInDb: number | undefined;
+    if (options.isFinalChunk) {
+      const { count, error: countError } = await supabase
+        .from("compras_flexline_import")
+        .select("id", { count: "exact", head: true });
+
+      if (countError) {
+        return {
+          success: false,
+          error: `Los datos se insertaron, pero falló la verificación final: ${countError.message}`,
+        };
+      }
+      totalSavedInDb = count ?? 0;
+      revalidatePath("/compras-tensacon/match-flexline");
+    }
+
+    return {
+      success: true,
+      insertedInChunk: rows.length,
+      totalSavedInDb,
+    };
+  } catch (err) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : "Error inesperado al guardar lote en Supabase.";
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Importa la planilla Excel de Flexline desde FormData (solo perfil ADMINISTRADOR),
+ * normaliza con llave canónica `RUT|FOLIO` y verifica el conteo real guardado en BD.
  */
 export async function importarMatchFlexlineAction(formData: FormData): Promise<{
   success: boolean;
   importedCount?: number;
+  totalSavedInDb?: number;
   error?: string;
 }> {
   try {
@@ -300,6 +307,7 @@ export async function importarMatchFlexlineAction(formData: FormData): Promise<{
 
     const ahoraIso = new Date().toISOString();
     const rowsToInsert: FlexlineImportRow[] = [];
+    const keyCounts = new Map<string, number>();
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -318,7 +326,6 @@ export async function importarMatchFlexlineAction(formData: FormData): Promise<{
       const rawDocCorto = String(row[17] ?? "").trim();
       const rawKey2 = String(row[18] ?? "").trim();
 
-      // Saltar fila de encabezado
       if (
         i === 0 &&
         (rawKey2.toUpperCase() === "KEY2" ||
@@ -328,36 +335,43 @@ export async function importarMatchFlexlineAction(formData: FormData): Promise<{
         continue;
       }
 
-      const folioFlex = rawDocCorto || rawNumDoc;
-      const key2Norm = rawKey2
-        ? normalizeKey2(rawKey2)
-        : rawRut && folioFlex
-        ? buildKey(rawRut, folioFlex)
-        : "";
+      const folioLimpio = normalizeFolio(rawDocCorto || rawNumDoc);
+      const rutLimpio = normalizeRut(rawRut);
+      const canonicalKey =
+        buildCanonicalCompraKey(rutLimpio, folioLimpio) ||
+        normalizeKey2ToCanonical(rawKey2);
 
-      // Saltar filas vacías o subtotales sin llave ni RUT
-      if (!key2Norm || (!rawRut && !rawKey2)) {
+      if (!canonicalKey || (!rutLimpio && !rawKey2)) {
         continue;
       }
+
+      keyCounts.set(canonicalKey, (keyCounts.get(canonicalKey) || 0) + 1);
 
       const montoG = parseExcelAmount(rawTotalG);
       const montoP = parseExcelAmount(rawTotalP);
       const montoFinal = montoG !== 0 ? montoG : montoP;
 
       rowsToInsert.push({
-        key2_original: rawKey2 || key2Norm,
-        key2_normalizada: key2Norm,
+        key2_original: rawKey2 || canonicalKey,
+        key2_normalizada: canonicalKey,
         documento_flexline: rawDocumento,
-        rut_proveedor: rawRut.replace(/\./g, "").trim().toUpperCase(),
+        rut_proveedor: rutLimpio,
         nombre_proveedor: rawProveedor,
-        folio_flexline: folioFlex,
+        folio_flexline: folioLimpio,
         fecha_emision: parseExcelDate(rawFechaEmision),
         fecha_vencimiento: parseExcelDate(rawFechaVence),
         monto_total: montoFinal,
         periodo_libro: rawPeriodoLibro,
         observacion: rawObservacion,
+        es_duplicado_excel: false,
         fecha_carga: ahoraIso,
       });
+    }
+
+    for (const r of rowsToInsert) {
+      if ((keyCounts.get(r.key2_normalizada) || 0) > 1) {
+        r.es_duplicado_excel = true;
+      }
     }
 
     if (rowsToInsert.length === 0) {
@@ -368,41 +382,19 @@ export async function importarMatchFlexlineAction(formData: FormData): Promise<{
       };
     }
 
-    const supabase = await createServerSupabaseClient();
+    const res = await importarMatchFlexlineChunkAction(rowsToInsert, {
+      replaceExisting: true,
+      isFinalChunk: true,
+    });
 
-    // Reemplazar la carga anterior completa
-    const { error: deleteError } = await supabase
-      .from("compras_flexline_import")
-      .delete()
-      .not("id", "is", null);
-
-    if (deleteError) {
-      return {
-        success: false,
-        error: `Error al limpiar la carga anterior: ${deleteError.message}`,
-      };
+    if (!res.success) {
+      return { success: false, error: res.error };
     }
 
-    // Insertar en lotes de 500 filas
-    const BATCH_SIZE = 500;
-    for (let start = 0; start < rowsToInsert.length; start += BATCH_SIZE) {
-      const batch = rowsToInsert.slice(start, start + BATCH_SIZE);
-      const { error: insertError } = await supabase
-        .from("compras_flexline_import")
-        .insert(batch);
-
-      if (insertError) {
-        return {
-          success: false,
-          error: `Error insertando lote (${start + 1}-${start + batch.length}): ${insertError.message}`,
-        };
-      }
-    }
-
-    revalidatePath("/compras-tensacon/match-flexline");
     return {
       success: true,
       importedCount: rowsToInsert.length,
+      totalSavedInDb: res.totalSavedInDb ?? rowsToInsert.length,
     };
   } catch (err) {
     const message =
@@ -412,8 +404,9 @@ export async function importarMatchFlexlineAction(formData: FormData): Promise<{
 }
 
 /**
- * Obtiene el universo completo de `facturas_compras` (SII) y `compras_flexline_import`,
- * ejecuta el motor de cruce por KEY2 normalizada y retorna las 3 pestañas y KPIs.
+ * Obtiene el universo completo (sin límite de 1.000 filas) de `facturas_compras` (SII)
+ * y `compras_flexline_import`, ejecuta el motor de cruce por llave canónica `RUT|FOLIO`
+ * y retorna las 3 pestañas y KPIs.
  */
 export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineResponse> {
   const session = await getServerUserSession();
@@ -455,7 +448,8 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
 
   const siiMap = new Map<string, FacturaCompraMatchSource[]>();
   for (const doc of siiDocs) {
-    const key = buildKey(doc.rut_proveedor, doc.folio);
+    const key = buildCanonicalCompraKey(doc.rut_proveedor, doc.folio);
+    if (!key) continue;
     const list = siiMap.get(key) || [];
     list.push(doc);
     siiMap.set(key, list);
@@ -467,7 +461,9 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
     if (row.fecha_carga && (!ultimaCarga || row.fecha_carga > ultimaCarga)) {
       ultimaCarga = row.fecha_carga;
     }
-    const key = normalizeKey2(row.key2_normalizada || row.key2_original);
+    const key =
+      buildCanonicalCompraKey(row.rut_proveedor, row.folio_flexline) ||
+      normalizeKey2ToCanonical(row.key2_normalizada || row.key2_original);
     if (!key) continue;
     const list = flexMap.get(key) || [];
     list.push(row);
@@ -483,18 +479,18 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
 
   // 1. Recorrer universo SII (facturas_compras)
   for (const doc of siiDocs) {
-    const key = buildKey(doc.rut_proveedor, doc.folio);
+    const key = buildCanonicalCompraKey(doc.rut_proveedor, doc.folio);
     const montoSii = Math.round(Number(doc.monto_total || 0));
     totalMontoSii += montoSii;
 
     const periodo = extractPeriodo(doc.fecha_docto);
     if (periodo) periodosSet.add(periodo);
 
-    const matchedFlex = flexMap.get(key);
+    const matchedFlex = key ? flexMap.get(key) : undefined;
     if (!matchedFlex || matchedFlex.length === 0) {
       faltantes.push({
         id: doc.id,
-        key,
+        key: key || `${normalizeRut(doc.rut_proveedor)}|${doc.folio}`,
         tipo_doc: Number(doc.tipo_doc || 33),
         folio: Number(doc.folio || 0),
         rut_proveedor: doc.rut_proveedor,
@@ -507,7 +503,6 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
       continue;
     }
 
-    // Evaluar el primer registro de Flexline contra el documento SII
     const primaryFlex = matchedFlex[0];
     const montoFlex = Math.round(Number(primaryFlex.monto_total || 0));
     const diff = montoSii - montoFlex;
@@ -571,7 +566,6 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
         });
       });
     } else if (flexRows.length > 1) {
-      // El índice 0 ya fue comparado con SII; los adicionales son duplicados en Flexline
       for (let idx = 1; idx < flexRows.length; idx++) {
         const row = flexRows[idx];
         const periodo = extractPeriodo(row.fecha_emision, row.periodo_libro);
@@ -597,7 +591,6 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
     }
   }
 
-  // Ordenar por fecha descendente
   faltantes.sort((a, b) => (b.fecha_docto || "").localeCompare(a.fecha_docto || ""));
   correctas.sort((a, b) => (b.fecha_docto || "").localeCompare(a.fecha_docto || ""));
   malIngresadas.sort((a, b) =>

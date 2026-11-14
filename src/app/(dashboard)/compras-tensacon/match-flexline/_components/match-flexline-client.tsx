@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useTransition } from "react";
+import React, { useState, useMemo, useRef, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -25,9 +25,19 @@ import {
   paginateArray,
 } from "@/components/ui/TablePagination";
 import {
+  FlexlineImportRow,
   MatchFlexlineResponse,
-  importarMatchFlexlineAction,
+  getMatchFlexlineDataAction,
+  importarMatchFlexlineChunkAction,
 } from "@/actions/match-flexline.actions";
+import {
+  buildCanonicalCompraKey,
+  normalizeFolio,
+  normalizeKey2ToCanonical,
+  normalizeRut,
+  parseExcelAmount,
+  parseExcelDate,
+} from "@/lib/match-flexline-utils";
 import { formatCLP, formatDateCL, cn } from "@/lib/utils";
 
 type TabMatchFlexline = "FALTANTES" | "CORRECTAS" | "MAL_INGRESADAS";
@@ -59,6 +69,12 @@ export function MatchFlexlineClient({
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, startUploadTransition] = useTransition();
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [data, setData] = useState<MatchFlexlineResponse>(initialData);
+
+  useEffect(() => {
+    setData(initialData);
+  }, [initialData]);
 
   const [activeTab, setActiveTab] = useState<TabMatchFlexline>("FALTANTES");
   const [search, setSearch] = useState("");
@@ -79,7 +95,7 @@ export function MatchFlexlineClient({
 
   const filteredFaltantes = useMemo(() => {
     const q = normalizeQuery(search);
-    return initialData.faltantes.filter((r) => {
+    return data.faltantes.filter((r) => {
       if (periodoFilter !== "TODOS" && r.periodo !== periodoFilter) return false;
       if (q) {
         const hay = normalizeQuery(
@@ -89,11 +105,11 @@ export function MatchFlexlineClient({
       }
       return true;
     });
-  }, [initialData.faltantes, search, periodoFilter]);
+  }, [data.faltantes, search, periodoFilter]);
 
   const filteredCorrectas = useMemo(() => {
     const q = normalizeQuery(search);
-    return initialData.correctas.filter((r) => {
+    return data.correctas.filter((r) => {
       if (periodoFilter !== "TODOS" && r.periodo !== periodoFilter) return false;
       if (q) {
         const hay = normalizeQuery(
@@ -103,11 +119,11 @@ export function MatchFlexlineClient({
       }
       return true;
     });
-  }, [initialData.correctas, search, periodoFilter]);
+  }, [data.correctas, search, periodoFilter]);
 
   const filteredMalIngresadas = useMemo(() => {
     const q = normalizeQuery(search);
-    return initialData.malIngresadas.filter((r) => {
+    return data.malIngresadas.filter((r) => {
       if (periodoFilter !== "TODOS" && r.periodo !== periodoFilter) return false;
       if (q) {
         const hay = normalizeQuery(
@@ -117,7 +133,7 @@ export function MatchFlexlineClient({
       }
       return true;
     });
-  }, [initialData.malIngresadas, search, periodoFilter]);
+  }, [data.malIngresadas, search, periodoFilter]);
 
   const handleTabChange = (tab: TabMatchFlexline) => {
     setActiveTab(tab);
@@ -144,25 +160,169 @@ export function MatchFlexlineClient({
     const file = e.target.files?.[0];
     if (!file) return;
     setFeedback(null);
-
-    const formData = new FormData();
-    formData.append("file", file);
+    setUploadProgress("Leyendo archivo Excel...");
 
     startUploadTransition(async () => {
-      const res = await importarMatchFlexlineAction(formData);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      try {
+        const fileName = file.name.toLowerCase();
+        if (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xls")) {
+          setFeedback({
+            type: "error",
+            message: "Formato inválido. Solo se aceptan archivos .xlsx o .xls.",
+          });
+          return;
+        }
 
-      if (res.success) {
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = XLSX.read(arrayBuffer, { type: "array" });
+
+        const targetSheetName = workbook.SheetNames.includes("Hoja1")
+          ? "Hoja1"
+          : workbook.SheetNames[0];
+
+        if (!targetSheetName) {
+          setFeedback({
+            type: "error",
+            message: "El archivo Excel no contiene hojas legibles.",
+          });
+          return;
+        }
+
+        const sheet = workbook.Sheets[targetSheetName];
+        const rawRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+          header: 1,
+          raw: true,
+          defval: "",
+        });
+
+        const ahoraIso = new Date().toISOString();
+        const parsedRows: FlexlineImportRow[] = [];
+        const keyCounts = new Map<string, number>();
+
+        for (let i = 0; i < rawRows.length; i++) {
+          const row = rawRows[i];
+          if (!Array.isArray(row) || row.length === 0) continue;
+
+          const rawDocumento = String(row[0] ?? "").trim();
+          const rawRut = String(row[1] ?? "").trim();
+          const rawProveedor = String(row[2] ?? "").trim();
+          const rawNumDoc = String(row[3] ?? "").trim();
+          const rawFechaEmision = row[4];
+          const rawTotalG = row[6];
+          const rawFechaVence = row[9];
+          const rawObservacion = String(row[10] ?? "").trim();
+          const rawPeriodoLibro = String(row[11] ?? "").trim();
+          const rawTotalP = row[15];
+          const rawDocCorto = String(row[17] ?? "").trim();
+          const rawKey2 = String(row[18] ?? "").trim();
+
+          if (
+            i === 0 &&
+            (rawKey2.toUpperCase() === "KEY2" ||
+              rawRut.toUpperCase() === "RUT" ||
+              rawDocumento.toUpperCase() === "DOCUMENTO")
+          ) {
+            continue;
+          }
+
+          const folioLimpio = normalizeFolio(rawDocCorto || rawNumDoc);
+          const rutLimpio = normalizeRut(rawRut);
+          const canonicalKey =
+            buildCanonicalCompraKey(rutLimpio, folioLimpio) ||
+            normalizeKey2ToCanonical(rawKey2);
+
+          if (!canonicalKey || (!rutLimpio && !rawKey2)) {
+            continue;
+          }
+
+          keyCounts.set(canonicalKey, (keyCounts.get(canonicalKey) || 0) + 1);
+
+          const montoG = parseExcelAmount(rawTotalG);
+          const montoP = parseExcelAmount(rawTotalP);
+          const montoFinal = montoG !== 0 ? montoG : montoP;
+
+          parsedRows.push({
+            key2_original: rawKey2 || canonicalKey,
+            key2_normalizada: canonicalKey,
+            documento_flexline: rawDocumento,
+            rut_proveedor: rutLimpio,
+            nombre_proveedor: rawProveedor,
+            folio_flexline: folioLimpio,
+            fecha_emision: parseExcelDate(rawFechaEmision),
+            fecha_vencimiento: parseExcelDate(rawFechaVence),
+            monto_total: montoFinal,
+            periodo_libro: rawPeriodoLibro,
+            observacion: rawObservacion,
+            es_duplicado_excel: false,
+            fecha_carga: ahoraIso,
+          });
+        }
+
+        for (const r of parsedRows) {
+          if ((keyCounts.get(r.key2_normalizada) || 0) > 1) {
+            r.es_duplicado_excel = true;
+          }
+        }
+
+        if (parsedRows.length === 0) {
+          setFeedback({
+            type: "error",
+            message:
+              "No se encontraron filas válidas con RUT + Folio o Columna S (KEY2) en el archivo.",
+          });
+          return;
+        }
+
+        const CHUNK_SIZE = 1000;
+        const totalChunks = Math.ceil(parsedRows.length / CHUNK_SIZE);
+        let totalSavedInDb = 0;
+
+        for (let c = 0; c < totalChunks; c++) {
+          setUploadProgress(`Guardando lote ${c + 1} de ${totalChunks}...`);
+          const chunk = parsedRows.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
+          const res = await importarMatchFlexlineChunkAction(chunk, {
+            replaceExisting: c === 0,
+            isFinalChunk: c === totalChunks - 1,
+          });
+
+          if (!res.success) {
+            setFeedback({
+              type: "error",
+              message:
+                res.error ||
+                `Error guardando el lote ${c + 1} de ${totalChunks} en base de datos.`,
+            });
+            return;
+          }
+
+          if (typeof res.totalSavedInDb === "number") {
+            totalSavedInDb = res.totalSavedInDb;
+          }
+        }
+
+        setUploadProgress("Actualizando conciliación...");
+        const refreshed = await getMatchFlexlineDataAction();
+        setData(refreshed);
+        setCurrentPage(1);
+        router.refresh();
+
         setFeedback({
           type: "success",
-          message: `Planilla Flexline importada correctamente: ${res.importedCount ?? 0} registros procesados.`,
+          message: `Planilla Flexline importada correctamente: ${parsedRows.length.toLocaleString(
+            "es-CL"
+          )} filas procesadas y ${totalSavedInDb.toLocaleString(
+            "es-CL"
+          )} registros verificados en base de datos.`,
         });
-        router.refresh();
-      } else {
-        setFeedback({
-          type: "error",
-          message: res.error || "No se pudo importar la planilla Excel.",
-        });
+      } catch (err) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Error inesperado al procesar o subir el archivo Excel.";
+        setFeedback({ type: "error", message });
+      } finally {
+        setUploadProgress(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
       }
     });
   };
@@ -369,18 +529,18 @@ export function MatchFlexlineClient({
               <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-orange-50 text-[#E05A10] border border-orange-200 uppercase tracking-wider">
                 Conciliación SII vs Flexline (KEY2)
               </span>
-              {initialData.totalFlexlineRows > 0 && (
+              {data.totalFlexlineRows > 0 && (
                 <span className="px-2 py-0.5 text-[10px] font-mono font-semibold rounded bg-slate-100 text-slate-600 border border-slate-200">
-                  {initialData.totalFlexlineRows.toLocaleString("es-CL")} filas Flexline
+                  {data.totalFlexlineRows.toLocaleString("es-CL")} filas Flexline
                 </span>
               )}
             </div>
             <p className="text-xs text-slate-500">
               COMPRAS TENSACON — Auditoría y cruce automático entre Registro de Compras SII y libro Flexline
-              {initialData.ultimaCarga && (
+              {data.ultimaCarga && (
                 <span className="ml-2 text-slate-400">
                   · Última carga:{" "}
-                  {new Date(initialData.ultimaCarga).toLocaleString("es-CL")}
+                  {new Date(data.ultimaCarga).toLocaleString("es-CL")}
                 </span>
               )}
             </p>
@@ -408,7 +568,9 @@ export function MatchFlexlineClient({
                 <Upload className="h-3.5 w-3.5" />
               )}
               <span>
-                {isUploading ? "Procesando Excel..." : "Importar Excel Flexline"}
+                {isUploading
+                  ? uploadProgress || "Procesando Excel..."
+                  : "Importar Excel Flexline"}
               </span>
             </button>
           </div>
@@ -443,11 +605,11 @@ export function MatchFlexlineClient({
               TOTAL DOCUMENTOS SII
             </span>
             <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
-              {initialData.kpis.totalDocumentosSii.toLocaleString("es-CL")} docs
+              {data.kpis.totalDocumentosSii.toLocaleString("es-CL")} docs
             </span>
           </div>
           <div className="text-lg font-black text-slate-900 font-mono tabular-nums mt-1.5">
-            {formatCLP(initialData.kpis.totalMontoSii)}
+            {formatCLP(data.kpis.totalMontoSii)}
           </div>
         </div>
 
@@ -457,11 +619,11 @@ export function MatchFlexlineClient({
               FALTAN POR INGRESAR
             </span>
             <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-orange-50 text-[#E05A10] border border-orange-200">
-              {initialData.kpis.faltanPorIngresarCount.toLocaleString("es-CL")} docs
+              {data.kpis.faltanPorIngresarCount.toLocaleString("es-CL")} docs
             </span>
           </div>
           <div className="text-lg font-black text-[#E05A10] font-mono tabular-nums mt-1.5">
-            {formatCLP(initialData.kpis.faltanPorIngresarMonto)}
+            {formatCLP(data.kpis.faltanPorIngresarMonto)}
           </div>
         </div>
 
@@ -471,11 +633,11 @@ export function MatchFlexlineClient({
               INGRESADAS CORRECTAMENTE
             </span>
             <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              {initialData.kpis.ingresadasCorrectamenteCount.toLocaleString("es-CL")} docs
+              {data.kpis.ingresadasCorrectamenteCount.toLocaleString("es-CL")} docs
             </span>
           </div>
           <div className="text-lg font-black text-emerald-700 font-mono tabular-nums mt-1.5">
-            {formatCLP(initialData.kpis.ingresadasCorrectamenteMonto)}
+            {formatCLP(data.kpis.ingresadasCorrectamenteMonto)}
           </div>
         </div>
 
@@ -485,11 +647,11 @@ export function MatchFlexlineClient({
               MAL INGRESADAS / OBSERVADAS
             </span>
             <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-rose-50 text-rose-700 border border-rose-200">
-              {initialData.kpis.malIngresadasCount.toLocaleString("es-CL")} obs
+              {data.kpis.malIngresadasCount.toLocaleString("es-CL")} obs
             </span>
           </div>
           <div className="text-lg font-black text-rose-700 font-mono tabular-nums mt-1.5">
-            {formatCLP(initialData.kpis.malIngresadasDiferenciaMonto)}
+            {formatCLP(data.kpis.malIngresadasDiferenciaMonto)}
           </div>
         </div>
       </div>
@@ -543,7 +705,7 @@ export function MatchFlexlineClient({
               className="rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:bg-white focus:border-[#E05A10] focus:outline-none"
             >
               <option value="TODOS">Todos los Períodos</option>
-              {initialData.periodosDisponibles.map((p) => (
+              {data.periodosDisponibles.map((p) => (
                 <option key={p} value={p}>
                   {p}
                 </option>
@@ -669,7 +831,7 @@ export function MatchFlexlineClient({
                 {paginatedCorrectas.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="py-10 text-center text-slate-500">
-                      {initialData.totalFlexlineRows === 0
+                      {data.totalFlexlineRows === 0
                         ? "Aún no se ha importado una planilla Excel de Flexline."
                         : "No hay documentos conciliados para los filtros seleccionados."}
                     </td>
