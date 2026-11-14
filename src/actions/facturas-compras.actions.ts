@@ -479,15 +479,22 @@ export async function importarComprasCsvAction(
 
   if (isServerSupabaseConfigured()) {
     const supabase = await createServerSupabaseClient();
-    const { data } = await supabase
-      .from("facturas_compras")
-      .select("id, rut_proveedor, folio");
-    if (data) {
-      for (const r of data as Array<{ id: string; rut_proveedor: string; folio: number }>) {
+    const pageSize = 1000;
+    let from = 0;
+    while (true) {
+      const { data } = await supabase
+        .from("facturas_compras")
+        .select("id, rut_proveedor, folio")
+        .order("id", { ascending: true })
+        .range(from, from + pageSize - 1);
+      const batch = (data || []) as Array<{ id: string; rut_proveedor: string; folio: number }>;
+      for (const r of batch) {
         const key = `${normalizeRut(r.rut_proveedor)}_${r.folio}`;
         existingKeys.add(key);
         if (r.id) existingIdByKey.set(key, r.id);
       }
+      if (batch.length < pageSize) break;
+      from += pageSize;
     }
   } else {
     const localDb = readLocalDb();

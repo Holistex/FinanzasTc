@@ -98,10 +98,37 @@ export function MatchFlexlineClient({
       .trim()
       .toLowerCase();
 
+  const activeDataset = useMemo(() => {
+    if (periodoFilter === "TODOS") {
+      return {
+        faltantes: data.faltantes,
+        correctas: data.correctas,
+        malIngresadas: data.malIngresadas,
+        kpis: data.kpis,
+      };
+    }
+    return (
+      data.porPeriodo?.[periodoFilter] || {
+        faltantes: [],
+        correctas: [],
+        malIngresadas: [],
+        kpis: {
+          totalDocumentosSii: 0,
+          totalMontoSii: 0,
+          faltanPorIngresarCount: 0,
+          faltanPorIngresarMonto: 0,
+          ingresadasCorrectamenteCount: 0,
+          ingresadasCorrectamenteMonto: 0,
+          malIngresadasCount: 0,
+          malIngresadasDiferenciaMonto: 0,
+        },
+      }
+    );
+  }, [data, periodoFilter]);
+
   const filteredFaltantes = useMemo(() => {
     const q = normalizeQuery(search);
-    return data.faltantes.filter((r) => {
-      if (periodoFilter !== "TODOS" && r.periodo !== periodoFilter) return false;
+    return activeDataset.faltantes.filter((r) => {
       if (q) {
         const hay = normalizeQuery(
           `${r.key} ${r.folio} ${r.rut_proveedor} ${r.razon_social}`
@@ -110,12 +137,11 @@ export function MatchFlexlineClient({
       }
       return true;
     });
-  }, [data.faltantes, search, periodoFilter]);
+  }, [activeDataset.faltantes, search]);
 
   const filteredCorrectas = useMemo(() => {
     const q = normalizeQuery(search);
-    return data.correctas.filter((r) => {
-      if (periodoFilter !== "TODOS" && r.periodo !== periodoFilter) return false;
+    return activeDataset.correctas.filter((r) => {
       if (q) {
         const hay = normalizeQuery(
           `${r.key} ${r.folio} ${r.rut_proveedor} ${r.razon_social}`
@@ -124,12 +150,11 @@ export function MatchFlexlineClient({
       }
       return true;
     });
-  }, [data.correctas, search, periodoFilter]);
+  }, [activeDataset.correctas, search]);
 
   const filteredMalIngresadas = useMemo(() => {
     const q = normalizeQuery(search);
-    return data.malIngresadas.filter((r) => {
-      if (periodoFilter !== "TODOS" && r.periodo !== periodoFilter) return false;
+    return activeDataset.malIngresadas.filter((r) => {
       if (q) {
         const hay = normalizeQuery(
           `${r.key2} ${r.folio} ${r.rut_proveedor} ${r.proveedor} ${r.motivo}`
@@ -138,7 +163,7 @@ export function MatchFlexlineClient({
       }
       return true;
     });
-  }, [data.malIngresadas, search, periodoFilter]);
+  }, [activeDataset.malIngresadas, search]);
 
   const handleTabChange = (tab: TabMatchFlexline) => {
     setActiveTab(tab);
@@ -587,21 +612,7 @@ export function MatchFlexlineClient({
     [filteredMalIngresadas, currentPage]
   );
 
-  const activeKpis = useMemo(() => {
-    if (periodoFilter === "TODOS") return data.kpis;
-    return (
-      data.kpisPorPeriodo?.[periodoFilter] || {
-        totalDocumentosSii: 0,
-        totalMontoSii: 0,
-        faltanPorIngresarCount: 0,
-        faltanPorIngresarMonto: 0,
-        ingresadasCorrectamenteCount: 0,
-        ingresadasCorrectamenteMonto: 0,
-        malIngresadasCount: 0,
-        malIngresadasDiferenciaMonto: 0,
-      }
-    );
-  }, [data.kpis, data.kpisPorPeriodo, periodoFilter]);
+  const activeKpis = activeDataset.kpis;
 
   return (
     <div className="space-y-4">
