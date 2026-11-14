@@ -53,6 +53,7 @@ export type MotivoMalIngresada =
 export interface MatchFlexlineMalIngresadaRow {
   id: string;
   key2: string;
+  tipo_doc?: number | string | null;
   motivo: MotivoMalIngresada;
   folio: string;
   rut_proveedor: string;
@@ -558,6 +559,7 @@ function reconcileMatchFlexline(
         malIngresadas.push({
           id: `${doc.id}-dup-${dupRow.id || idx}`,
           key2: dupRow.key2_original || key,
+          tipo_doc: Number(doc.tipo_doc || 33),
           motivo: "Duplicado en Flexline",
           folio: String(doc.folio),
           rut_proveedor: doc.rut_proveedor,
@@ -579,6 +581,7 @@ function reconcileMatchFlexline(
         malIngresadas.push({
           id: `${doc.id}-diff-${primaryFlex.id || "0"}`,
           key2: primaryFlex.key2_original || key,
+          tipo_doc: Number(doc.tipo_doc || 33),
           motivo: "Diferencia de Monto",
           folio: String(doc.folio),
           rut_proveedor: doc.rut_proveedor,
@@ -615,10 +618,22 @@ function reconcileMatchFlexline(
     flexRows.forEach((row, idx) => {
       const periodo = normalizePeriodoLibro(row.periodo_libro, row.fecha_emision);
       const montoFlex = Math.round(Number(row.monto_total || 0));
+      const docRaw = String(row.documento_flexline || "").toUpperCase();
+      let inferredTipoDoc: number | string | null = row.documento_flexline || null;
+      if (docRaw.includes("61") || docRaw.includes("NC") || docRaw.includes("CREDITO")) {
+        inferredTipoDoc = 61;
+      } else if (docRaw.includes("56") || docRaw.includes("ND") || docRaw.includes("DEBITO")) {
+        inferredTipoDoc = 56;
+      } else if (docRaw.includes("34") || docRaw.includes("EX")) {
+        inferredTipoDoc = 34;
+      } else if (docRaw.includes("33") || docRaw.includes("FA")) {
+        inferredTipoDoc = 33;
+      }
 
       malIngresadas.push({
         id: `flex-nosii-${row.id || key}-${idx}`,
         key2: row.key2_original || key,
+        tipo_doc: inferredTipoDoc,
         motivo: idx > 0 ? "Duplicado en Flexline" : "Error de Folio / No existe en SII",
         folio: row.folio_flexline || "-",
         rut_proveedor: row.rut_proveedor || "-",

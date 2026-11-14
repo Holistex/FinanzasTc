@@ -52,19 +52,66 @@ interface MatchFlexlineClientProps {
   esAdministrador: boolean;
 }
 
-function getTipoDteLabel(tipoDoc: number): string {
-  switch (Number(tipoDoc)) {
-    case 33:
-      return "FAC 33";
-    case 34:
-      return "EX 34";
-    case 61:
-      return "NC 61";
-    case 56:
-      return "ND 56";
-    default:
-      return `DTE ${tipoDoc}`;
+function getTipoDteLabel(tipoDoc?: number | string | null): string {
+  if (tipoDoc === null || tipoDoc === undefined || tipoDoc === "") return "—";
+  const num = Number(tipoDoc);
+  if (Number.isFinite(num)) {
+    switch (num) {
+      case 33:
+        return "FAC 33";
+      case 34:
+        return "EX 34";
+      case 61:
+        return "NC 61";
+      case 56:
+        return "ND 56";
+      default:
+        return `DTE ${num}`;
+    }
   }
+  return String(tipoDoc);
+}
+
+function getTipoDteOptionLabel(code: string): string {
+  switch (code) {
+    case "33":
+      return "FAC 33 (Factura Electrónica)";
+    case "61":
+      return "NC 61 (Nota de Crédito)";
+    case "34":
+      return "EX 34 (Factura Exenta)";
+    case "56":
+      return "ND 56 (Nota de Débito)";
+    default:
+      return `DTE ${code}`;
+  }
+}
+
+function normalizeTipoDteCode(tipoDoc?: number | string | null): string {
+  if (tipoDoc === null || tipoDoc === undefined || tipoDoc === "") return "";
+  const str = String(tipoDoc).trim().toUpperCase();
+  if (/^\d+$/.test(str)) return str;
+  if (str.includes("61") || str.includes("NC")) return "61";
+  if (str.includes("56") || str.includes("ND")) return "56";
+  if (str.includes("34") || str.includes("EX")) return "34";
+  if (str.includes("33") || str.includes("FA")) return "33";
+  return str;
+}
+
+function renderTipoDteCell(tipoDoc?: number | string | null) {
+  const label = getTipoDteLabel(tipoDoc);
+  const esNC61 =
+    String(tipoDoc || "").includes("61") ||
+    label.toUpperCase().includes("NC");
+  return (
+    <span
+      className={
+        esNC61 ? "font-bold text-red-600" : "font-mono text-xs text-slate-600"
+      }
+    >
+      {esNC61 ? "NC 61" : label}
+    </span>
+  );
 }
 
 export function MatchFlexlineClient({
@@ -84,6 +131,7 @@ export function MatchFlexlineClient({
   const [activeTab, setActiveTab] = useState<TabMatchFlexline>("FALTANTES");
   const [search, setSearch] = useState("");
   const [periodoFilter, setPeriodoFilter] = useState("TODOS");
+  const [tipoDteFilter, setTipoDteFilter] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [feedback, setFeedback] = useState<{
     type: "success" | "error";
@@ -126,9 +174,37 @@ export function MatchFlexlineClient({
     );
   }, [data, periodoFilter]);
 
+  const tiposDteDisponibles = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of activeDataset.faltantes) {
+      const code = normalizeTipoDteCode(r.tipo_doc);
+      if (code) set.add(code);
+    }
+    for (const r of activeDataset.correctas) {
+      const code = normalizeTipoDteCode(r.tipo_doc);
+      if (code) set.add(code);
+    }
+    for (const r of activeDataset.malIngresadas) {
+      const code = normalizeTipoDteCode(r.tipo_doc);
+      if (code) set.add(code);
+    }
+    const order = ["33", "61", "34", "56"];
+    return Array.from(set).sort((a, b) => {
+      const ia = order.indexOf(a);
+      const ib = order.indexOf(b);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  }, [activeDataset]);
+
   const filteredFaltantes = useMemo(() => {
     const q = normalizeQuery(search);
     return activeDataset.faltantes.filter((r) => {
+      if (tipoDteFilter !== "ALL" && normalizeTipoDteCode(r.tipo_doc) !== tipoDteFilter) {
+        return false;
+      }
       if (q) {
         const hay = normalizeQuery(
           `${r.key} ${r.folio} ${r.rut_proveedor} ${r.razon_social}`
@@ -137,11 +213,14 @@ export function MatchFlexlineClient({
       }
       return true;
     });
-  }, [activeDataset.faltantes, search]);
+  }, [activeDataset.faltantes, search, tipoDteFilter]);
 
   const filteredCorrectas = useMemo(() => {
     const q = normalizeQuery(search);
     return activeDataset.correctas.filter((r) => {
+      if (tipoDteFilter !== "ALL" && normalizeTipoDteCode(r.tipo_doc) !== tipoDteFilter) {
+        return false;
+      }
       if (q) {
         const hay = normalizeQuery(
           `${r.key} ${r.folio} ${r.rut_proveedor} ${r.razon_social}`
@@ -150,11 +229,14 @@ export function MatchFlexlineClient({
       }
       return true;
     });
-  }, [activeDataset.correctas, search]);
+  }, [activeDataset.correctas, search, tipoDteFilter]);
 
   const filteredMalIngresadas = useMemo(() => {
     const q = normalizeQuery(search);
     return activeDataset.malIngresadas.filter((r) => {
+      if (tipoDteFilter !== "ALL" && normalizeTipoDteCode(r.tipo_doc) !== tipoDteFilter) {
+        return false;
+      }
       if (q) {
         const hay = normalizeQuery(
           `${r.key2} ${r.folio} ${r.rut_proveedor} ${r.proveedor} ${r.motivo}`
@@ -163,7 +245,7 @@ export function MatchFlexlineClient({
       }
       return true;
     });
-  }, [activeDataset.malIngresadas, search]);
+  }, [activeDataset.malIngresadas, search, tipoDteFilter]);
 
   const handleTabChange = (tab: TabMatchFlexline) => {
     setActiveTab(tab);
@@ -180,9 +262,15 @@ export function MatchFlexlineClient({
     setCurrentPage(1);
   };
 
+  const handleTipoDteChange = (val: string) => {
+    setTipoDteFilter(val);
+    setCurrentPage(1);
+  };
+
   const handleClearFilters = () => {
     setSearch("");
     setPeriodoFilter("TODOS");
+    setTipoDteFilter("ALL");
     setCurrentPage(1);
   };
 
@@ -824,7 +912,23 @@ export function MatchFlexlineClient({
             </select>
           </div>
 
-          {(search || periodoFilter !== "TODOS") && (
+          <div className="flex items-center gap-1.5">
+            <select
+              value={tipoDteFilter}
+              onChange={(e) => handleTipoDteChange(e.target.value)}
+              aria-label="Filtrar por Tipo DTE"
+              className="rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:bg-white focus:border-[#E05A10] focus:outline-none"
+            >
+              <option value="ALL">Todos los DTE</option>
+              {tiposDteDisponibles.map((code) => (
+                <option key={code} value={code}>
+                  {getTipoDteOptionLabel(code)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {(search || periodoFilter !== "TODOS" || tipoDteFilter !== "ALL") && (
             <button
               type="button"
               onClick={handleClearFilters}
@@ -885,8 +989,8 @@ export function MatchFlexlineClient({
                 ) : (
                   paginatedFaltantes.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-2 px-3 font-mono text-slate-600 whitespace-nowrap">
-                        {getTipoDteLabel(r.tipo_doc)}
+                      <td className="py-2 px-3 whitespace-nowrap">
+                        {renderTipoDteCell(r.tipo_doc)}
                       </td>
                       <td className="py-2 px-3 font-mono font-semibold text-slate-900">
                         #{r.folio}
@@ -945,8 +1049,8 @@ export function MatchFlexlineClient({
                 ) : (
                   paginatedCorrectas.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-2 px-3 font-mono text-slate-600 whitespace-nowrap">
-                        {getTipoDteLabel(r.tipo_doc)}
+                      <td className="py-2 px-3 whitespace-nowrap">
+                        {renderTipoDteCell(r.tipo_doc)}
                       </td>
                       <td className="py-2 px-3 font-mono font-semibold text-slate-900">
                         #{r.folio}
@@ -986,6 +1090,7 @@ export function MatchFlexlineClient({
               <thead>
                 <tr className="bg-slate-50 text-slate-600 text-[10px] font-bold uppercase tracking-wider border-b border-slate-200">
                   <th className="py-2.5 px-3">MOTIVO / DIAGNÓSTICO</th>
+                  <th className="py-2.5 px-3">TIPO DTE</th>
                   <th className="py-2.5 px-3">FOLIO</th>
                   <th className="py-2.5 px-3">RUT PROVEEDOR</th>
                   <th className="py-2.5 px-3">PROVEEDOR</th>
@@ -997,7 +1102,7 @@ export function MatchFlexlineClient({
               <tbody className="divide-y divide-slate-200/80 text-xs">
                 {paginatedMalIngresadas.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-10 text-center text-slate-500">
+                    <td colSpan={8} className="py-10 text-center text-slate-500">
                       No se detectaron inconsistencias ni errores de ingreso para los filtros seleccionados.
                     </td>
                   </tr>
@@ -1017,6 +1122,9 @@ export function MatchFlexlineClient({
                         >
                           {r.motivo}
                         </span>
+                      </td>
+                      <td className="py-2 px-3 whitespace-nowrap">
+                        {renderTipoDteCell(r.tipo_doc)}
                       </td>
                       <td className="py-2 px-3 font-mono font-semibold text-slate-900">
                         {r.folio}
