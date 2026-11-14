@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   Loader2,
   Calendar,
+  Trash2,
 } from "lucide-react";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import {
@@ -27,8 +28,10 @@ import {
 import {
   FlexlineImportRow,
   MatchFlexlineResponse,
+  getExistingFlexlineKeysAction,
   getMatchFlexlineDataAction,
   importarMatchFlexlineChunkAction,
+  vaciarMatchFlexlineAction,
 } from "@/actions/match-flexline.actions";
 import {
   buildCanonicalCompraKey,
@@ -195,9 +198,26 @@ export function MatchFlexlineClient({
           defval: "",
         });
 
+        setUploadProgress("Consultando registros existentes...");
+        const existingRes = await getExistingFlexlineKeysAction();
+        if (!existingRes.success) {
+          setFeedback({
+            type: "error",
+            message:
+              existingRes.error ||
+              "No se pudieron verificar los registros existentes en la base de datos.",
+          });
+          return;
+        }
+
+        const llavesEnBase = new Set<string>(existingRes.keys || []);
+        const llavesEnMismoArchivo = new Set<string>();
+
         const ahoraIso = new Date().toISOString();
-        const parsedRows: FlexlineImportRow[] = [];
-        const keyCounts = new Map<string, number>();
+        const nuevosRegistrosParaInsertar: FlexlineImportRow[] = [];
+        let omitidosPorExistirEnBase = 0;
+        let omitidosDuplicadosEnArchivo = 0;
+        let totalFilasValidas = 0;
 
         for (let i = 0; i < rawRows.length; i++) {
           const row = rawRows[i];
@@ -235,13 +255,23 @@ export function MatchFlexlineClient({
             continue;
           }
 
-          keyCounts.set(canonicalKey, (keyCounts.get(canonicalKey) || 0) + 1);
+          totalFilasValidas++;
+
+          if (llavesEnBase.has(canonicalKey)) {
+            omitidosPorExistirEnBase++;
+            continue;
+          }
+          if (llavesEnMismoArchivo.has(canonicalKey)) {
+            omitidosDuplicadosEnArchivo++;
+            continue;
+          }
+          llavesEnMismoArchivo.add(canonicalKey);
 
           const montoG = parseExcelAmount(rawTotalG);
           const montoP = parseExcelAmount(rawTotalP);
           const montoFinal = montoG !== 0 ? montoG : montoP;
 
-          parsedRows.push({
+          nuevosRegistrosParaInsertar.push({
             key2_original: rawKey2 || canonicalKey,
             key2_normalizada: canonicalKey,
             documento_flexline: rawDocumento,
@@ -258,13 +288,7 @@ export function MatchFlexlineClient({
           });
         }
 
-        for (const r of parsedRows) {
-          if ((keyCounts.get(r.key2_normalizada) || 0) > 1) {
-            r.es_duplicado_excel = true;
-          }
-        }
-
-        if (parsedRows.length === 0) {
+        if (totalFilasValidas === 0) {
           setFeedback({
             type: "error",
             message:
@@ -273,46 +297,51 @@ export function MatchFlexlineClient({
           return;
         }
 
-        const CHUNK_SIZE = 1000;
-        const totalChunks = Math.ceil(parsedRows.length / CHUNK_SIZE);
-        let totalSavedInDb = 0;
+        if (nuevosRegistrosParaInsertar.length > 0) {
+          const CHUNK_SIZE = 1000;
+          const totalChunks = Math.ceil(
+            nuevosRegistrosParaInsertar.length / CHUNK_SIZE
+          );
 
-        for (let c = 0; c < totalChunks; c++) {
-          setUploadProgress(`Guardando lote ${c + 1} de ${totalChunks}...`);
-          const chunk = parsedRows.slice(c * CHUNK_SIZE, (c + 1) * CHUNK_SIZE);
-          const res = await importarMatchFlexlineChunkAction(chunk, {
-            replaceExisting: c === 0,
-            isFinalChunk: c === totalChunks - 1,
-          });
-
-          if (!res.success) {
-            setFeedback({
-              type: "error",
-              message:
-                res.error ||
-                `Error guardando el lote ${c + 1} de ${totalChunks} en base de datos.`,
+          for (let c = 0; c < totalChunks; c++) {
+            setUploadProgress(`Guardando lote ${c + 1} de ${totalChunks}...`);
+            const chunk = nuevosRegistrosParaInsertar.slice(
+              c * CHUNK_SIZE,
+              (c + 1) * CHUNK_SIZE
+            );
+            const res = await importarMatchFlexlineChunkAction(chunk, {
+              isFinalChunk: c === totalChunks - 1,
             });
-            return;
+
+            if (!res.success) {
+              setFeedback({
+                type: "error",
+                message:
+                  res.error ||
+                  `Error guardando el lote ${c + 1} de ${totalChunks} en base de datos.`,
+              });
+              return;
+            }
           }
 
-          if (typeof res.totalSavedInDb === "number") {
-            totalSavedInDb = res.totalSavedInDb;
-          }
+          setUploadProgress("Actualizando conciliación...");
+          const refreshed = await getMatchFlexlineDataAction();
+          setData(refreshed);
+          setCurrentPage(1);
+          router.refresh();
         }
-
-        setUploadProgress("Actualizando conciliación...");
-        const refreshed = await getMatchFlexlineDataAction();
-        setData(refreshed);
-        setCurrentPage(1);
-        router.refresh();
 
         setFeedback({
           type: "success",
-          message: `Planilla Flexline importada correctamente: ${parsedRows.length.toLocaleString(
+          message: `Carga incremental completada: ${nuevosRegistrosParaInsertar.length.toLocaleString(
             "es-CL"
-          )} filas procesadas y ${totalSavedInDb.toLocaleString(
+          )} registros nuevos integrados · ${omitidosPorExistirEnBase.toLocaleString(
             "es-CL"
-          )} registros verificados en base de datos.`,
+          )} omitidos (ya existían en la base de datos)${
+            omitidosDuplicadosEnArchivo > 0
+              ? ` · ${omitidosDuplicadosEnArchivo.toLocaleString("es-CL")} duplicados en el archivo`
+              : ""
+          }.`,
         });
       } catch (err) {
         const message =
@@ -323,6 +352,46 @@ export function MatchFlexlineClient({
       } finally {
         setUploadProgress(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    });
+  };
+
+  const handleVaciarBase = () => {
+    const confirmed = window.confirm(
+      "¿Está seguro de vaciar toda la base de datos de Flexline para comenzar una auditoría desde cero? Esta acción no se puede deshacer."
+    );
+    if (!confirmed) return;
+
+    setFeedback(null);
+    setUploadProgress("Vaciando base Flexline...");
+    startUploadTransition(async () => {
+      try {
+        const res = await vaciarMatchFlexlineAction();
+        if (!res.success) {
+          setFeedback({
+            type: "error",
+            message: res.error || "No se pudo vaciar la base de datos Flexline.",
+          });
+          return;
+        }
+        const refreshed = await getMatchFlexlineDataAction();
+        setData(refreshed);
+        setCurrentPage(1);
+        router.refresh();
+        setFeedback({
+          type: "success",
+          message: "Base de datos Flexline vaciada correctamente.",
+        });
+      } catch (err) {
+        setFeedback({
+          type: "error",
+          message:
+            err instanceof Error
+              ? err.message
+              : "Error inesperado al vaciar Flexline.",
+        });
+      } finally {
+        setUploadProgress(null);
       }
     });
   };
@@ -548,7 +617,7 @@ export function MatchFlexlineClient({
         </div>
 
         {esAdministrador && (
-          <div className="shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <input
               ref={fileInputRef}
               type="file"
@@ -572,6 +641,16 @@ export function MatchFlexlineClient({
                   ? uploadProgress || "Procesando Excel..."
                   : "Importar Excel Flexline"}
               </span>
+            </button>
+            <button
+              type="button"
+              disabled={isUploading || data.totalFlexlineRows === 0}
+              onClick={handleVaciarBase}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50 transition-colors"
+              title="Vaciar registros Flexline para reiniciar auditoría desde cero"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Vaciar Base Flexline</span>
             </button>
           </div>
         )}
@@ -751,10 +830,9 @@ export function MatchFlexlineClient({
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           {activeTab === "FALTANTES" && (
-            <table className="min-w-[920px] lg:min-w-full text-left border-collapse">
+            <table className="min-w-[860px] lg:min-w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 text-slate-600 text-[10px] font-bold uppercase tracking-wider border-b border-slate-200">
-                  <th className="py-2.5 px-3">KEY</th>
                   <th className="py-2.5 px-3">TIPO DTE</th>
                   <th className="py-2.5 px-3">FOLIO</th>
                   <th className="py-2.5 px-3">RUT PROVEEDOR</th>
@@ -768,16 +846,13 @@ export function MatchFlexlineClient({
               <tbody className="divide-y divide-slate-200/80 text-xs">
                 {paginatedFaltantes.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-10 text-center text-slate-500">
+                    <td colSpan={8} className="py-10 text-center text-slate-500">
                       No hay documentos pendientes por ingresar a Flexline para los filtros seleccionados.
                     </td>
                   </tr>
                 ) : (
                   paginatedFaltantes.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-2 px-3 font-mono font-semibold text-slate-800 whitespace-nowrap">
-                        {r.key}
-                      </td>
                       <td className="py-2 px-3 font-mono text-slate-600 whitespace-nowrap">
                         {getTipoDteLabel(r.tipo_doc)}
                       </td>
@@ -812,10 +887,9 @@ export function MatchFlexlineClient({
           )}
 
           {activeTab === "CORRECTAS" && (
-            <table className="min-w-[960px] lg:min-w-full text-left border-collapse">
+            <table className="min-w-[900px] lg:min-w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 text-slate-600 text-[10px] font-bold uppercase tracking-wider border-b border-slate-200">
-                  <th className="py-2.5 px-3">KEY</th>
                   <th className="py-2.5 px-3">TIPO DTE</th>
                   <th className="py-2.5 px-3">FOLIO</th>
                   <th className="py-2.5 px-3">RUT PROVEEDOR</th>
@@ -830,7 +904,7 @@ export function MatchFlexlineClient({
               <tbody className="divide-y divide-slate-200/80 text-xs">
                 {paginatedCorrectas.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="py-10 text-center text-slate-500">
+                    <td colSpan={9} className="py-10 text-center text-slate-500">
                       {data.totalFlexlineRows === 0
                         ? "Aún no se ha importado una planilla Excel de Flexline."
                         : "No hay documentos conciliados para los filtros seleccionados."}
@@ -839,9 +913,6 @@ export function MatchFlexlineClient({
                 ) : (
                   paginatedCorrectas.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-2 px-3 font-mono font-semibold text-slate-800 whitespace-nowrap">
-                        {r.key}
-                      </td>
                       <td className="py-2 px-3 font-mono text-slate-600 whitespace-nowrap">
                         {getTipoDteLabel(r.tipo_doc)}
                       </td>
@@ -879,10 +950,9 @@ export function MatchFlexlineClient({
           )}
 
           {activeTab === "MAL_INGRESADAS" && (
-            <table className="min-w-[920px] lg:min-w-full text-left border-collapse">
+            <table className="min-w-[860px] lg:min-w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 text-slate-600 text-[10px] font-bold uppercase tracking-wider border-b border-slate-200">
-                  <th className="py-2.5 px-3">KEY2</th>
                   <th className="py-2.5 px-3">MOTIVO / DIAGNÓSTICO</th>
                   <th className="py-2.5 px-3">FOLIO</th>
                   <th className="py-2.5 px-3">RUT PROVEEDOR</th>
@@ -895,16 +965,13 @@ export function MatchFlexlineClient({
               <tbody className="divide-y divide-slate-200/80 text-xs">
                 {paginatedMalIngresadas.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-10 text-center text-slate-500">
+                    <td colSpan={7} className="py-10 text-center text-slate-500">
                       No se detectaron inconsistencias ni errores de ingreso para los filtros seleccionados.
                     </td>
                   </tr>
                 ) : (
                   paginatedMalIngresadas.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-2 px-3 font-mono font-semibold text-slate-800 whitespace-nowrap">
-                        {r.key2}
-                      </td>
                       <td className="py-2 px-3 whitespace-nowrap">
                         <span
                           className={cn(

@@ -158,12 +158,89 @@ async function fetchAllTableRows<T>(
 }
 
 /**
- * Inserta un bloque de filas ya parseadas en `compras_flexline_import` (en lotes de 500),
- * evitando límites de tamaño de payload HTTP en Vercel para planillas de 6.000+ filas.
+ * Obtiene todas las llaves `key2_normalizada` ya existentes en `compras_flexline_import`
+ * (paginado sin límite de 1.000 filas) para deduplicación incremental.
+ */
+export async function getExistingFlexlineKeysAction(): Promise<{
+  success: boolean;
+  keys?: string[];
+  error?: string;
+}> {
+  try {
+    await assertIsAdmin();
+
+    if (!isServerSupabaseConfigured()) {
+      return {
+        success: false,
+        error: "Supabase no está configurado en el servidor.",
+      };
+    }
+
+    const rows = await fetchAllTableRows<{ key2_normalizada: string }>(
+      "compras_flexline_import",
+      "key2_normalizada"
+    );
+
+    const keys = rows
+      .map((r) => String(r.key2_normalizada || "").trim().toUpperCase())
+      .filter(Boolean);
+
+    return { success: true, keys };
+  } catch (err) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : "Error consultando llaves existentes en Flexline.";
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Vacía por completo la tabla `compras_flexline_import` (solo perfil ADMINISTRADOR).
+ */
+export async function vaciarMatchFlexlineAction(): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    await assertIsAdmin();
+
+    if (!isServerSupabaseConfigured()) {
+      return {
+        success: false,
+        error: "Supabase no está configurado en el servidor.",
+      };
+    }
+
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase
+      .from("compras_flexline_import")
+      .delete()
+      .not("id", "is", null);
+
+    if (error) {
+      return {
+        success: false,
+        error: `Error al vaciar la base Flexline: ${error.message}`,
+      };
+    }
+
+    revalidatePath("/compras-tensacon/match-flexline");
+    return { success: true };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Error inesperado al vaciar Flexline.";
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Inserta de forma incremental un bloque de filas nuevas en `compras_flexline_import`
+ * (en lotes de 500 con upsert ignoreDuplicates), sin borrar los registros previos.
  */
 export async function importarMatchFlexlineChunkAction(
   rows: FlexlineImportRow[],
-  options: { replaceExisting: boolean; isFinalChunk: boolean }
+  options: { isFinalChunk: boolean }
 ): Promise<{
   success: boolean;
   insertedInChunk?: number;
@@ -182,31 +259,20 @@ export async function importarMatchFlexlineChunkAction(
 
     const supabase = await createServerSupabaseClient();
 
-    if (options.replaceExisting) {
-      const { error: deleteError } = await supabase
-        .from("compras_flexline_import")
-        .delete()
-        .not("id", "is", null);
-
-      if (deleteError) {
-        return {
-          success: false,
-          error: `Error al limpiar la carga anterior: ${deleteError.message}`,
-        };
-      }
-    }
-
     const BATCH_SIZE = 500;
     for (let start = 0; start < rows.length; start += BATCH_SIZE) {
       const batch = rows.slice(start, start + BATCH_SIZE);
-      const { error: insertError } = await supabase
+      const { error: upsertError } = await supabase
         .from("compras_flexline_import")
-        .insert(batch);
+        .upsert(batch, {
+          onConflict: "key2_normalizada",
+          ignoreDuplicates: true,
+        });
 
-      if (insertError) {
+      if (upsertError) {
         return {
           success: false,
-          error: `Error insertando lote (${start + 1}-${start + batch.length}): ${insertError.message}`,
+          error: `Error insertando lote (${start + 1}-${start + batch.length}): ${upsertError.message}`,
         };
       }
     }
@@ -242,12 +308,13 @@ export async function importarMatchFlexlineChunkAction(
 }
 
 /**
- * Importa la planilla Excel de Flexline desde FormData (solo perfil ADMINISTRADOR),
- * normaliza con llave canónica `RUT|FOLIO` y verifica el conteo real guardado en BD.
+ * Importa la planilla Excel de Flexline de forma incremental anti-duplicados (solo ADMINISTRADOR).
  */
 export async function importarMatchFlexlineAction(formData: FormData): Promise<{
   success: boolean;
   importedCount?: number;
+  omitidosPorExistirEnBase?: number;
+  omitidosDuplicadosEnArchivo?: number;
   totalSavedInDb?: number;
   error?: string;
 }> {
@@ -305,9 +372,17 @@ export async function importarMatchFlexlineAction(formData: FormData): Promise<{
       };
     }
 
+    const existingRes = await getExistingFlexlineKeysAction();
+    if (!existingRes.success) {
+      return { success: false, error: existingRes.error };
+    }
+    const llavesEnBase = new Set<string>(existingRes.keys || []);
+    const llavesEnMismoArchivo = new Set<string>();
+
     const ahoraIso = new Date().toISOString();
-    const rowsToInsert: FlexlineImportRow[] = [];
-    const keyCounts = new Map<string, number>();
+    const nuevosRegistrosParaInsertar: FlexlineImportRow[] = [];
+    let omitidosPorExistirEnBase = 0;
+    let omitidosDuplicadosEnArchivo = 0;
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -345,13 +420,21 @@ export async function importarMatchFlexlineAction(formData: FormData): Promise<{
         continue;
       }
 
-      keyCounts.set(canonicalKey, (keyCounts.get(canonicalKey) || 0) + 1);
+      if (llavesEnBase.has(canonicalKey)) {
+        omitidosPorExistirEnBase++;
+        continue;
+      }
+      if (llavesEnMismoArchivo.has(canonicalKey)) {
+        omitidosDuplicadosEnArchivo++;
+        continue;
+      }
+      llavesEnMismoArchivo.add(canonicalKey);
 
       const montoG = parseExcelAmount(rawTotalG);
       const montoP = parseExcelAmount(rawTotalP);
       const montoFinal = montoG !== 0 ? montoG : montoP;
 
-      rowsToInsert.push({
+      nuevosRegistrosParaInsertar.push({
         key2_original: rawKey2 || canonicalKey,
         key2_normalizada: canonicalKey,
         documento_flexline: rawDocumento,
@@ -368,13 +451,7 @@ export async function importarMatchFlexlineAction(formData: FormData): Promise<{
       });
     }
 
-    for (const r of rowsToInsert) {
-      if ((keyCounts.get(r.key2_normalizada) || 0) > 1) {
-        r.es_duplicado_excel = true;
-      }
-    }
-
-    if (rowsToInsert.length === 0) {
+    if (nuevosRegistrosParaInsertar.length === 0 && omitidosPorExistirEnBase === 0) {
       return {
         success: false,
         error:
@@ -382,19 +459,24 @@ export async function importarMatchFlexlineAction(formData: FormData): Promise<{
       };
     }
 
-    const res = await importarMatchFlexlineChunkAction(rowsToInsert, {
-      replaceExisting: true,
-      isFinalChunk: true,
-    });
-
-    if (!res.success) {
-      return { success: false, error: res.error };
+    let totalSavedInDb = llavesEnBase.size;
+    if (nuevosRegistrosParaInsertar.length > 0) {
+      const res = await importarMatchFlexlineChunkAction(
+        nuevosRegistrosParaInsertar,
+        { isFinalChunk: true }
+      );
+      if (!res.success) {
+        return { success: false, error: res.error };
+      }
+      totalSavedInDb = res.totalSavedInDb ?? llavesEnBase.size + nuevosRegistrosParaInsertar.length;
     }
 
     return {
       success: true,
-      importedCount: rowsToInsert.length,
-      totalSavedInDb: res.totalSavedInDb ?? rowsToInsert.length,
+      importedCount: nuevosRegistrosParaInsertar.length,
+      omitidosPorExistirEnBase,
+      omitidosDuplicadosEnArchivo,
+      totalSavedInDb,
     };
   } catch (err) {
     const message =
