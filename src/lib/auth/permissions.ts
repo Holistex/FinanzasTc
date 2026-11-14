@@ -160,6 +160,7 @@ export const ROUTE_MODULE_MAP: Array<{
   { prefix: "/compras-tensacon/historico-pagos", moduleKey: "historico_pagos_compras" },
   { prefix: "/compras-tensacon/compromisos", moduleKey: "compromisos_compras" },
   { prefix: "/compras-tensacon/deuda-proveedores", moduleKey: "facturas_compras" },
+  { prefix: "/compras-tensacon/match-flexline", moduleKey: "match_flexline" },
   { prefix: "/compras-tensacon", moduleKey: "compras_global" },
 
   // Tesorería

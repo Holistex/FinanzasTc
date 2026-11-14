@@ -29,6 +29,7 @@ import {
   CalendarDays,
   FolderKanban,
   LineChart,
+  GitCompare,
   UserCheck,
   Banknote,
   Menu,
@@ -180,12 +181,14 @@ export function DashboardSidebar({
   const canDeudaProveedores =
     hasPermission(userSession, "facturas_compras") ||
     hasPermission(userSession, "compras_global");
+  const canMatchFlexline = hasPermission(userSession, "match_flexline");
   const canComprasGroup =
     hasPermission(userSession, "compras_global") ||
     canFacturasCompras ||
     canHistoricoPagos ||
     canCompromisos ||
-    canDeudaProveedores;
+    canDeudaProveedores ||
+    canMatchFlexline;
 
   const canTesoreriaSaldos = hasPermission(userSession, "tesoreria_saldos");
   const canTesoreriaPagos = hasPermission(userSession, "tesoreria_pagos");
@@ -263,6 +266,9 @@ export function DashboardSidebar({
   );
   const isDeudaProveedoresActive = pathname.startsWith(
     "/compras-tensacon/deuda-proveedores"
+  );
+  const isMatchFlexlineActive = pathname.startsWith(
+    "/compras-tensacon/match-flexline"
   );
 
   const isTesoreriaSectionActive = pathname.startsWith("/tesoreria");
@@ -502,6 +508,17 @@ export function DashboardSidebar({
                       isActive={isDeudaProveedoresActive}
                       icon={LineChart}
                       label="Deuda Prov."
+                      queryClient={queryClient}
+                      router={router}
+                    />
+                  )}
+
+                  {canMatchFlexline && (
+                    <SidebarSubLink
+                      href="/compras-tensacon/match-flexline"
+                      isActive={isMatchFlexlineActive}
+                      icon={GitCompare}
+                      label="Match Flexline"
                       queryClient={queryClient}
                       router={router}
                     />

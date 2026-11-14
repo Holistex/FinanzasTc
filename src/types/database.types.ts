@@ -351,6 +351,12 @@ export const MODULOS_SISTEMA_FINANZAS: ModuloSistema[] = [
     categoria: "COMPRAS TENSACON",
     descripcion: "Obligaciones financieras por vencer y reporte PDF.",
   },
+  {
+    id: "match_flexline",
+    nombre: "Match Flexline",
+    categoria: "COMPRAS TENSACON",
+    descripcion: "Conciliación SII vs Flexline mediante planilla Excel por KEY2.",
+  },
 
   // C. TESORERÍA
   {
