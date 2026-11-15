@@ -12,16 +12,50 @@ import {
   ExternalLink,
   Hash,
   ShieldCheck,
+  CalendarClock,
 } from "lucide-react";
 import { FacturaVenta, MantenedorON } from "@/types/database.types";
 import { asignarOnFacturaAction } from "@/actions/facturas-ventas.actions";
-import { formatCLP, formatRutDisplay } from "@/lib/utils";
+import { formatCLP, formatDateCL, formatRutDisplay } from "@/lib/utils";
+
+const PLAZOS_VENCIMIENTO = [30, 60, 90] as const;
+type PlazoVencimiento = (typeof PLAZOS_VENCIMIENTO)[number];
+
+function calcularFechaVencimiento(fechaEmision: string, dias: number): string {
+  const [y, m, d] = fechaEmision.split("T")[0].split("-").map(Number);
+  if (!y || !m || !d) return fechaEmision;
+  const fecha = new Date(Date.UTC(y, m - 1, d + dias));
+  return fecha.toISOString().split("T")[0];
+}
+
+function inferPlazoInicial(factura: FacturaVenta): PlazoVencimiento {
+  if (factura.plazo_dias === 60 || factura.plazo_dias === 90 || factura.plazo_dias === 30) {
+    return factura.plazo_dias;
+  }
+  if (factura.fecha_docto && factura.fecha_vencimiento) {
+    const [ey, em, ed] = factura.fecha_docto.split("T")[0].split("-").map(Number);
+    const [vy, vm, vd] = factura.fecha_vencimiento.split("T")[0].split("-").map(Number);
+    if (ey && em && ed && vy && vm && vd) {
+      const diffDays = Math.round(
+        (Date.UTC(vy, vm - 1, vd) - Date.UTC(ey, em - 1, ed)) / 86400000
+      );
+      if (diffDays === 60) return 60;
+      if (diffDays === 90) return 90;
+    }
+  }
+  return 30;
+}
 
 interface AssignOnModalProps {
   factura: FacturaVenta;
   catalogoOn: MantenedorON[];
   onClose: () => void;
-  onSuccess: (facturaId: string, assignedOn: string) => void;
+  onSuccess: (
+    facturaId: string,
+    assignedOn: string,
+    fechaVencimiento?: string | null,
+    plazoDias?: number
+  ) => void;
 }
 
 export function AssignOnModal({
@@ -31,10 +65,17 @@ export function AssignOnModal({
   onSuccess,
 }: AssignOnModalProps) {
   const [selectedOn, setSelectedOn] = useState(factura.on_proyecto || "");
+  const [plazoDias, setPlazoDias] = useState<PlazoVencimiento>(() =>
+    inferPlazoInicial(factura)
+  );
   const [searchFilter, setSearchFilter] = useState("");
   const [manualCode, setManualCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const fechaVencimientoPreview = factura.fecha_docto
+    ? calcularFechaVencimiento(factura.fecha_docto, plazoDias)
+    : null;
 
   // Filter active catalog items
   const activeCatalog = catalogoOn.filter((item) => item.activo);
@@ -76,10 +117,16 @@ export function AssignOnModal({
       const res = await asignarOnFacturaAction({
         facturaId: factura.id,
         onProyecto: onToAssign,
+        plazoDias,
       });
 
       if (res.success) {
-        onSuccess(factura.id, res.on_proyecto);
+        onSuccess(
+          factura.id,
+          res.on_proyecto,
+          res.fecha_vencimiento ?? fechaVencimientoPreview,
+          res.plazo_dias
+        );
         onClose();
       }
     } catch (err: any) {
@@ -250,6 +297,51 @@ export function AssignOnModal({
             <p className="mt-1 text-[11px] text-slate-400">
               Formato numérico estricto de 3 dígitos (ej. 701, 719, 740).
             </p>
+          </div>
+
+          {/* Selector de Plazo de Vencimiento (30, 60, 90 días) */}
+          <div>
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 mb-1.5">
+              <CalendarClock className="h-3.5 w-3.5 text-orange-400" />
+              <span>Plazo de Vencimiento</span>
+              <span className="text-orange-400">*</span>
+            </label>
+            <div
+              role="group"
+              aria-label="Plazo de vencimiento"
+              className="grid grid-cols-3 gap-2"
+            >
+              {PLAZOS_VENCIMIENTO.map((dias) => {
+                const active = plazoDias === dias;
+                return (
+                  <button
+                    key={dias}
+                    type="button"
+                    onClick={() => setPlazoDias(dias)}
+                    className={`rounded-lg border px-3 py-2 text-xs font-bold transition-all ${
+                      active
+                        ? "border-orange-500 bg-orange-500/20 text-orange-300 shadow-xs ring-1 ring-orange-500/40"
+                        : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-600 hover:bg-slate-800/80"
+                    }`}
+                  >
+                    {dias} días
+                  </button>
+                );
+              })}
+            </div>
+            {fechaVencimientoPreview && (
+              <p className="mt-1.5 text-[11px] text-slate-400 flex items-center justify-between">
+                <span>
+                  Emisión: <span className="font-mono text-slate-300">{formatDateCL(factura.fecha_docto)}</span>
+                </span>
+                <span>
+                  Nueva fecha de vencimiento:{" "}
+                  <strong className="font-mono text-orange-300">
+                    {formatDateCL(fechaVencimientoPreview)}
+                  </strong>
+                </span>
+              </p>
+            )}
           </div>
 
           {/* Gatekeeper alert notification */}

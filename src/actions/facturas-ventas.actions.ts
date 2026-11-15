@@ -624,13 +624,26 @@ export async function updateGestionPagoAction(params: {
   return { success: true };
 }
 
+function calcularFechaVencimientoUtc(fechaEmision: string, dias: number): string {
+  const [y, m, d] = fechaEmision.split("T")[0].split("-").map(Number);
+  if (!y || !m || !d) return fechaEmision;
+  const fecha = new Date(Date.UTC(y, m - 1, d + dias));
+  return fecha.toISOString().split("T")[0];
+}
+
 /**
- * Asigna la Orden de Número (ON) a una factura de venta para habilitar sus operaciones
+ * Asigna la Orden de Número (ON) y el Plazo de Vencimiento (30, 60, 90 días) a una factura de venta
  */
 export async function asignarOnFacturaAction(params: {
   facturaId: string;
   onProyecto: string;
-}): Promise<{ success: boolean; on_proyecto: string }> {
+  plazoDias?: number;
+}): Promise<{
+  success: boolean;
+  on_proyecto: string;
+  fecha_vencimiento?: string | null;
+  plazo_dias: number;
+}> {
   const auth = await assertCanManage(["facturas_ventas", "ventas_global"]);
   if (!auth.authorized) {
     throw new Error(auth.error || "Acceso denegado.");
@@ -641,46 +654,103 @@ export async function asignarOnFacturaAction(params: {
     throw new Error("Debe ingresar o seleccionar un Código ON válido de 3 dígitos (ej. 701, 740).");
   }
 
-  // 1. Guardar de inmediato en la base de datos local para disponibilidad instantánea y tolerancia a fallos
+  const validPlazo =
+    params.plazoDias === 60 || params.plazoDias === 90 ? params.plazoDias : 30;
+
+  // 1. Localizar fecha_docto y guardar de inmediato en la base de datos local
   const db = readLocalDb();
   if (!db.facturas_ventas) {
     db.facturas_ventas = [];
   }
   const idx = db.facturas_ventas.findIndex((f) => f.id === params.facturaId);
+  let fechaDocto: string | null = idx !== -1 ? db.facturas_ventas[idx].fecha_docto || null : null;
+
+  if (!fechaDocto && isServerSupabaseConfigured()) {
+    try {
+      const supabase = await createServerSupabaseClient();
+      const { data: facRow } = await supabase
+        .from("facturas_ventas")
+        .select("fecha_docto")
+        .eq("id", params.facturaId)
+        .maybeSingle();
+      if (facRow?.fecha_docto) {
+        fechaDocto = String(facRow.fecha_docto);
+      }
+    } catch {
+      // Continuar sin bloquear si falla lectura previa
+    }
+  }
+
+  const nuevaFechaVencimiento = fechaDocto
+    ? calcularFechaVencimientoUtc(fechaDocto, validPlazo)
+    : null;
+
   if (idx !== -1) {
     db.facturas_ventas[idx].on_proyecto = cleanOn;
+    db.facturas_ventas[idx].plazo_dias = validPlazo;
+    if (nuevaFechaVencimiento) {
+      db.facturas_ventas[idx].fecha_vencimiento = nuevaFechaVencimiento;
+    }
   } else {
     db.facturas_ventas.push({
       id: params.facturaId,
       on_proyecto: cleanOn,
+      plazo_dias: validPlazo,
+      ...(nuevaFechaVencimiento ? { fecha_vencimiento: nuevaFechaVencimiento } : {}),
     } as any);
   }
   writeLocalDb(db);
+
+  const revalidateVentasPaths = () => {
+    revalidatePath("/finanzas/facturas-ventas");
+    revalidatePath("/ventas-tensacon/facturas-ventas");
+    revalidatePath("/ventas-tensacon/gestion-cobranza");
+    revalidatePath("/finanzas/facturas-ventas/gestion-cobranza");
+  };
 
   // 2. Si Supabase está configurado, persistir en la nube
   if (isServerSupabaseConfigured()) {
     try {
       const supabase = await createServerSupabaseClient();
-      const { error } = await supabase
+      const updatePayload: Record<string, unknown> = {
+        on_proyecto: cleanOn,
+        plazo_dias: validPlazo,
+      };
+      if (nuevaFechaVencimiento) {
+        updatePayload.fecha_vencimiento = nuevaFechaVencimiento;
+      }
+
+      let { error } = await supabase
         .from("facturas_ventas")
-        .update({
-          on_proyecto: cleanOn,
-        })
+        .update(updatePayload)
         .eq("id", params.facturaId);
+
+      // Si la columna plazo_dias aún no existe en Supabase, reintentar solo con on_proyecto y fecha_vencimiento
+      if (error && error.message.includes("plazo_dias")) {
+        delete updatePayload.plazo_dias;
+        const retry = await supabase
+          .from("facturas_ventas")
+          .update(updatePayload)
+          .eq("id", params.facturaId);
+        error = retry.error;
+      }
 
       if (error) {
         console.warn(
           `[Supabase Update Warning]: ${error.message}. Asignación persistida en almacenamiento local.`
         );
-        // Si el error es por falta de columna en Supabase o cache de esquema PostgREST,
-        // no arrojar excepción fatal para no bloquear al usuario, ya que quedó guardado en el fallback local.
         if (
           error.message.includes("on_proyecto") ||
           error.message.includes("schema cache") ||
           error.message.includes("Could not find the 'on_proyecto' column")
         ) {
-          revalidatePath("/finanzas/facturas-ventas");
-          return { success: true, on_proyecto: cleanOn };
+          revalidateVentasPaths();
+          return {
+            success: true,
+            on_proyecto: cleanOn,
+            fecha_vencimiento: nuevaFechaVencimiento,
+            plazo_dias: validPlazo,
+          };
         }
         throw new Error(`Error asignando ON a la factura: ${error.message}`);
       }
@@ -693,15 +763,25 @@ export async function asignarOnFacturaAction(params: {
         console.warn(
           `[Supabase Schema Cache Warning]: ${err.message}. Continúa con almacenamiento local.`
         );
-        revalidatePath("/finanzas/facturas-ventas");
-        return { success: true, on_proyecto: cleanOn };
+        revalidateVentasPaths();
+        return {
+          success: true,
+          on_proyecto: cleanOn,
+          fecha_vencimiento: nuevaFechaVencimiento,
+          plazo_dias: validPlazo,
+        };
       }
       throw err;
     }
   }
 
-  revalidatePath("/finanzas/facturas-ventas");
-  return { success: true, on_proyecto: cleanOn };
+  revalidateVentasPaths();
+  return {
+    success: true,
+    on_proyecto: cleanOn,
+    fecha_vencimiento: nuevaFechaVencimiento,
+    plazo_dias: validPlazo,
+  };
 }
 
 /**

@@ -188,11 +188,25 @@ export function FacturasVentasTable({
   const [facturaToAssignOn, setFacturaToAssignOn] = useState<FacturaVenta | null>(null);
   const [facturaToUploadPdf, setFacturaToUploadPdf] = useState<FacturaVenta | null>(null);
 
-  const handleOnAssigned = (facturaId: string, assignedOn: string) => {
+  const handleOnAssigned = (
+    facturaId: string,
+    assignedOn: string,
+    nuevaFechaVencimiento?: string | null,
+    plazoDias?: number
+  ) => {
     setResponse((prev) => ({
       ...prev,
       data: prev.data.map((f) =>
-        f.id === facturaId ? { ...f, on_proyecto: assignedOn } : f
+        f.id === facturaId
+          ? {
+              ...f,
+              on_proyecto: assignedOn,
+              ...(nuevaFechaVencimiento
+                ? { fecha_vencimiento: nuevaFechaVencimiento }
+                : {}),
+              ...(plazoDias ? { plazo_dias: plazoDias } : {}),
+            }
+          : f
       ),
     }));
     queryClient.invalidateQueries({ queryKey: ["facturas_ventas"] });

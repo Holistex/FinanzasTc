@@ -153,6 +153,7 @@ export interface FacturaVenta {
   on_proyecto?: string | null;
   url_pdf?: string | null;
   fecha_vencimiento?: string | null; // YYYY-MM-DD
+  plazo_dias?: number | null;
   pagos_facturas?: PagoFactura[];
   gestiones_cobranza?: GestionCobranza[];
   nc_referenciada_folio?: number | null;
