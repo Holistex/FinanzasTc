@@ -11,7 +11,7 @@ import {
   MantenedorCompania,
 } from "@/types/database.types";
 import { normalizeRut } from "@/lib/utils";
-import { assertCanManage } from "@/lib/auth/session";
+import { assertIsAdmin } from "@/lib/auth/session";
 
 // ============================================================================
 // 1. MANTENEDOR: MANDANTES
@@ -76,10 +76,7 @@ export async function upsertMandanteAction(input: {
   contacto_email?: string | null;
   contacto_telefono?: string | null;
 }): Promise<MantenedorMandante> {
-  const auth = await assertCanManage([
-    "mantenedor_mandantes_companias",
-    "mantenedores",
-  ]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
 
   const cleanRut = normalizeRut(input.rut);
@@ -162,10 +159,7 @@ export async function upsertMandanteAction(input: {
 }
 
 export async function deleteMandanteAction(id: string): Promise<void> {
-  const auth = await assertCanManage([
-    "mantenedor_mandantes_companias",
-    "mantenedores",
-  ]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
 
   if (!id) throw new Error("ID de Mandante no proporcionado.");
@@ -261,10 +255,7 @@ export async function upsertCompaniaAction(input: {
   contacto_email?: string | null;
   contacto_telefono?: string | null;
 }): Promise<MantenedorCompania> {
-  const auth = await assertCanManage([
-    "mantenedor_mandantes_companias",
-    "mantenedores",
-  ]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
 
   const cleanRut = normalizeRut(input.rut);
@@ -347,10 +338,7 @@ export async function upsertCompaniaAction(input: {
 }
 
 export async function deleteCompaniaAction(id: string): Promise<void> {
-  const auth = await assertCanManage([
-    "mantenedor_mandantes_companias",
-    "mantenedores",
-  ]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
 
   if (!id) throw new Error("ID de Compañía no proporcionado.");

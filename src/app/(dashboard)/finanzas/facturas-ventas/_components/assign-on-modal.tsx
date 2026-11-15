@@ -49,6 +49,7 @@ function inferPlazoInicial(factura: FacturaVenta): PlazoVencimiento {
 interface AssignOnModalProps {
   factura: FacturaVenta;
   catalogoOn: MantenedorON[];
+  esAdmin?: boolean;
   onClose: () => void;
   onSuccess: (
     facturaId: string,
@@ -61,6 +62,7 @@ interface AssignOnModalProps {
 export function AssignOnModal({
   factura,
   catalogoOn,
+  esAdmin = false,
   onClose,
   onSuccess,
 }: AssignOnModalProps) {
@@ -212,14 +214,16 @@ export function AssignOnModal({
               <label className="text-xs font-bold text-slate-700">
                 Seleccionar del Catálogo de Proyectos (ON)
               </label>
-              <Link
-                href="/configuracion/mantenedor-on"
-                target="_blank"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[#E05A10] hover:underline"
-              >
-                <span>Mantenedor de ON</span>
-                <ExternalLink className="h-3 w-3" />
-              </Link>
+              {esAdmin && (
+                <Link
+                  href="/configuracion/mantenedor-on"
+                  target="_blank"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-[#E05A10] hover:underline"
+                >
+                  <span>Mantenedor de ON</span>
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              )}
             </div>
 
             {/* Buscador en catálogo */}

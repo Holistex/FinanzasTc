@@ -244,7 +244,7 @@ export async function upsertTipoPagoAction(input: {
   descripcion?: string | null;
   activo?: boolean;
 }): Promise<MantenedorTipoPago> {
-  const auth = await assertCanManage(["mantenedor_colaboradores", "tesoreria_saldos", "configuracion_adm"]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) {
     throw new Error(auth.error || "Acceso denegado.");
   }
@@ -330,7 +330,7 @@ export async function toggleTipoPagoStatusAction(
   id: string,
   activo: boolean
 ): Promise<{ success: boolean; error?: string }> {
-  const auth = await assertCanManage(["mantenedor_colaboradores", "tesoreria_saldos", "configuracion_adm"]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) {
     return { success: false, error: auth.error };
   }

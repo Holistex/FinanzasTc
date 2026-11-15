@@ -12,7 +12,7 @@ import {
   EmpresaFactoringProveedor,
 } from "@/types/database.types";
 import { normalizeRut } from "@/lib/utils";
-import { assertCanManage } from "@/lib/auth/session";
+import { assertIsAdmin } from "@/lib/auth/session";
 
 // ============================================================================
 // 1. MANTENEDOR: EMPRESA FACTORING CLIENTE
@@ -66,7 +66,7 @@ export async function upsertFactoringClienteAction(input: {
   contacto_nombre?: string | null;
   contacto_email?: string | null;
 }): Promise<EmpresaFactoringCliente> {
-  const auth = await assertCanManage(["mantenedor_factoring", "mantenedores"]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
 
   const cleanRut = normalizeRut(input.rut_cliente);
@@ -140,7 +140,7 @@ export async function upsertFactoringClienteAction(input: {
 export async function deleteFactoringClienteAction(
   id: string
 ): Promise<{ success: boolean }> {
-  const auth = await assertCanManage(["mantenedor_factoring", "mantenedores"]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
 
   if (isServerSupabaseConfigured()) {
@@ -219,7 +219,7 @@ export async function upsertFactoringProveedorAction(input: {
   rut_proveedor: string;
   razon_social: string;
 }): Promise<EmpresaFactoringProveedor> {
-  const auth = await assertCanManage(["mantenedor_factoring", "mantenedores"]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
 
   const cleanRut = normalizeRut(input.rut_proveedor);
@@ -284,7 +284,7 @@ export async function upsertFactoringProveedorAction(input: {
 export async function deleteFactoringProveedorAction(
   id: string
 ): Promise<{ success: boolean }> {
-  const auth = await assertCanManage(["mantenedor_factoring", "mantenedores"]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
 
   if (isServerSupabaseConfigured()) {
@@ -360,7 +360,7 @@ export async function upsertEmpresaConfirmingAction(input: {
   contacto_nombre?: string | null;
   contacto_email?: string | null;
 }): Promise<EmpresaConfirming> {
-  const auth = await assertCanManage(["mantenedor_factoring", "mantenedores"]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
 
   const cleanRut = normalizeRut(input.rut_confirming);
@@ -437,7 +437,7 @@ export async function upsertEmpresaConfirmingAction(input: {
 export async function deleteEmpresaConfirmingAction(
   id: string
 ): Promise<{ success: boolean }> {
-  const auth = await assertCanManage(["mantenedor_factoring", "mantenedores"]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
 
   if (isServerSupabaseConfigured()) {

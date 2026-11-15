@@ -211,8 +211,21 @@ export function isRouteAllowed(
   pathname: string = ""
 ): boolean {
   if (!session) return false;
-  if (session.esAdmin || session.perfil?.toUpperCase() === "ADMINISTRADOR") {
+  const esAdmin = Boolean(
+    session.esAdmin || session.perfil?.trim().toUpperCase() === "ADMINISTRADOR"
+  );
+  if (esAdmin) {
     return true;
+  }
+
+  // Bloqueo estricto: Configuración y Mantenedores son exclusivos del perfil ADMINISTRADOR
+  if (
+    pathname === "/configuracion" ||
+    pathname.startsWith("/configuracion/") ||
+    pathname === "/mantenedores" ||
+    pathname.startsWith("/mantenedores/")
+  ) {
+    return false;
   }
 
   // Rutas siempre autorizadas para cualquier usuario con sesión activa

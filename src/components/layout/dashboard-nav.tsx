@@ -212,19 +212,24 @@ export function DashboardSidebar({
     canJuicios ||
     canCalendario;
 
-  const canMantenedorOn = hasPermission(userSession, "mantenedor_on");
-  const canColaboradores = hasPermission(userSession, "mantenedor_colaboradores");
-  const canMantenedoresFactoring = hasPermission(userSession, "mantenedor_factoring");
-  const canMandantesCompanias = hasPermission(userSession, "mantenedor_mandantes_companias");
-  const canUsuarios = hasPermission(userSession, "maestro_usuarios");
-  const canPerfiles = hasPermission(userSession, "adm_perfiles");
+  const esAdmin =
+    Boolean(userSession?.esAdmin) ||
+    String(userSession?.perfil || "").trim().toUpperCase() === "ADMINISTRADOR";
+
+  const canMantenedorOn = esAdmin && hasPermission(userSession, "mantenedor_on");
+  const canColaboradores = esAdmin && hasPermission(userSession, "mantenedor_colaboradores");
+  const canMantenedoresFactoring = esAdmin && hasPermission(userSession, "mantenedor_factoring");
+  const canMandantesCompanias = esAdmin && hasPermission(userSession, "mantenedor_mandantes_companias");
+  const canUsuarios = esAdmin && hasPermission(userSession, "maestro_usuarios");
+  const canPerfiles = esAdmin && hasPermission(userSession, "adm_perfiles");
   const canConfiguracionGroup =
-    canMantenedorOn ||
-    canColaboradores ||
-    canMantenedoresFactoring ||
-    canMandantesCompanias ||
-    canUsuarios ||
-    canPerfiles;
+    esAdmin &&
+    (canMantenedorOn ||
+      canColaboradores ||
+      canMantenedoresFactoring ||
+      canMandantesCompanias ||
+      canUsuarios ||
+      canPerfiles);
 
   const handleLogout = async () => {
     try {

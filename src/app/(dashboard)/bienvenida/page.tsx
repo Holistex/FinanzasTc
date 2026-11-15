@@ -86,12 +86,16 @@ export default async function BienvenidaPage({
     canComparendos ||
     canJuicios;
 
-  const canMantenedoresFactoring = hasPermission(session, "mantenedor_factoring");
-  const canMandantesCompanias = hasPermission(session, "mantenedor_mandantes_companias");
-  const canUsuarios = hasPermission(session, "maestro_usuarios");
-  const canPerfiles = hasPermission(session, "adm_perfiles");
-  const canConfiguracionAdm = canUsuarios || canPerfiles;
-  const canMantenedoresCat = canMantenedoresFactoring || canMandantesCompanias;
+  const esAdmin =
+    Boolean(session?.esAdmin) ||
+    String(session?.perfil || "").trim().toUpperCase() === "ADMINISTRADOR";
+
+  const canMantenedoresFactoring = esAdmin && hasPermission(session, "mantenedor_factoring");
+  const canMandantesCompanias = esAdmin && hasPermission(session, "mantenedor_mandantes_companias");
+  const canUsuarios = esAdmin && hasPermission(session, "maestro_usuarios");
+  const canPerfiles = esAdmin && hasPermission(session, "adm_perfiles");
+  const canConfiguracionAdm = esAdmin && (canUsuarios || canPerfiles);
+  const canMantenedoresCat = esAdmin && (canMantenedoresFactoring || canMandantesCompanias);
 
   const anyModuleVisible =
     canVentasGroup ||

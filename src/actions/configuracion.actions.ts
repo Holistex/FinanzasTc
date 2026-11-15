@@ -11,7 +11,7 @@ import {
   UsuarioSistema,
   buildNormalizedPermisosMatrix,
 } from "@/types/database.types";
-import { assertCanManage } from "@/lib/auth/session";
+import { assertIsAdmin } from "@/lib/auth/session";
 
 function mapPerfilRow(row: Record<string, unknown>): PerfilUsuario {
   return {
@@ -79,7 +79,7 @@ export async function savePerfilAction(
     permisos: Record<string, any>;
   }
 ): Promise<PerfilUsuario> {
-  const auth = await assertCanManage(["adm_perfiles", "configuracion_adm"]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
 
   const nombreLimpio = payload.nombre_perfil.trim().toUpperCase();
@@ -190,7 +190,7 @@ export async function savePerfilAction(
  * Elimina un perfil de usuario
  */
 export async function deletePerfilAction(id: string): Promise<{ success: boolean }> {
-  const auth = await assertCanManage(["adm_perfiles", "configuracion_adm"]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
 
   // Validar si existen usuarios asignados a este perfil
@@ -285,7 +285,7 @@ export async function saveUsuarioAction(
     estado?: "Activo" | "Inactivo";
   }
 ): Promise<UsuarioSistema> {
-  const auth = await assertCanManage(["maestro_usuarios", "configuracion_adm"]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
 
   const nombre = payload.nombre.trim();
@@ -450,7 +450,7 @@ export async function saveUsuarioAction(
  * Elimina un usuario del sistema
  */
 export async function deleteUsuarioAction(id: string): Promise<{ success: boolean }> {
-  const auth = await assertCanManage(["maestro_usuarios", "configuracion_adm"]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
 
   if (isServerSupabaseConfigured()) {

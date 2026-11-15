@@ -1772,6 +1772,7 @@ export function FacturasVentasTable({
         <AssignOnModal
           factura={facturaToAssignOn}
           catalogoOn={catalogoOn}
+          esAdmin={isAdmin}
           onClose={() => setFacturaToAssignOn(null)}
           onSuccess={handleOnAssigned}
         />

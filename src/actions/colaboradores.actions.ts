@@ -136,10 +136,7 @@ export async function getColaboradoresAction(
 export async function upsertColaboradorAction(
   input: UpsertColaboradorInput
 ): Promise<MantenedorColaborador> {
-  const auth = await assertCanManage([
-    "mantenedor_colaboradores",
-    "configuracion_adm",
-  ]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) {
     throw new Error(auth.error || "Acceso denegado.");
   }
@@ -253,10 +250,7 @@ export async function toggleColaboradorStatusAction(
   rut: string,
   activo: boolean
 ): Promise<boolean> {
-  const auth = await assertCanManage([
-    "mantenedor_colaboradores",
-    "configuracion_adm",
-  ]);
+  const auth = await assertIsAdmin();
   if (!auth.authorized) {
     throw new Error(auth.error || "Acceso denegado.");
   }
