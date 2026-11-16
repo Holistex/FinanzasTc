@@ -1,6 +1,7 @@
 import React from "react";
 import { DashboardSidebar } from "@/components/layout/dashboard-nav";
 import { SessionHeartbeat } from "@/components/layout/session-heartbeat";
+import { SessionTimeoutGuard } from "@/components/auth/SessionTimeoutGuard";
 import { isServerSupabaseConfigured } from "@/lib/supabase/server";
 import { getServerUserSession } from "@/lib/auth/session";
 
@@ -19,6 +20,7 @@ export default async function DashboardLayout({
   return (
     <div className="flex flex-col lg:flex-row min-h-screen bg-[#F8FAFC] text-[#0F172A] overflow-x-hidden">
       {session && <SessionHeartbeat />}
+      {session && <SessionTimeoutGuard />}
       <DashboardSidebar
         isSupabaseLive={isSupabaseLive}
         userSession={session}

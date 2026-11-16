@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -20,6 +20,14 @@ export default function LoginPage() {
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [inactivityNotice, setInactivityNotice] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reason") === "inactivity") {
+      setInactivityNotice(true);
+    }
+  }, []);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -116,6 +124,17 @@ export default function LoginPage() {
               Ingrese sus credenciales de acceso asignadas.
             </p>
           </div>
+
+          {inactivityNotice && (
+            <div className="mb-5 flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+              <span>
+                Su sesión fue cerrada automáticamente tras 30 minutos de
+                inactividad por seguridad. Inicie sesión nuevamente para
+                continuar.
+              </span>
+            </div>
+          )}
 
           {errorMsg && (
             <div className="mb-5 flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">
