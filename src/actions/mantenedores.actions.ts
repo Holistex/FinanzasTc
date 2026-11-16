@@ -10,6 +10,7 @@ import {
   EmpresaConfirming,
   EmpresaFactoringCliente,
   EmpresaFactoringProveedor,
+  MantenedorBanco,
 } from "@/types/database.types";
 import { normalizeRut } from "@/lib/utils";
 import { assertIsAdmin } from "@/lib/auth/session";
@@ -464,4 +465,215 @@ export async function deleteEmpresaConfirmingAction(
   revalidatePath("/compras-tensacon/facturas-compras");
   return { success: true };
 }
+
+// ============================================================================
+// 4. MANTENEDOR: BANCOS (mantenedor_bancos)
+// ============================================================================
+
+export async function getBancosAction(
+  searchQuery?: string,
+  onlyActive = false
+): Promise<MantenedorBanco[]> {
+  const q = searchQuery?.trim().toLowerCase();
+
+  if (isServerSupabaseConfigured()) {
+    try {
+      const supabase = await createServerSupabaseClient();
+      let query = supabase
+        .from("mantenedor_bancos")
+        .select("*")
+        .order("nombre", { ascending: true });
+
+      if (onlyActive) {
+        query = query.eq("activo", true);
+      }
+      if (q) {
+        query = query.or(
+          `nombre.ilike.%${q}%,codigo_sbif.ilike.%${q}%,rut.ilike.%${q}%`
+        );
+      }
+
+      const { data, error } = await query;
+      if (!error && data) {
+        const list = data as MantenedorBanco[];
+        if (list.length > 0 || !onlyActive) {
+          return list;
+        }
+      }
+    } catch {
+      // Fallback a lista local
+    }
+  }
+
+  const db = readLocalDb();
+  let list = [...(db.mantenedor_bancos || [])];
+  if (onlyActive) {
+    list = list.filter((b) => b.activo !== false);
+  }
+  if (q) {
+    list = list.filter(
+      (b) =>
+        b.nombre.toLowerCase().includes(q) ||
+        (b.codigo_sbif || "").toLowerCase().includes(q) ||
+        (b.rut || "").toLowerCase().includes(q)
+    );
+  }
+  return list.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+}
+
+export async function upsertBancoAction(input: {
+  id?: string;
+  nombre: string;
+  codigo_sbif?: string | null;
+  rut?: string | null;
+  activo?: boolean;
+}): Promise<MantenedorBanco> {
+  const auth = await assertIsAdmin();
+  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
+
+  const nombreClean = input.nombre.trim();
+  if (!nombreClean) {
+    throw new Error("El nombre del banco es obligatorio.");
+  }
+  const cleanRut = input.rut?.trim() ? normalizeRut(input.rut) : null;
+  const cleanSbif = input.codigo_sbif?.trim() || null;
+  const activoVal = input.activo !== false;
+
+  const revalidateBancoPaths = () => {
+    revalidatePath("/configuracion/mantenedores-factoring");
+    revalidatePath("/mantenedores");
+    revalidatePath("/gestion-garantias/boletas-garantias");
+    revalidatePath("/gestion-garantias/polizas-garantias");
+    revalidatePath("/tesoreria/pagos");
+    revalidatePath("/compras-tensacon/facturas-compras");
+  };
+
+  if (isServerSupabaseConfigured()) {
+    const supabase = await createServerSupabaseClient();
+    const payload = {
+      ...(input.id ? { id: input.id } : {}),
+      nombre: nombreClean,
+      codigo_sbif: cleanSbif,
+      rut: cleanRut,
+      activo: activoVal,
+    };
+
+    const { data, error } = input.id
+      ? await supabase
+          .from("mantenedor_bancos")
+          .update(payload)
+          .eq("id", input.id)
+          .select()
+          .single()
+      : await supabase
+          .from("mantenedor_bancos")
+          .insert(payload)
+          .select()
+          .single();
+
+    if (error) {
+      throw new Error(`Error guardando banco: ${error.message}`);
+    }
+
+    revalidateBancoPaths();
+    return data as MantenedorBanco;
+  }
+
+  const db = readLocalDb();
+  if (!db.mantenedor_bancos) db.mantenedor_bancos = [];
+
+  if (input.id) {
+    const idx = db.mantenedor_bancos.findIndex((b) => b.id === input.id);
+    if (idx === -1) throw new Error("Banco no encontrado.");
+    const updated: MantenedorBanco = {
+      ...db.mantenedor_bancos[idx],
+      nombre: nombreClean,
+      codigo_sbif: cleanSbif,
+      rut: cleanRut,
+      activo: activoVal,
+    };
+    db.mantenedor_bancos[idx] = updated;
+    writeLocalDb(db);
+    revalidateBancoPaths();
+    return updated;
+  }
+
+  const created: MantenedorBanco = {
+    id: `bco-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    nombre: nombreClean,
+    codigo_sbif: cleanSbif,
+    rut: cleanRut,
+    activo: activoVal,
+    created_at: new Date().toISOString(),
+  };
+  db.mantenedor_bancos.push(created);
+  writeLocalDb(db);
+  revalidateBancoPaths();
+  return created;
+}
+
+export async function toggleBancoStatusAction(
+  id: string,
+  activo: boolean
+): Promise<{ success: boolean }> {
+  const auth = await assertIsAdmin();
+  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
+
+  if (isServerSupabaseConfigured()) {
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase
+      .from("mantenedor_bancos")
+      .update({ activo })
+      .eq("id", id);
+
+    if (error) {
+      throw new Error(`Error actualizando estado del banco: ${error.message}`);
+    }
+    revalidatePath("/configuracion/mantenedores-factoring");
+    revalidatePath("/mantenedores");
+    return { success: true };
+  }
+
+  const db = readLocalDb();
+  if (!db.mantenedor_bancos) db.mantenedor_bancos = [];
+  const idx = db.mantenedor_bancos.findIndex((b) => b.id === id);
+  if (idx !== -1) {
+    db.mantenedor_bancos[idx].activo = activo;
+    writeLocalDb(db);
+  }
+  revalidatePath("/configuracion/mantenedores-factoring");
+  revalidatePath("/mantenedores");
+  return { success: true };
+}
+
+export async function deleteBancoAction(
+  id: string
+): Promise<{ success: boolean }> {
+  const auth = await assertIsAdmin();
+  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
+
+  if (isServerSupabaseConfigured()) {
+    const supabase = await createServerSupabaseClient();
+    const { error } = await supabase
+      .from("mantenedor_bancos")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      throw new Error(`Error eliminando banco: ${error.message}`);
+    }
+    revalidatePath("/configuracion/mantenedores-factoring");
+    revalidatePath("/mantenedores");
+    return { success: true };
+  }
+
+  const db = readLocalDb();
+  if (!db.mantenedor_bancos) db.mantenedor_bancos = [];
+  db.mantenedor_bancos = db.mantenedor_bancos.filter((b) => b.id !== id);
+  writeLocalDb(db);
+  revalidatePath("/configuracion/mantenedores-factoring");
+  revalidatePath("/mantenedores");
+  return { success: true };
+}
+
 

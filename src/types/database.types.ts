@@ -30,6 +30,15 @@ export interface EmpresaConfirming {
   updated_at?: string;
 }
 
+export interface MantenedorBanco {
+  id: string;
+  nombre: string;
+  codigo_sbif?: string | null;
+  rut?: string | null;
+  activo: boolean;
+  created_at: string;
+}
+
 export type EstadoFacturaCompra =
   | "DEUDA_PROVEEDOR"
   | "FACTORING"

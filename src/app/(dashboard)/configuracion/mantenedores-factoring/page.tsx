@@ -8,7 +8,9 @@ import {
   EmpresaConfirming,
   EmpresaFactoringCliente,
   EmpresaFactoringProveedor,
+  MantenedorBanco,
 } from "@/types/database.types";
+import { getBancosAction } from "@/actions/mantenedores.actions";
 import { MantenedoresTabsClient } from "../../mantenedores/_components/mantenedores-tabs-client";
 import { getServerUserSession } from "@/lib/auth/session";
 import { getModuleAccess } from "@/lib/permissions";
@@ -55,6 +57,8 @@ export default async function MantenedoresFactoringConfigPage() {
     );
   }
 
+  const bancos: MantenedorBanco[] = await getBancosAction();
+
   const session = await getServerUserSession();
   const { canManage } = getModuleAccess(session, [
     "mantenedor_factoring",
@@ -66,6 +70,7 @@ export default async function MantenedoresFactoringConfigPage() {
       initialClientes={clientes}
       initialProveedores={proveedores}
       initialConfirming={confirming}
+      initialBancos={bancos}
       canManage={canManage}
     />
   );

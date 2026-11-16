@@ -3,6 +3,7 @@ import {
   getCartolasBancariasAction,
   getTiposPagoAction,
 } from "@/actions/tesoreria.actions";
+import { getBancosAction } from "@/actions/mantenedores.actions";
 import {
   createServerSupabaseClient,
   isServerSupabaseConfigured,
@@ -14,7 +15,10 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function PagosTesoreriaPage() {
-  const baseData = await getCartolasBancariasAction();
+  const [baseData, bancos] = await Promise.all([
+    getCartolasBancariasAction(),
+    getBancosAction(undefined, true),
+  ]);
 
   // Lectura directa sin JOIN por FK en Supabase y cruce en memoria
   if (isServerSupabaseConfigured()) {
@@ -80,6 +84,7 @@ export default async function PagosTesoreriaPage() {
               lineas: mappedLineas,
               tiposPago,
             }}
+            bancos={bancos}
           />
         );
       }
@@ -88,5 +93,5 @@ export default async function PagosTesoreriaPage() {
     }
   }
 
-  return <PagosTesoreriaClient initialData={baseData} />;
+  return <PagosTesoreriaClient initialData={baseData} bancos={bancos} />;
 }

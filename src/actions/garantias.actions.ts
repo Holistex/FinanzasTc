@@ -205,12 +205,79 @@ export async function upsertBoletaGarantiaAction(input: {
   if (!input.fecha_emision) throw new Error("La fecha de emisión es obligatoria.");
   if (!input.fecha_vencimiento) throw new Error("La fecha de vencimiento es obligatoria.");
 
+  let resolvedCompaniaId = input.compania_id;
+  if (resolvedCompaniaId.startsWith("banco:")) {
+    const bancoId = resolvedCompaniaId.slice("banco:".length);
+    const localDb = readLocalDb();
+    let bancoNombre =
+      (localDb.mantenedor_bancos || []).find((b) => b.id === bancoId)?.nombre || "";
+    let bancoRut =
+      (localDb.mantenedor_bancos || []).find((b) => b.id === bancoId)?.rut || "00000000-0";
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      if (!bancoNombre) {
+        const { data: bRow } = await supabase
+          .from("mantenedor_bancos")
+          .select("nombre, rut")
+          .eq("id", bancoId)
+          .maybeSingle();
+        if (bRow?.nombre) {
+          bancoNombre = String(bRow.nombre);
+          bancoRut = bRow.rut ? String(bRow.rut) : bancoRut;
+        }
+      }
+      if (bancoNombre) {
+        const { data: existingComp } = await supabase
+          .from("mantenedor_companias")
+          .select("id")
+          .ilike("razon_social", bancoNombre)
+          .maybeSingle();
+        if (existingComp?.id) {
+          resolvedCompaniaId = String(existingComp.id);
+        } else {
+          const { data: createdComp, error: compErr } = await supabase
+            .from("mantenedor_companias")
+            .insert({
+              razon_social: bancoNombre,
+              rut: bancoRut || "00000000-0",
+              tipo: "BANCO",
+            })
+            .select("id")
+            .single();
+          if (!compErr && createdComp?.id) {
+            resolvedCompaniaId = String(createdComp.id);
+          }
+        }
+      }
+    } else if (bancoNombre) {
+      if (!localDb.mantenedor_companias) localDb.mantenedor_companias = [];
+      const existingLocal = localDb.mantenedor_companias.find(
+        (c) => c.razon_social.toLowerCase() === bancoNombre.toLowerCase()
+      );
+      if (existingLocal) {
+        resolvedCompaniaId = existingLocal.id;
+      } else {
+        const newCompId = `comp-${Date.now()}`;
+        localDb.mantenedor_companias.push({
+          id: newCompId,
+          rut: bancoRut,
+          rut_compania: bancoRut,
+          razon_social: bancoNombre,
+          created_at: new Date().toISOString(),
+        });
+        writeLocalDb(localDb);
+        resolvedCompaniaId = newCompId;
+      }
+    }
+  }
+
   const payload = {
     ...(input.id ? { id: input.id } : {}),
     nro_folio: input.nro_folio.trim().toUpperCase(),
     on_proyecto: input.on_proyecto?.trim() || null,
     mandante_id: input.mandante_id,
-    compania_id: input.compania_id,
+    compania_id: resolvedCompaniaId,
     motivo: input.motivo.trim(),
     monto: Number(input.monto),
     monto_uf: input.monto_uf !== undefined && input.monto_uf !== null ? Number(input.monto_uf) : Number(input.monto),
@@ -455,12 +522,79 @@ export async function upsertPolizaGarantiaAction(input: {
   if (!input.fecha_emision) throw new Error("La fecha de emisión es obligatoria.");
   if (!input.fecha_vencimiento) throw new Error("La fecha de vencimiento es obligatoria.");
 
+  let resolvedCompaniaId = input.compania_id;
+  if (resolvedCompaniaId.startsWith("banco:")) {
+    const bancoId = resolvedCompaniaId.slice("banco:".length);
+    const localDb = readLocalDb();
+    let bancoNombre =
+      (localDb.mantenedor_bancos || []).find((b) => b.id === bancoId)?.nombre || "";
+    let bancoRut =
+      (localDb.mantenedor_bancos || []).find((b) => b.id === bancoId)?.rut || "00000000-0";
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      if (!bancoNombre) {
+        const { data: bRow } = await supabase
+          .from("mantenedor_bancos")
+          .select("nombre, rut")
+          .eq("id", bancoId)
+          .maybeSingle();
+        if (bRow?.nombre) {
+          bancoNombre = String(bRow.nombre);
+          bancoRut = bRow.rut ? String(bRow.rut) : bancoRut;
+        }
+      }
+      if (bancoNombre) {
+        const { data: existingComp } = await supabase
+          .from("mantenedor_companias")
+          .select("id")
+          .ilike("razon_social", bancoNombre)
+          .maybeSingle();
+        if (existingComp?.id) {
+          resolvedCompaniaId = String(existingComp.id);
+        } else {
+          const { data: createdComp, error: compErr } = await supabase
+            .from("mantenedor_companias")
+            .insert({
+              razon_social: bancoNombre,
+              rut: bancoRut || "00000000-0",
+              tipo: "BANCO",
+            })
+            .select("id")
+            .single();
+          if (!compErr && createdComp?.id) {
+            resolvedCompaniaId = String(createdComp.id);
+          }
+        }
+      }
+    } else if (bancoNombre) {
+      if (!localDb.mantenedor_companias) localDb.mantenedor_companias = [];
+      const existingLocal = localDb.mantenedor_companias.find(
+        (c) => c.razon_social.toLowerCase() === bancoNombre.toLowerCase()
+      );
+      if (existingLocal) {
+        resolvedCompaniaId = existingLocal.id;
+      } else {
+        const newCompId = `comp-${Date.now()}`;
+        localDb.mantenedor_companias.push({
+          id: newCompId,
+          rut: bancoRut,
+          rut_compania: bancoRut,
+          razon_social: bancoNombre,
+          created_at: new Date().toISOString(),
+        });
+        writeLocalDb(localDb);
+        resolvedCompaniaId = newCompId;
+      }
+    }
+  }
+
   const payload = {
     ...(input.id ? { id: input.id } : {}),
     nro_folio: input.nro_folio.trim().toUpperCase(),
     on_proyecto: input.on_proyecto?.trim() || null,
     mandante_id: input.mandante_id,
-    compania_id: input.compania_id,
+    compania_id: resolvedCompaniaId,
     motivo: input.motivo.trim(),
     monto: Number(input.monto),
     monto_uf: input.monto_uf !== undefined && input.monto_uf !== null ? Number(input.monto_uf) : Number(input.monto),

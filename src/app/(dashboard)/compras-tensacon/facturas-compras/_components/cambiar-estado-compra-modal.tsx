@@ -32,7 +32,9 @@ import {
   ChequeCompra,
   MantenedorColaborador,
   MantenedorON,
+  MantenedorBanco,
 } from "@/types/database.types";
+import { getBancosAction } from "@/actions/mantenedores.actions";
 import {
   cambiarEstadoCompraAction,
   editarFechaVencimientoCompraAction,
@@ -164,6 +166,14 @@ export function CambiarEstadoCompraModal({
       return saldoDisp > 0;
     });
   }, [factura, todasLasFacturas]);
+
+  const [bancosCatalog, setBancosCatalog] = useState<MantenedorBanco[]>([]);
+
+  useEffect(() => {
+    getBancosAction(undefined, true)
+      .then((list) => setBancosCatalog(list))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (factura) {
@@ -805,13 +815,24 @@ export function CambiarEstadoCompraModal({
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
                         Banco Emisor <span className="text-red-500">*</span>
                       </label>
-                      <input
-                        type="text"
+                      <select
                         value={bancoEmisor}
                         onChange={(e) => setBancoEmisor(e.target.value)}
-                        placeholder="Ej. Banco de Chile / Santander"
                         className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                      />
+                      >
+                        <option value="" disabled>
+                          Seleccione banco...
+                        </option>
+                        {bancoEmisor &&
+                          !bancosCatalog.some((b) => b.nombre === bancoEmisor) && (
+                            <option value={bancoEmisor}>{bancoEmisor}</option>
+                          )}
+                        {bancosCatalog.map((b) => (
+                          <option key={b.id} value={b.nombre}>
+                            {b.nombre}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
@@ -955,15 +976,26 @@ export function CambiarEstadoCompraModal({
                             <label className="block text-[11px] font-medium text-slate-600 mb-0.5">
                               Banco Emisor <span className="text-red-500">*</span>
                             </label>
-                            <input
-                              type="text"
+                            <select
                               value={cuota.bancoEmisor}
                               onChange={(e) =>
                                 handleUpdateCuota(cuota.id, "bancoEmisor", e.target.value)
                               }
-                              placeholder="Ej. Banco de Chile"
                               className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-800 focus:border-amber-500 focus:outline-none"
-                            />
+                            >
+                              <option value="" disabled>
+                                Seleccione banco...
+                              </option>
+                              {cuota.bancoEmisor &&
+                                !bancosCatalog.some((b) => b.nombre === cuota.bancoEmisor) && (
+                                  <option value={cuota.bancoEmisor}>{cuota.bancoEmisor}</option>
+                                )}
+                              {bancosCatalog.map((b) => (
+                                <option key={b.id} value={b.nombre}>
+                                  {b.nombre}
+                                </option>
+                              ))}
+                            </select>
                           </div>
 
                           <div>

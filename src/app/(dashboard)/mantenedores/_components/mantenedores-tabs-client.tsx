@@ -24,6 +24,7 @@ import {
   EmpresaConfirming,
   EmpresaFactoringCliente,
   EmpresaFactoringProveedor,
+  MantenedorBanco,
 } from "@/types/database.types";
 import {
   getFactoringClientesAction,
@@ -35,6 +36,10 @@ import {
   getEmpresasConfirmingAction,
   upsertEmpresaConfirmingAction,
   deleteEmpresaConfirmingAction,
+  getBancosAction,
+  upsertBancoAction,
+  toggleBancoStatusAction,
+  deleteBancoAction,
 } from "@/actions/mantenedores.actions";
 import { cn, formatDateCL, formatRutDisplay } from "@/lib/utils";
 
@@ -42,6 +47,7 @@ interface MantenedoresTabsClientProps {
   initialClientes: EmpresaFactoringCliente[];
   initialProveedores: EmpresaFactoringProveedor[];
   initialConfirming: EmpresaConfirming[];
+  initialBancos?: MantenedorBanco[];
   canManage?: boolean;
 }
 
@@ -49,26 +55,29 @@ export function MantenedoresTabsClient({
   initialClientes,
   initialProveedores,
   initialConfirming,
+  initialBancos = [],
   canManage = false,
 }: MantenedoresTabsClientProps) {
-  const [activeTab, setActiveTab] = useState<"CLIENTES" | "PROVEEDORES" | "CONFIRMING">(
-    "CLIENTES"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "CLIENTES" | "PROVEEDORES" | "CONFIRMING" | "BANCOS"
+  >("CLIENTES");
   const [clientes, setClientes] =
     useState<EmpresaFactoringCliente[]>(initialClientes);
   const [proveedores, setProveedores] =
     useState<EmpresaFactoringProveedor[]>(initialProveedores);
   const [confirmingList, setConfirmingList] =
     useState<EmpresaConfirming[]>(initialConfirming);
+  const [bancosList, setBancosList] = useState<MantenedorBanco[]>(initialBancos);
 
   const [searchClientes, setSearchClientes] = useState("");
   const [searchProveedores, setSearchProveedores] = useState("");
   const [searchConfirming, setSearchConfirming] = useState("");
+  const [searchBancos, setSearchBancos] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, searchClientes, searchProveedores, searchConfirming]);
+  }, [activeTab, searchClientes, searchProveedores, searchConfirming, searchBancos]);
   const [isPending, startTransition] = useTransition();
 
   // Modal Cliente state
@@ -102,8 +111,82 @@ export function MantenedoresTabsClient({
     contacto_email: "",
   });
 
+  // Modal Bancos state
+  const [isBancoModalOpen, setIsBancoModalOpen] = useState(false);
+  const [editingBanco, setEditingBanco] = useState<MantenedorBanco | null>(null);
+  const [bancoForm, setBancoForm] = useState({
+    nombre: "",
+    codigo_sbif: "",
+    rut: "",
+    activo: true,
+  });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Handlers Bancos
+  const handleSearchBancos = (q: string) => {
+    setSearchBancos(q);
+    startTransition(async () => {
+      const updated = await getBancosAction(q);
+      setBancosList(updated);
+    });
+  };
+
+  const openCreateBanco = () => {
+    setEditingBanco(null);
+    setBancoForm({ nombre: "", codigo_sbif: "", rut: "", activo: true });
+    setFormError(null);
+    setIsBancoModalOpen(true);
+  };
+
+  const openEditBanco = (item: MantenedorBanco) => {
+    setEditingBanco(item);
+    setBancoForm({
+      nombre: item.nombre,
+      codigo_sbif: item.codigo_sbif || "",
+      rut: item.rut ? formatRutDisplay(item.rut) : "",
+      activo: item.activo !== false,
+    });
+    setFormError(null);
+    setIsBancoModalOpen(true);
+  };
+
+  const handleSaveBanco = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+    setIsSubmitting(true);
+    try {
+      await upsertBancoAction({
+        id: editingBanco?.id,
+        nombre: bancoForm.nombre,
+        codigo_sbif: bancoForm.codigo_sbif || null,
+        rut: bancoForm.rut || null,
+        activo: bancoForm.activo,
+      });
+      const updated = await getBancosAction(searchBancos);
+      setBancosList(updated);
+      setIsBancoModalOpen(false);
+    } catch (err: unknown) {
+      setFormError(err instanceof Error ? err.message : "Error guardando banco.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleToggleBancoStatus = async (item: MantenedorBanco) => {
+    const nextActivo = item.activo === false;
+    await toggleBancoStatusAction(item.id, nextActivo);
+    setBancosList((prev) =>
+      prev.map((b) => (b.id === item.id ? { ...b, activo: nextActivo } : b))
+    );
+  };
+
+  const handleDeleteBanco = async (id: string) => {
+    if (!window.confirm("¿Eliminar este banco del catálogo?")) return;
+    await deleteBancoAction(id);
+    setBancosList((prev) => prev.filter((b) => b.id !== id));
+  };
 
   // Handlers Clientes
   const handleSearchClientes = (q: string) => {
@@ -334,6 +417,12 @@ export function MantenedoresTabsClient({
             label: "Empresa Confirming",
             icon: ShieldCheck,
             count: confirmingList.length,
+          },
+          {
+            id: "BANCOS",
+            label: "Bancos",
+            icon: Landmark,
+            count: bancosList.length,
           },
         ]}
       />
@@ -1005,6 +1094,268 @@ export function MantenedoresTabsClient({
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   )}
                   Guardar Confirming
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          PESTAÑA 4: BANCOS (mantenedor_bancos)
+      ===================================================================== */}
+      {activeTab === "BANCOS" && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar por Nombre, Código SBIF o RUT..."
+                value={searchBancos}
+                onChange={(e) => handleSearchBancos(e.target.value)}
+                className="w-full rounded-md border border-slate-300 bg-[#F8FAFC] pl-8 pr-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:border-[#E05A10] focus:outline-none"
+              />
+            </div>
+
+            {canManage && (
+              <button
+                type="button"
+                onClick={openCreateBanco}
+                className="inline-flex items-center gap-1.5 rounded-md bg-[#E05A10] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#C2410C] transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Nuevo Banco
+              </button>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-[650px] lg:min-w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-[#F8FAFC] font-bold text-slate-600 text-[10px] uppercase tracking-wider">
+                    <th className="py-2.5 px-3">Institución Bancaria</th>
+                    <th className="py-2.5 px-3">Código SBIF</th>
+                    <th className="py-2.5 px-3">RUT</th>
+                    <th className="py-2.5 px-3 text-center">Estado</th>
+                    <th className="py-2.5 px-3 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {bancosList.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-slate-500">
+                        No hay bancos registrados en el catálogo.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginateArray(bancosList, currentPage, GLOBAL_PAGE_SIZE).map(
+                      (b) => {
+                        const isActivo = b.activo !== false;
+                        return (
+                          <tr
+                            key={b.id}
+                            className="hover:bg-slate-50 transition-colors"
+                          >
+                            <td className="py-2.5 px-3 font-semibold text-slate-900">
+                              <div className="flex items-center gap-2">
+                                <Landmark className="h-3.5 w-3.5 text-[#E05A10] shrink-0" />
+                                <span>{b.nombre}</span>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-slate-600">
+                              {b.codigo_sbif || "—"}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-slate-600">
+                              {b.rut ? formatRutDisplay(b.rut) : "—"}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              {canManage ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleBancoStatus(b)}
+                                  className={cn(
+                                    "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border transition-colors",
+                                    isActivo
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                      : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "h-1.5 w-1.5 rounded-full",
+                                      isActivo ? "bg-emerald-500" : "bg-slate-400"
+                                    )}
+                                  />
+                                  {isActivo ? "ACTIVO" : "INACTIVO"}
+                                </button>
+                              ) : (
+                                <span
+                                  className={cn(
+                                    "inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border",
+                                    isActivo
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                      : "bg-slate-100 text-slate-500 border-slate-200"
+                                  )}
+                                >
+                                  {isActivo ? "ACTIVO" : "INACTIVO"}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              {canManage && (
+                                <div className="inline-flex items-center gap-1 justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditBanco(b)}
+                                    className="p-1.5 rounded text-slate-400 hover:text-[#E05A10] hover:bg-orange-50 transition-colors"
+                                    title="Editar banco"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteBanco(b.id)}
+                                    className="p-1.5 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                    title="Eliminar banco"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      }
+                    )
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <TablePagination
+              currentPage={currentPage}
+              totalItems={bancosList.length}
+              pageSize={GLOBAL_PAGE_SIZE}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODAL CREAR / EDITAR: BANCO
+      ===================================================================== */}
+      {isBancoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-[95vw] sm:w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded-lg bg-orange-50 border border-orange-200 flex items-center justify-center text-[#E05A10]">
+                  <Landmark className="h-4 w-4" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  {editingBanco ? "Editar Institución Bancaria" : "Nuevo Banco"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBancoModalOpen(false)}
+                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBanco} className="p-5 space-y-3.5 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Nombre del Banco <span className="text-[#E05A10]">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={bancoForm.nombre}
+                  onChange={(e) =>
+                    setBancoForm({ ...bancoForm, nombre: e.target.value })
+                  }
+                  placeholder="Ej: Banco de Chile"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-[#E05A10] focus:outline-none focus:ring-1 focus:ring-[#E05A10]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Código SBIF
+                  </label>
+                  <input
+                    type="text"
+                    value={bancoForm.codigo_sbif}
+                    onChange={(e) =>
+                      setBancoForm({ ...bancoForm, codigo_sbif: e.target.value })
+                    }
+                    placeholder="Ej: 001"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-slate-900 focus:border-[#E05A10] focus:outline-none focus:ring-1 focus:ring-[#E05A10]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    RUT Institución
+                  </label>
+                  <input
+                    type="text"
+                    value={bancoForm.rut}
+                    onChange={(e) =>
+                      setBancoForm({ ...bancoForm, rut: e.target.value })
+                    }
+                    placeholder="Ej: 97.004.000-5"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-slate-900 focus:border-[#E05A10] focus:outline-none focus:ring-1 focus:ring-[#E05A10]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="bancoActivo"
+                  checked={bancoForm.activo}
+                  onChange={(e) =>
+                    setBancoForm({ ...bancoForm, activo: e.target.checked })
+                  }
+                  className="h-4 w-4 rounded border-slate-300 text-[#E05A10] focus:ring-[#E05A10]"
+                />
+                <label
+                  htmlFor="bancoActivo"
+                  className="text-xs font-medium text-slate-700 cursor-pointer"
+                >
+                  Banco activo y disponible en selectores de la plataforma
+                </label>
+              </div>
+
+              {formError && (
+                <div className="rounded-lg bg-rose-50 border border-rose-200 p-2.5 text-rose-700">
+                  {formError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsBancoModalOpen(false)}
+                  className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#E05A10] px-4 py-2 font-bold text-white hover:bg-[#c84e0c] disabled:opacity-50 transition-colors"
+                >
+                  {isSubmitting && (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  )}
+                  Guardar Banco
                 </button>
               </div>
             </form>

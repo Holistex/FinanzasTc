@@ -224,21 +224,21 @@ export function MantenedorOnClient({
   const inactiveCount = data.filter((d) => d.activo === false).length;
 
   return (
-    <div className="w-full min-h-screen space-y-6 p-6 bg-[#0B0F17] text-slate-100">
+    <div className="w-full min-h-screen space-y-6 p-6 bg-[#F8FAFC] text-slate-900">
       {/* Header Corporativo Ejecutivo */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-5">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/20">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-50 border border-orange-200 text-[#E05A10]">
             <FolderKanban className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
               Mantenedor de ON
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-950/60 border border-orange-800/60 text-orange-400">
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-orange-50 border border-orange-200 text-[#E05A10]">
                 3 Dígitos
               </span>
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500 mt-0.5">
               Catálogo maestro de proyectos y obras (ON) para asignación obligatoria en Facturas de Ventas y Garantías.
             </p>
           </div>
@@ -248,7 +248,7 @@ export function MantenedorOnClient({
           <button
             type="button"
             onClick={openCreateModal}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#E05A10] px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-[#c94e0c] transition-colors"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#E05A10] px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-[#c84e0c] transition-colors"
           >
             <Plus className="h-4 w-4" />
             Nueva ON
@@ -260,16 +260,16 @@ export function MantenedorOnClient({
       {actionError && (
         <div
           role="alert"
-          className="flex items-center justify-between gap-3 rounded-xl border border-rose-500/40 bg-rose-950/60 px-4 py-3 text-xs text-rose-200"
+          className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700"
         >
           <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-rose-400 shrink-0" />
+            <AlertTriangle className="h-4 w-4 text-rose-500 shrink-0" />
             <span>{actionError}</span>
           </div>
           <button
             type="button"
             onClick={() => setActionError(null)}
-            className="text-rose-400 hover:text-white"
+            className="text-rose-400 hover:text-rose-700"
             aria-label="Cerrar error"
           >
             <X className="h-4 w-4" />
@@ -279,45 +279,45 @@ export function MantenedorOnClient({
 
       {/* KPI Cards Superiores (3 Columnas Equilibradas) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-4 shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
               Total Proyectos ON
             </span>
-            <div className="p-1.5 rounded-lg bg-slate-800/60 border border-slate-700/50">
-              <Hash className="h-4 w-4 text-slate-400" />
+            <div className="p-1.5 rounded-lg bg-slate-100 border border-slate-200">
+              <Hash className="h-4 w-4 text-slate-500" />
             </div>
           </div>
-          <div className="mt-2 text-3xl font-bold text-white font-mono">{totalCount}</div>
+          <div className="mt-2 text-2xl font-extrabold text-slate-900 font-mono">{totalCount}</div>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-4 shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
               ONs Habilitadas
             </span>
-            <div className="p-1.5 rounded-lg bg-emerald-950/30 border border-emerald-800/40">
-              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+            <div className="p-1.5 rounded-lg bg-emerald-50 border border-emerald-200">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
             </div>
           </div>
-          <div className="mt-2 text-3xl font-bold text-white font-mono">{activeCount}</div>
+          <div className="mt-2 text-2xl font-extrabold text-slate-900 font-mono">{activeCount}</div>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-4 shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
               ONs Inactivas
             </span>
-            <div className="p-1.5 rounded-lg bg-slate-800/60 border border-slate-700/50">
+            <div className="p-1.5 rounded-lg bg-slate-100 border border-slate-200">
               <XCircle className="h-4 w-4 text-slate-400" />
             </div>
           </div>
-          <div className="mt-2 text-3xl font-bold text-white font-mono">{inactiveCount}</div>
+          <div className="mt-2 text-2xl font-extrabold text-slate-900 font-mono">{inactiveCount}</div>
         </div>
       </div>
 
       {/* Toolbar / Search & Filter Pills */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-3 rounded-xl shadow-sm">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white border border-slate-200 p-3 rounded-xl shadow-xs">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
           <input
@@ -325,21 +325,21 @@ export function MantenedorOnClient({
             placeholder="Buscar por código ON o nombre de proyecto..."
             value={searchTerm}
             onChange={(e) => handleSearch(e.target.value)}
-            className="w-full rounded-lg bg-slate-900 border border-slate-800 pl-9 pr-8 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-[#E05A10]"
+            className="w-full rounded-lg bg-white border border-slate-300 pl-9 pr-8 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#E05A10] focus:ring-1 focus:ring-[#E05A10]"
           />
           {searchTerm && (
             <button
               type="button"
               onClick={() => handleSearch("")}
-              className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-200"
+              className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
             >
               <X className="h-4 w-4" />
             </button>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 self-end sm:self-auto bg-slate-950/60 p-1 rounded-lg border border-slate-800">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-2">
+        <div className="flex items-center gap-1.5 self-end sm:self-auto bg-slate-100 p-1 rounded-lg border border-slate-200">
+          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider px-2">
             Estado:
           </span>
           {(["ALL", "ACTIVO", "INACTIVO"] as const).map((filter) => (
@@ -350,8 +350,8 @@ export function MantenedorOnClient({
               className={cn(
                 "px-3 py-1 text-xs font-medium rounded-md transition-all",
                 statusFilter === filter
-                  ? "bg-[#E05A10] text-white font-semibold shadow-sm"
-                  : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                  ? "bg-[#E05A10] text-white font-semibold shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/70"
               )}
             >
               {filter === "ALL" ? "Todos" : filter === "ACTIVO" ? "Activos" : "Inactivos"}
@@ -360,22 +360,22 @@ export function MantenedorOnClient({
         </div>
       </div>
 
-      {/* Tabla Corporativa de Registros (Sin Mandante) */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/90 overflow-hidden shadow-sm">
+      {/* Tabla Corporativa de Registros */}
+      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="min-w-[650px] lg:min-w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-900 text-xs font-semibold tracking-wider text-slate-400 uppercase">
-                <th className="py-3 px-4 w-32">CÓDIGO ON</th>
+              <tr className="border-b border-slate-200 bg-slate-50 text-xs font-bold tracking-wider text-slate-500 uppercase">
+                <th className="py-3 px-4 w-36">CÓDIGO ON</th>
                 <th className="py-3 px-4">PROYECTO / OBRA</th>
                 <th className="py-3 px-4 text-center w-36">ESTADO</th>
                 <th className="py-3 px-4 text-right w-28">ACCIONES</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 text-xs">
+            <tbody className="divide-y divide-slate-100 text-xs">
               {filteredData.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-12 text-center text-slate-400">
+                  <td colSpan={4} className="py-12 text-center text-slate-500">
                     No se encontraron códigos ON con los criterios de búsqueda actuales.
                   </td>
                 </tr>
@@ -383,23 +383,23 @@ export function MantenedorOnClient({
                 paginateArray(filteredData, currentPage, GLOBAL_PAGE_SIZE).map((item) => (
                   <tr
                     key={item.id}
-                    className="hover:bg-slate-900/60 border-b border-slate-800/60 transition-colors group"
+                    className="bg-white hover:bg-slate-50 border-b border-slate-100 transition-colors group"
                   >
                     {/* Código ON Badge */}
                     <td className="py-3 px-4 font-mono">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-bold text-xs bg-orange-950/20 text-orange-400 border border-orange-500/40">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-bold text-xs bg-orange-50 text-[#E05A10] border border-orange-200">
                         <Hash className="h-3 w-3" />
                         ON {item.codigo_on}
                       </span>
                     </td>
 
-                    {/* Proyecto / Obra (Ancho expandido) */}
+                    {/* Proyecto / Obra */}
                     <td className="py-3 px-4">
-                      <div className="font-semibold text-slate-100 text-sm">
+                      <div className="font-semibold text-slate-900 text-sm">
                         {item.nombre_proyecto}
                       </div>
                       {item.descripcion && (
-                        <div className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                        <div className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
                           {item.descripcion}
                         </div>
                       )}
@@ -413,16 +413,16 @@ export function MantenedorOnClient({
                           onClick={() => handleToggleStatus(item)}
                           title="Haga clic para cambiar estado"
                           className={cn(
-                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all cursor-pointer shadow-xs",
+                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border transition-all cursor-pointer",
                             item.activo !== false
-                              ? "bg-emerald-950/30 text-emerald-400 border-emerald-800/30 hover:bg-emerald-950/60"
-                              : "bg-slate-800/60 text-slate-400 border-slate-700 hover:bg-slate-800"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                              : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
                           )}
                         >
                           <span
                             className={cn(
                               "h-1.5 w-1.5 rounded-full",
-                              item.activo !== false ? "bg-emerald-400" : "bg-slate-500"
+                              item.activo !== false ? "bg-emerald-500" : "bg-slate-400"
                             )}
                           />
                           {item.activo !== false ? "ACTIVO" : "INACTIVO"}
@@ -430,16 +430,16 @@ export function MantenedorOnClient({
                       ) : (
                         <span
                           className={cn(
-                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border",
+                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border",
                             item.activo !== false
-                              ? "bg-emerald-950/30 text-emerald-400 border-emerald-800/30"
-                              : "bg-slate-800/60 text-slate-400 border-slate-700"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : "bg-slate-100 text-slate-500 border-slate-200"
                           )}
                         >
                           <span
                             className={cn(
                               "h-1.5 w-1.5 rounded-full",
-                              item.activo !== false ? "bg-emerald-400" : "bg-slate-500"
+                              item.activo !== false ? "bg-emerald-500" : "bg-slate-400"
                             )}
                           />
                           {item.activo !== false ? "ACTIVO" : "INACTIVO"}
@@ -454,7 +454,7 @@ export function MantenedorOnClient({
                           <button
                             type="button"
                             onClick={() => openEditModal(item)}
-                            className="p-1.5 rounded-md text-slate-400 hover:text-orange-400 hover:bg-slate-800 transition-colors"
+                            className="p-1.5 rounded-md text-slate-400 hover:text-[#E05A10] hover:bg-orange-50 transition-colors"
                             title="Editar ON"
                           >
                             <Pencil className="h-3.5 w-3.5" />
@@ -463,7 +463,7 @@ export function MantenedorOnClient({
                             type="button"
                             onClick={() => handleDelete(item.id, item.codigo_on)}
                             disabled={deletingId === item.id}
-                            className="p-1.5 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors disabled:opacity-50"
+                            className="p-1.5 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50"
                             title="Eliminar ON"
                           >
                             {deletingId === item.id ? (
@@ -474,7 +474,7 @@ export function MantenedorOnClient({
                           </button>
                         </div>
                       ) : (
-                        <span className="text-[11px] text-slate-500">
+                        <span className="text-[11px] text-slate-400">
                           Solo lectura
                         </span>
                       )}
@@ -490,26 +490,27 @@ export function MantenedorOnClient({
           totalItems={filteredData.length}
           pageSize={GLOBAL_PAGE_SIZE}
           onPageChange={setCurrentPage}
-          dark
         />
       </div>
 
-      {/* Modal Crear / Editar (Sin Campo Mandante) */}
+      {/* Modal Crear / Editar */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="relative w-[95vw] sm:w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="relative w-[95vw] sm:w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 text-slate-800 shadow-2xl">
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <div className="flex items-center gap-2">
-                <FolderKanban className="h-5 w-5 text-orange-400" />
-                <h2 className="text-base font-bold text-white">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 border border-orange-200 text-[#E05A10]">
+                  <FolderKanban className="h-5 w-5" />
+                </div>
+                <h2 className="text-base font-bold text-slate-900">
                   {editingItem ? "Editar Proyecto / Código ON" : "Registrar Nueva ON"}
                 </h2>
               </div>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -518,21 +519,21 @@ export function MantenedorOnClient({
             {/* Formulario */}
             <form onSubmit={handleSubmit} className="mt-4 space-y-4">
               {formError && (
-                <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 border border-rose-500/30 p-3 text-xs text-rose-300">
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-rose-400" />
+                <div className="flex items-center gap-2 rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-700">
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-rose-500" />
                   <span>{formError}</span>
                 </div>
               )}
 
               {/* Código ON */}
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Código ON <span className="text-rose-400">*</span>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Código ON <span className="text-[#E05A10]">*</span>
                 </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-orange-400 font-mono text-xs font-bold">
+                <div className="bg-white border border-slate-300 rounded-lg px-3 py-2 flex items-center gap-2 focus-within:border-[#E05A10] focus-within:ring-1 focus-within:ring-[#E05A10]">
+                  <span className="text-xs font-bold text-[#E05A10] uppercase font-mono">
                     ON
-                  </div>
+                  </span>
                   <input
                     type="text"
                     maxLength={3}
@@ -542,41 +543,41 @@ export function MantenedorOnClient({
                       const val = e.target.value.replace(/[^0-9]/g, "");
                       setFormCodigo(val);
                     }}
-                    className="w-full rounded-lg bg-slate-950 border border-slate-700 pl-11 pr-3 py-2 text-xs font-mono font-bold text-white focus:outline-none focus:border-orange-500"
+                    className="w-full text-sm font-mono font-bold text-slate-900 bg-transparent focus:outline-none"
                     required
                   />
                 </div>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  Debe estar compuesto por exactamente **3 dígitos numéricos** (ej. 701, 719, 740).
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Debe estar compuesto por exactamente 3 dígitos numéricos (ej. 701, 719, 740).
                 </p>
               </div>
 
               {/* Nombre Proyecto / Obra */}
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Nombre del Proyecto / Obra <span className="text-rose-400">*</span>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nombre del Proyecto / Obra <span className="text-[#E05A10]">*</span>
                 </label>
                 <input
                   type="text"
                   placeholder="Ej. Línea 2 Metro de Santiago / Puente Chacao / CD Imolog"
                   value={formNombre}
                   onChange={(e) => setFormNombre(e.target.value)}
-                  className="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-500"
+                  className="w-full rounded-lg bg-white border border-slate-300 px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#E05A10] focus:ring-1 focus:ring-[#E05A10]"
                   required
                 />
               </div>
 
               {/* Descripción / Observación */}
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Descripción / Observación <span className="text-slate-500">(Opcional)</span>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Descripción / Observación <span className="text-slate-400 font-normal">(Opcional)</span>
                 </label>
                 <textarea
                   rows={2}
                   placeholder="Detalle de obras, frentes de trabajo o alcances..."
                   value={formDescripcion}
                   onChange={(e) => setFormDescripcion(e.target.value)}
-                  className="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-500 resize-none"
+                  className="w-full rounded-lg bg-white border border-slate-300 px-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-[#E05A10] focus:ring-1 focus:ring-[#E05A10] resize-none"
                 />
               </div>
 
@@ -587,27 +588,27 @@ export function MantenedorOnClient({
                   id="formActivo"
                   checked={formActivo}
                   onChange={(e) => setFormActivo(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-700 bg-slate-950 text-orange-600 focus:ring-orange-500"
+                  className="h-4 w-4 rounded border-slate-300 text-[#E05A10] focus:ring-[#E05A10]"
                 />
-                <label htmlFor="formActivo" className="text-xs text-slate-300 cursor-pointer">
+                <label htmlFor="formActivo" className="text-xs text-slate-700 cursor-pointer font-medium">
                   Habilitar ON inmediatamente para asignación y operaciones
                 </label>
               </div>
 
               {/* Footer Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-800">
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
                   disabled={isSubmitting}
-                  className="rounded-lg bg-slate-800 px-3.5 py-2 text-xs font-medium text-slate-300 hover:bg-slate-700 transition-colors"
+                  className="rounded-lg bg-white border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-500 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#E05A10] px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-[#c84e0c] transition-colors disabled:opacity-50"
                 >
                   {isSubmitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   {editingItem ? "Actualizar ON" : "Guardar ON"}

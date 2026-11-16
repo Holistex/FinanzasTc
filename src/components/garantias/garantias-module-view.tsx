@@ -42,6 +42,8 @@ import {
   HistorialRenovacionGarantia,
   GestionGarantia,
   EstadoGestionGarantia,
+  MantenedorON,
+  MantenedorBanco,
 } from "@/types/database.types";
 import {
   GarantiasFilterParams,
@@ -103,6 +105,8 @@ interface GarantiasModuleViewProps {
   initialKpis: GarantiasKpiSummary;
   mandantes: MantenedorMandante[];
   companias: MantenedorCompania[];
+  catalogoOn?: MantenedorON[];
+  bancos?: MantenedorBanco[];
   onFetchAction: (
     filters: GarantiasFilterParams
   ) => Promise<{ items: GarantiaItemWithRelations[]; kpis: GarantiasKpiSummary }>;
@@ -143,6 +147,8 @@ export function GarantiasModuleView({
   initialKpis,
   mandantes,
   companias,
+  catalogoOn = [],
+  bancos = [],
   onFetchAction,
   onUpsertAction,
   onRenovarAction,
@@ -1175,24 +1181,36 @@ export function GarantiasModuleView({
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     ON (Proyecto) <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
+                  <select
                     required
-                    maxLength={3}
-                    pattern="[0-9]{3}"
-                    placeholder="740"
                     value={formData.on_proyecto}
                     onChange={(e) =>
                       setFormData((prev) => ({
                         ...prev,
-                        on_proyecto: e.target.value.replace(/\D/g, "").slice(0, 3),
+                        on_proyecto: e.target.value,
                       }))
                     }
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10] font-mono font-bold text-slate-900"
-                  />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">
-                    3 dígitos numéricos
-                  </span>
+                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10] bg-white font-medium text-slate-900"
+                  >
+                    <option value="" disabled>
+                      Seleccione un proyecto ON...
+                    </option>
+                    {formData.on_proyecto &&
+                      !catalogoOn.some(
+                        (on) => on.codigo_on === formData.on_proyecto
+                      ) && (
+                        <option value={formData.on_proyecto}>
+                          ON {formData.on_proyecto} (Proyecto actual)
+                        </option>
+                      )}
+                    {catalogoOn
+                      .filter((on) => on.activo !== false)
+                      .map((on) => (
+                        <option key={on.id} value={on.codigo_on}>
+                          ON {on.codigo_on} — {on.nombre_proyecto}
+                        </option>
+                      ))}
+                  </select>
                 </div>
 
                 <div>
@@ -1258,11 +1276,48 @@ export function GarantiasModuleView({
                     <option value="" disabled>
                       Seleccione {isBoleta ? "el banco emisor" : "la aseguradora"}...
                     </option>
-                    {companias.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.razon_social} ({formatRutDisplay(c.rut || c.rut_compania || "")})
-                      </option>
-                    ))}
+                    {isBoleta && bancos.length > 0 ? (
+                      <>
+                        {bancos
+                          .filter((b) => b.activo !== false)
+                          .map((b) => {
+                            const matchedComp = companias.find(
+                              (c) =>
+                                c.razon_social.trim().toLowerCase() ===
+                                b.nombre.trim().toLowerCase()
+                            );
+                            const optVal = matchedComp
+                              ? matchedComp.id
+                              : `banco:${b.id}`;
+                            return (
+                              <option key={b.id} value={optVal}>
+                                {b.nombre}
+                                {b.rut ? ` (${formatRutDisplay(b.rut)})` : ""}
+                              </option>
+                            );
+                          })}
+                        {companias
+                          .filter(
+                            (c) =>
+                              !bancos.some(
+                                (b) =>
+                                  b.nombre.trim().toLowerCase() ===
+                                  c.razon_social.trim().toLowerCase()
+                              )
+                          )
+                          .map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.razon_social} ({formatRutDisplay(c.rut || c.rut_compania || "")})
+                            </option>
+                          ))}
+                      </>
+                    ) : (
+                      companias.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.razon_social} ({formatRutDisplay(c.rut || c.rut_compania || "")})
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>

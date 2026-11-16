@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import {
   CartolaLinea,
+  MantenedorBanco,
   MantenedorTipoPago,
 } from "@/types/database.types";
 import {
@@ -26,6 +27,7 @@ import { cn, formatCLP } from "@/lib/utils";
 
 interface PagosTesoreriaClientProps {
   initialData: CartolasTesoreriaResponse;
+  bancos?: MantenedorBanco[];
 }
 
 // Estructura fija y unívoca para las semanas del mes:
@@ -124,6 +126,7 @@ function calcularSemanasDelMes(year: number, month: number): SemanaPeriodo[] {
 
 export function PagosTesoreriaClient({
   initialData,
+  bancos = [],
 }: PagosTesoreriaClientProps) {
   const [lineas, setLineas] = useState<CartolaLinea[]>(initialData.lineas);
   const [tiposPago, setTiposPago] = useState<MantenedorTipoPago[]>(
@@ -533,8 +536,18 @@ export function PagosTesoreriaClient({
                 className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 focus:border-[#E05A10] focus:outline-none"
               >
                 <option value="TODOS">Todos los Bancos</option>
-                <option value="Banco Itaú">Banco Itaú</option>
-                <option value="Banco Santander">Banco Santander</option>
+                {bancos.length > 0 ? (
+                  bancos.map((b) => (
+                    <option key={b.id} value={b.nombre}>
+                      {b.nombre}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="Banco Itaú">Banco Itaú</option>
+                    <option value="Banco Santander">Banco Santander</option>
+                  </>
+                )}
               </select>
             </div>
           </div>

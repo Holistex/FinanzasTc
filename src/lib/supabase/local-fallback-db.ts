@@ -25,6 +25,7 @@ import {
   LitigioComparendo,
   CuotaComparendo,
   MantenedorON,
+  MantenedorBanco,
   MantenedorColaborador,
   MantenedorTipoPago,
   CartolaBancaria,
@@ -33,6 +34,7 @@ import {
 
 export interface LocalDatabaseSchema {
   mantenedor_on?: MantenedorON[];
+  mantenedor_bancos?: MantenedorBanco[];
   mantenedor_colaboradores?: MantenedorColaborador[];
   mantenedor_tipos_pago?: MantenedorTipoPago[];
   cartolas_bancarias?: CartolaBancaria[];
@@ -897,6 +899,16 @@ const INITIAL_SEED: LocalDatabaseSchema = {
       activo: true,
       created_at: "2026-04-10T14:00:00.000Z",
     },
+  ],
+  mantenedor_bancos: [
+    { id: "bco-chile", nombre: "Banco de Chile", codigo_sbif: "001", rut: "97004000-5", activo: true, created_at: "2026-01-01T00:00:00.000Z" },
+    { id: "bco-estado", nombre: "BancoEstado", codigo_sbif: "012", rut: "97030000-7", activo: true, created_at: "2026-01-01T00:00:00.000Z" },
+    { id: "bco-bci", nombre: "Banco BCI", codigo_sbif: "016", rut: "97006000-6", activo: true, created_at: "2026-01-01T00:00:00.000Z" },
+    { id: "bco-santander", nombre: "Banco Santander", codigo_sbif: "037", rut: "97036000-K", activo: true, created_at: "2026-01-01T00:00:00.000Z" },
+    { id: "bco-itau", nombre: "Banco Itaú", codigo_sbif: "039", rut: "97023000-9", activo: true, created_at: "2026-01-01T00:00:00.000Z" },
+    { id: "bco-scotiabank", nombre: "Scotiabank Chile", codigo_sbif: "014", rut: "97018000-1", activo: true, created_at: "2026-01-01T00:00:00.000Z" },
+    { id: "bco-bice", nombre: "Banco BICE", codigo_sbif: "028", rut: "97080000-K", activo: true, created_at: "2026-01-01T00:00:00.000Z" },
+    { id: "bco-security", nombre: "Banco Security", codigo_sbif: "049", rut: "97053000-2", activo: true, created_at: "2026-01-01T00:00:00.000Z" },
   ],
 };
 
