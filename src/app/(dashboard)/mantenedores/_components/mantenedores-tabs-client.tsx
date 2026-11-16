@@ -76,6 +76,10 @@ export function MantenedoresTabsClient({
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
+    setBancosList(initialBancos);
+  }, [initialBancos]);
+
+  useEffect(() => {
     setCurrentPage(1);
   }, [activeTab, searchClientes, searchProveedores, searchConfirming, searchBancos]);
   const [isPending, startTransition] = useTransition();
