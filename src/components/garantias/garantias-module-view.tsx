@@ -554,7 +554,7 @@ export function GarantiasModuleView({
         });
 
         // Also update any modified details
-        await onUpsertAction({
+        const resUpdate = await onUpsertAction({
           id: editingItem.id,
           nro_folio: formData.nro_folio,
           on_proyecto: formData.on_proyecto.trim() || null,
@@ -571,6 +571,11 @@ export function GarantiasModuleView({
           contrafianza: formData.contrafianza || null,
           contrafianza_compania: formData.contrafianza_compania || null,
         });
+        if (resUpdate && resUpdate.success === false) {
+          setFormError(resUpdate.error || "Error al actualizar el documento.");
+          setIsSubmitting(false);
+          return;
+        }
 
         setIsModalOpen(false);
         triggerRefresh();
@@ -584,7 +589,7 @@ export function GarantiasModuleView({
 
     setIsSubmitting(true);
     try {
-      await onUpsertAction({
+      const res = await onUpsertAction({
         id: editingItem?.id,
         nro_folio: formData.nro_folio,
         on_proyecto: formData.on_proyecto.trim() || null,
@@ -602,6 +607,11 @@ export function GarantiasModuleView({
         contrafianza_compania: formData.contrafianza_compania || null,
         contador_renovaciones: editingItem ? editingItem.contador_renovaciones : 0,
       });
+      if (res && res.success === false) {
+        setFormError(res.error || "Error al guardar el documento.");
+        setIsSubmitting(false);
+        return;
+      }
 
       setIsModalOpen(false);
       triggerRefresh();
@@ -1312,11 +1322,17 @@ export function GarantiasModuleView({
                           ))}
                       </>
                     ) : (
-                      companias.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.razon_social} ({formatRutDisplay(c.rut || c.rut_compania || "")})
-                        </option>
-                      ))
+                      companias.map((c) => {
+                        const rawRut = (c.rut || c.rut_compania || "").trim();
+                        const hasRealRut = rawRut.replace(/\D/g, "").length >= 6;
+                        return (
+                          <option key={c.id} value={c.id}>
+                            {hasRealRut
+                              ? `${c.razon_social} (${formatRutDisplay(rawRut)})`
+                              : c.razon_social}
+                          </option>
+                        );
+                      })
                     )}
                   </select>
                 </div>

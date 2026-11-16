@@ -189,21 +189,22 @@ export async function upsertBoletaGarantiaAction(input: {
   contrafianza?: string | null;
   contrafianza_compania?: string | null;
   contador_renovaciones?: number;
-}): Promise<BoletaGarantia> {
-  const auth = await assertCanManage(["garantias_boletas"]);
-  if (!auth.authorized) {
-    throw new Error(auth.error || "Acceso denegado.");
-  }
+}): Promise<{ success: boolean; data?: BoletaGarantia; error?: string }> {
+  try {
+    const auth = await assertCanManage(["garantias_boletas"]);
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
+    }
 
-  if (!input.nro_folio.trim()) throw new Error("El N° Folio es obligatorio.");
-  if (!input.mandante_id) throw new Error("Debe seleccionar un Mandante.");
-  if (!input.compania_id) throw new Error("Debe seleccionar una Compañía.");
-  if (!input.motivo.trim()) throw new Error("El motivo es obligatorio.");
-  if (input.monto === undefined || input.monto === null || input.monto < 0) {
-    throw new Error("El monto debe ser mayor o igual a 0.");
-  }
-  if (!input.fecha_emision) throw new Error("La fecha de emisión es obligatoria.");
-  if (!input.fecha_vencimiento) throw new Error("La fecha de vencimiento es obligatoria.");
+    if (!input.nro_folio.trim()) return { success: false, error: "El N° Folio es obligatorio." };
+    if (!input.mandante_id) return { success: false, error: "Debe seleccionar un Mandante." };
+    if (!input.compania_id) return { success: false, error: "Debe seleccionar una Compañía." };
+    if (!input.motivo.trim()) return { success: false, error: "El motivo es obligatorio." };
+    if (input.monto === undefined || input.monto === null || input.monto < 0) {
+      return { success: false, error: "El monto debe ser mayor o igual a 0." };
+    }
+    if (!input.fecha_emision) return { success: false, error: "La fecha de emisión es obligatoria." };
+    if (!input.fecha_vencimiento) return { success: false, error: "La fecha de vencimiento es obligatoria." };
 
   let resolvedCompaniaId = input.compania_id;
   if (resolvedCompaniaId.startsWith("banco:")) {
@@ -293,19 +294,29 @@ export async function upsertBoletaGarantiaAction(input: {
 
   if (isServerSupabaseConfigured()) {
     const supabase = await createServerSupabaseClient();
-    const { data, error } = await supabase
-      .from("boletas_garantias")
-      .upsert(payload)
-      .select()
-      .single();
+    const { data, error } = input.id
+      ? await supabase
+          .from("boletas_garantias")
+          .update(payload)
+          .eq("id", input.id)
+          .select()
+          .single()
+      : await supabase
+          .from("boletas_garantias")
+          .insert(payload)
+          .select()
+          .single();
 
     if (error) {
-      throw new Error(`Error al guardar Boleta de Garantía en Supabase: ${error.message}`);
+      return {
+        success: false,
+        error: `Error al guardar Boleta de Garantía en Supabase: ${error.message}`,
+      };
     }
 
     if (data) {
       revalidatePath("/gestion-garantias/boletas-garantias");
-      return data as BoletaGarantia;
+      return { success: true, data: data as BoletaGarantia };
     }
   }
 
@@ -340,7 +351,16 @@ export async function upsertBoletaGarantiaAction(input: {
 
   writeLocalDb(db);
   revalidatePath("/gestion-garantias/boletas-garantias");
-  return savedRecord;
+  return { success: true, data: savedRecord };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : "Error inesperado al guardar Boleta de Garantía.",
+    };
+  }
 }
 
 export async function deleteBoletaGarantiaAction(_id: string): Promise<void> {
@@ -506,21 +526,22 @@ export async function upsertPolizaGarantiaAction(input: {
   contrafianza?: string | null;
   contrafianza_compania?: string | null;
   contador_renovaciones?: number;
-}): Promise<PolizaGarantia> {
-  const auth = await assertCanManage(["garantias_polizas"]);
-  if (!auth.authorized) {
-    throw new Error(auth.error || "Acceso denegado.");
-  }
+}): Promise<{ success: boolean; data?: PolizaGarantia; error?: string }> {
+  try {
+    const auth = await assertCanManage(["garantias_polizas"]);
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
+    }
 
-  if (!input.nro_folio.trim()) throw new Error("El N° Folio es obligatorio.");
-  if (!input.mandante_id) throw new Error("Debe seleccionar un Mandante.");
-  if (!input.compania_id) throw new Error("Debe seleccionar una Compañía.");
-  if (!input.motivo.trim()) throw new Error("El motivo es obligatorio.");
-  if (input.monto === undefined || input.monto === null || input.monto < 0) {
-    throw new Error("El monto debe ser mayor o igual a 0.");
-  }
-  if (!input.fecha_emision) throw new Error("La fecha de emisión es obligatoria.");
-  if (!input.fecha_vencimiento) throw new Error("La fecha de vencimiento es obligatoria.");
+    if (!input.nro_folio.trim()) return { success: false, error: "El N° Folio es obligatorio." };
+    if (!input.mandante_id) return { success: false, error: "Debe seleccionar un Mandante." };
+    if (!input.compania_id) return { success: false, error: "Debe seleccionar una Compañía." };
+    if (!input.motivo.trim()) return { success: false, error: "El motivo es obligatorio." };
+    if (input.monto === undefined || input.monto === null || input.monto < 0) {
+      return { success: false, error: "El monto debe ser mayor o igual a 0." };
+    }
+    if (!input.fecha_emision) return { success: false, error: "La fecha de emisión es obligatoria." };
+    if (!input.fecha_vencimiento) return { success: false, error: "La fecha de vencimiento es obligatoria." };
 
   let resolvedCompaniaId = input.compania_id;
   if (resolvedCompaniaId.startsWith("banco:")) {
@@ -610,19 +631,29 @@ export async function upsertPolizaGarantiaAction(input: {
 
   if (isServerSupabaseConfigured()) {
     const supabase = await createServerSupabaseClient();
-    const { data, error } = await supabase
-      .from("polizas_garantias")
-      .upsert(payload)
-      .select()
-      .single();
+    const { data, error } = input.id
+      ? await supabase
+          .from("polizas_garantias")
+          .update(payload)
+          .eq("id", input.id)
+          .select()
+          .single()
+      : await supabase
+          .from("polizas_garantias")
+          .insert(payload)
+          .select()
+          .single();
 
     if (error) {
-      throw new Error(`Error al guardar Póliza de Garantía en Supabase: ${error.message}`);
+      return {
+        success: false,
+        error: `Error al guardar Póliza de Garantía en Supabase: ${error.message}`,
+      };
     }
 
     if (data) {
       revalidatePath("/gestion-garantias/polizas-garantias");
-      return data as PolizaGarantia;
+      return { success: true, data: data as PolizaGarantia };
     }
   }
 
@@ -657,7 +688,16 @@ export async function upsertPolizaGarantiaAction(input: {
 
   writeLocalDb(db);
   revalidatePath("/gestion-garantias/polizas-garantias");
-  return savedRecord;
+  return { success: true, data: savedRecord };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : "Error inesperado al guardar Póliza de Garantía.",
+    };
+  }
 }
 
 export async function deletePolizaGarantiaAction(_id: string): Promise<void> {
