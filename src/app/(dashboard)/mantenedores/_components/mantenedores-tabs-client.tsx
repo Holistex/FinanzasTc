@@ -161,13 +161,17 @@ export function MantenedoresTabsClient({
     setFormError(null);
     setIsSubmitting(true);
     try {
-      await upsertBancoAction({
+      const res = await upsertBancoAction({
         id: editingBanco?.id,
         nombre: bancoForm.nombre,
         codigo_sbif: bancoForm.codigo_sbif || null,
         rut: bancoForm.rut || null,
         activo: bancoForm.activo,
       });
+      if (!res.success) {
+        setFormError(res.error || "Error guardando banco.");
+        return;
+      }
       const updated = await getBancosAction(searchBancos);
       setBancosList(updated);
       setIsBancoModalOpen(false);

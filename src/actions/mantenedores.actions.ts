@@ -481,7 +481,7 @@ export async function getBancosAction(
       const supabase = await createServerSupabaseClient();
       let query = supabase
         .from("mantenedor_bancos")
-        .select("*")
+        .select("id, codigo_sbif, nombre, rut, activo, created_at")
         .order("nombre", { ascending: true });
 
       if (onlyActive) {
@@ -527,89 +527,119 @@ export async function upsertBancoAction(input: {
   codigo_sbif?: string | null;
   rut?: string | null;
   activo?: boolean;
-}): Promise<MantenedorBanco> {
-  const auth = await assertIsAdmin();
-  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
-
-  const nombreClean = input.nombre.trim();
-  if (!nombreClean) {
-    throw new Error("El nombre del banco es obligatorio.");
-  }
-  const cleanRut = input.rut?.trim() ? normalizeRut(input.rut) : null;
-  const cleanSbif = input.codigo_sbif?.trim() || null;
-  const activoVal = input.activo !== false;
-
-  const revalidateBancoPaths = () => {
-    revalidatePath("/configuracion/mantenedores-factoring");
-    revalidatePath("/mantenedores");
-    revalidatePath("/gestion-garantias/boletas-garantias");
-    revalidatePath("/gestion-garantias/polizas-garantias");
-    revalidatePath("/tesoreria/pagos");
-    revalidatePath("/compras-tensacon/facturas-compras");
-  };
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const payload = {
-      ...(input.id ? { id: input.id } : {}),
-      nombre: nombreClean,
-      codigo_sbif: cleanSbif,
-      rut: cleanRut,
-      activo: activoVal,
-    };
-
-    const { data, error } = input.id
-      ? await supabase
-          .from("mantenedor_bancos")
-          .update(payload)
-          .eq("id", input.id)
-          .select()
-          .single()
-      : await supabase
-          .from("mantenedor_bancos")
-          .insert(payload)
-          .select()
-          .single();
-
-    if (error) {
-      throw new Error(`Error guardando banco: ${error.message}`);
+}): Promise<{ success: boolean; data?: MantenedorBanco; error?: string }> {
+  try {
+    const auth = await assertIsAdmin();
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
 
-    revalidateBancoPaths();
-    return data as MantenedorBanco;
-  }
+    const nombreClean = input.nombre.trim().toUpperCase();
+    if (!nombreClean) {
+      return { success: false, error: "El nombre del banco es obligatorio." };
+    }
+    const cleanRut = input.rut?.trim() ? normalizeRut(input.rut) : null;
+    const cleanSbif = input.codigo_sbif?.trim() || null;
+    const activoVal = Boolean(input.activo !== false);
 
-  const db = readLocalDb();
-  if (!db.mantenedor_bancos) db.mantenedor_bancos = [];
+    const revalidateBancoPaths = () => {
+      revalidatePath("/configuracion/mantenedores-factoring");
+      revalidatePath("/mantenedores");
+      revalidatePath("/gestion-garantias/boletas-garantias");
+      revalidatePath("/gestion-garantias/polizas-garantias");
+      revalidatePath("/tesoreria/pagos");
+      revalidatePath("/compras-tensacon/facturas-compras");
+    };
 
-  if (input.id) {
-    const idx = db.mantenedor_bancos.findIndex((b) => b.id === input.id);
-    if (idx === -1) throw new Error("Banco no encontrado.");
-    const updated: MantenedorBanco = {
-      ...db.mantenedor_bancos[idx],
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const payload = {
+        nombre: nombreClean,
+        codigo_sbif: cleanSbif,
+        rut: cleanRut,
+        activo: activoVal,
+      };
+
+      const { data, error } = input.id
+        ? await supabase
+            .from("mantenedor_bancos")
+            .update(payload)
+            .eq("id", input.id)
+            .select("id, codigo_sbif, nombre, rut, activo, created_at")
+            .single()
+        : await supabase
+            .from("mantenedor_bancos")
+            .upsert(payload, { onConflict: "nombre" })
+            .select("id, codigo_sbif, nombre, rut, activo, created_at")
+            .single();
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      revalidateBancoPaths();
+      return { success: true, data: data as MantenedorBanco };
+    }
+
+    const db = readLocalDb();
+    if (!db.mantenedor_bancos) db.mantenedor_bancos = [];
+
+    if (input.id) {
+      const idx = db.mantenedor_bancos.findIndex((b) => b.id === input.id);
+      if (idx === -1) {
+        return { success: false, error: "Banco no encontrado." };
+      }
+      const updated: MantenedorBanco = {
+        ...db.mantenedor_bancos[idx],
+        nombre: nombreClean,
+        codigo_sbif: cleanSbif,
+        rut: cleanRut,
+        activo: activoVal,
+      };
+      db.mantenedor_bancos[idx] = updated;
+      writeLocalDb(db);
+      revalidateBancoPaths();
+      return { success: true, data: updated };
+    }
+
+    const existingByNameIdx = db.mantenedor_bancos.findIndex(
+      (b) => b.nombre.trim().toUpperCase() === nombreClean
+    );
+    if (existingByNameIdx !== -1) {
+      const updated: MantenedorBanco = {
+        ...db.mantenedor_bancos[existingByNameIdx],
+        nombre: nombreClean,
+        codigo_sbif: cleanSbif,
+        rut: cleanRut,
+        activo: activoVal,
+      };
+      db.mantenedor_bancos[existingByNameIdx] = updated;
+      writeLocalDb(db);
+      revalidateBancoPaths();
+      return { success: true, data: updated };
+    }
+
+    const created: MantenedorBanco = {
+      id: `bco-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       nombre: nombreClean,
       codigo_sbif: cleanSbif,
       rut: cleanRut,
       activo: activoVal,
+      created_at: new Date().toISOString(),
     };
-    db.mantenedor_bancos[idx] = updated;
+    db.mantenedor_bancos.push(created);
     writeLocalDb(db);
     revalidateBancoPaths();
-    return updated;
+    return { success: true, data: created };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : "Error inesperado al guardar banco.",
+    };
   }
-
-  const created: MantenedorBanco = {
-    id: `bco-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    nombre: nombreClean,
-    codigo_sbif: cleanSbif,
-    rut: cleanRut,
-    activo: activoVal,
-    created_at: new Date().toISOString(),
-  };
-  db.mantenedor_bancos.push(created);
-  writeLocalDb(db);
-  revalidateBancoPaths();
-  return created;
 }
 
 export async function toggleBancoStatusAction(

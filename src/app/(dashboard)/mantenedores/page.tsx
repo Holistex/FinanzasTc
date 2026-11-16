@@ -42,7 +42,7 @@ export default async function MantenedoresPage() {
           .order("created_at", { ascending: false }),
         supabase
           .from("mantenedor_bancos")
-          .select("*")
+          .select("id, codigo_sbif, nombre, rut, activo, created_at")
           .order("nombre", { ascending: true }),
       ]);
 
