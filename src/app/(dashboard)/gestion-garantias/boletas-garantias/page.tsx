@@ -24,7 +24,7 @@ export default async function BoletasGarantiasPage() {
       getBoletasGarantiasAction(),
       getMandantesAction(),
       getCompaniasAction(),
-      getMantenedorOnAction(undefined, true),
+      getMantenedorOnAction(undefined, "Activos"),
       getBancosAction(undefined, true),
     ]);
 

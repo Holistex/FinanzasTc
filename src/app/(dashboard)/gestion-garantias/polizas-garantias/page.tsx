@@ -24,7 +24,7 @@ export default async function PolizasGarantiasPage() {
       getPolizasGarantiasAction(),
       getMandantesAction(),
       getCompaniasAction(),
-      getMantenedorOnAction(undefined, true),
+      getMantenedorOnAction(undefined, "Activos"),
       getBancosAction(undefined, true),
     ]);
 
