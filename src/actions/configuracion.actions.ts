@@ -471,3 +471,158 @@ export async function deleteUsuarioAction(id: string): Promise<{ success: boolea
   revalidatePath("/configuracion/maestro-usuarios");
   return { success: true };
 }
+
+/**
+ * Deshabilita temporalmente a todos los usuarios activos cuyo perfil NO es ADMINISTRADOR
+ * para realizar mantenimiento en la plataforma.
+ */
+export async function deshabilitarUsuariosMantenimientoAction(): Promise<{
+  success: boolean;
+  affectedCount?: number;
+  error?: string;
+}> {
+  try {
+    const auth = await assertIsAdmin();
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
+    }
+
+    const ahora = new Date().toISOString();
+    let affectedCount = 0;
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { data: adminPerfil } = await supabase
+        .from("perfiles_acceso")
+        .select("id")
+        .ilike("nombre_perfil", "ADMINISTRADOR")
+        .maybeSingle();
+
+      const adminPerfilId = adminPerfil?.id ? String(adminPerfil.id) : null;
+
+      let query = supabase
+        .from("usuarios_sistema")
+        .update({
+          estado: "Inactivo",
+          suspendido_por_mantenimiento: true,
+          sesion_activa: false,
+          updated_at: ahora,
+        })
+        .eq("estado", "Activo");
+
+      if (adminPerfilId) {
+        query = query.neq("perfil_id", adminPerfilId);
+      } else {
+        query = query.not("perfil_nombre", "ilike", "ADMINISTRADOR");
+      }
+
+      const { data: updatedRows, error } = await query.select("id");
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      affectedCount = (updatedRows || []).length;
+    }
+
+    const db = readLocalDb();
+    const adminPerfilIds = new Set(
+      (db.perfiles || [])
+        .filter((p) => p.nombre_perfil.trim().toUpperCase() === "ADMINISTRADOR")
+        .map((p) => p.id)
+    );
+    let localChanged = 0;
+    db.usuarios = (db.usuarios || []).map((u) => {
+      const isAdminUser =
+        adminPerfilIds.has(u.perfil_id) ||
+        (u.perfil_nombre || "").trim().toUpperCase() === "ADMINISTRADOR";
+      if (!isAdminUser && u.estado === "Activo") {
+        localChanged += 1;
+        return {
+          ...u,
+          estado: "Inactivo",
+          suspendido_por_mantenimiento: true,
+          sesion_activa: false,
+          updated_at: ahora,
+        };
+      }
+      return u;
+    });
+    if (localChanged > 0) writeLocalDb(db);
+    if (!isServerSupabaseConfigured()) affectedCount = localChanged;
+
+    revalidatePath("/configuracion/maestro-usuarios");
+    return { success: true, affectedCount };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : "Error inesperado al deshabilitar usuarios.",
+    };
+  }
+}
+
+/**
+ * Rehabilita a todos los usuarios suspendidos por mantenimiento.
+ */
+export async function rehabilitarUsuariosMantenimientoAction(): Promise<{
+  success: boolean;
+  affectedCount?: number;
+  error?: string;
+}> {
+  try {
+    const auth = await assertIsAdmin();
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
+    }
+
+    const ahora = new Date().toISOString();
+    let affectedCount = 0;
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { data: updatedRows, error } = await supabase
+        .from("usuarios_sistema")
+        .update({
+          estado: "Activo",
+          suspendido_por_mantenimiento: false,
+          updated_at: ahora,
+        })
+        .eq("suspendido_por_mantenimiento", true)
+        .select("id");
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+      affectedCount = (updatedRows || []).length;
+    }
+
+    const db = readLocalDb();
+    let localChanged = 0;
+    db.usuarios = (db.usuarios || []).map((u) => {
+      if (u.suspendido_por_mantenimiento) {
+        localChanged += 1;
+        return {
+          ...u,
+          estado: "Activo",
+          suspendido_por_mantenimiento: false,
+          updated_at: ahora,
+        };
+      }
+      return u;
+    });
+    if (localChanged > 0) writeLocalDb(db);
+    if (!isServerSupabaseConfigured()) affectedCount = localChanged;
+
+    revalidatePath("/configuracion/maestro-usuarios");
+    return { success: true, affectedCount };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : "Error inesperado al rehabilitar usuarios.",
+    };
+  }
+}

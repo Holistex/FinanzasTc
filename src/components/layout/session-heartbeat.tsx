@@ -7,12 +7,23 @@ const HEARTBEAT_INTERVAL_MS = 60_000;
 
 export function SessionHeartbeat() {
   useEffect(() => {
+    const sendPulse = () => {
+      registrarPulsoSesionAction()
+        .then((res) => {
+          if (res?.forceLogout) {
+            document.cookie = "tensacon_session=; path=/; max-age=0";
+            window.location.href = "/login";
+          }
+        })
+        .catch(() => {});
+    };
+
     // Pulso inmediato al montar
-    registrarPulsoSesionAction().catch(() => {});
+    sendPulse();
 
     const intervalId = setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        registrarPulsoSesionAction().catch(() => {});
+        sendPulse();
       }
     }, HEARTBEAT_INTERVAL_MS);
 

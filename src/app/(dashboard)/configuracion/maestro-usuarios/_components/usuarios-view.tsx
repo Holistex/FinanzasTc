@@ -27,12 +27,16 @@ import {
   Activity,
   RefreshCw,
   Clock,
+  UserX,
+  ShieldAlert,
 } from "lucide-react";
 import { PerfilUsuario, UsuarioSistema } from "@/types/database.types";
 import {
   saveUsuarioAction,
   deleteUsuarioAction,
   getUsuariosAction,
+  deshabilitarUsuariosMantenimientoAction,
+  rehabilitarUsuariosMantenimientoAction,
 } from "@/actions/configuracion.actions";
 import { cn } from "@/lib/utils";
 
@@ -276,6 +280,50 @@ export function UsuariosView({
     });
   }, [filteredUsuarios]);
 
+  const suspendidosMantenimientoCount = useMemo(
+    () => usuarios.filter((u) => u.suspendido_por_mantenimiento === true).length,
+    [usuarios]
+  );
+  const isMantenimientoActivo = suspendidosMantenimientoCount > 0;
+  const [isMaintenancePending, setIsMaintenancePending] = useState(false);
+
+  const handleDeshabilitarMantenimiento = async () => {
+    const confirmed = window.confirm(
+      "¿Deshabilitar temporalmente a todos los usuarios (excepto ADMINISTRADOR) para realizar actualizaciones en la plataforma?"
+    );
+    if (!confirmed) return;
+
+    setIsMaintenancePending(true);
+    try {
+      const res = await deshabilitarUsuariosMantenimientoAction();
+      if (!res.success) {
+        alert(res.error || "No se pudo activar el modo mantenimiento.");
+        return;
+      }
+      const updated = await getUsuariosAction();
+      setUsuarios(updated);
+      router.refresh();
+    } finally {
+      setIsMaintenancePending(false);
+    }
+  };
+
+  const handleRehabilitarMantenimiento = async () => {
+    setIsMaintenancePending(true);
+    try {
+      const res = await rehabilitarUsuariosMantenimientoAction();
+      if (!res.success) {
+        alert(res.error || "No se pudieron rehabilitar los usuarios.");
+        return;
+      }
+      const updated = await getUsuariosAction();
+      setUsuarios(updated);
+      router.refresh();
+    } finally {
+      setIsMaintenancePending(false);
+    }
+  };
+
   return (
     <div className="space-y-3.5">
       {/* Cabecera del Módulo */}
@@ -293,16 +341,72 @@ export function UsuariosView({
         </div>
 
         {canManage && activeTab === "CUENTAS" && (
-          <button
-            type="button"
-            onClick={handleOpenCreate}
-            className="inline-flex items-center gap-1.5 rounded-md bg-[#E05A10] hover:bg-[#C2410C] text-white px-3 py-1.5 text-xs font-semibold shadow-sm transition-all active:scale-[0.98]"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Nuevo Usuario
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {!isMantenimientoActivo ? (
+              <button
+                type="button"
+                onClick={handleDeshabilitarMantenimiento}
+                disabled={isMaintenancePending}
+                className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 px-3 py-1.5 text-xs font-semibold shadow-xs transition-all disabled:opacity-50"
+              >
+                {isMaintenancePending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <UserX className="h-3.5 w-3.5" />
+                )}
+                Deshabilitar Usuarios
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleRehabilitarMantenimiento}
+                disabled={isMaintenancePending}
+                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-semibold shadow-sm transition-all disabled:opacity-50"
+              >
+                {isMaintenancePending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <UserCheck className="h-3.5 w-3.5" />
+                )}
+                Rehabilitar Usuarios ({suspendidosMantenimientoCount})
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleOpenCreate}
+              className="inline-flex items-center gap-1.5 rounded-md bg-[#E05A10] hover:bg-[#C2410C] text-white px-3 py-1.5 text-xs font-semibold shadow-sm transition-all active:scale-[0.98]"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Nuevo Usuario
+            </button>
+          </div>
         )}
       </div>
+
+      {isMantenimientoActivo && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4 shrink-0 text-amber-600" />
+            <span>
+              <strong>Modo Mantenimiento Activo:</strong>{" "}
+              {suspendidosMantenimientoCount} usuario(s) no-administradores
+              tienen el acceso temporalmente restringido por actualización de la
+              plataforma.
+            </span>
+          </div>
+          {canManage && (
+            <button
+              type="button"
+              onClick={handleRehabilitarMantenimiento}
+              disabled={isMaintenancePending}
+              className="shrink-0 rounded bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              Rehabilitar ahora
+            </button>
+          )}
+        </div>
+      )}
 
       {/* KPI Cards Ejecutivos */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">

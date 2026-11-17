@@ -22,12 +22,15 @@ export function calculateDiasRestantes(fechaVencimiento: string): number {
   return Math.round(diffMs / (1000 * 60 * 60 * 24));
 }
 
-export function calculateEstadoGarantia(fechaVencimiento: string): {
+export function calculateEstadoGarantia(
+  fechaVencimiento: string,
+  umbralPorVencer: number = 15
+): {
   estado: EstadoGarantia;
   diasRestantes: number;
 } {
   const diasRestantes = calculateDiasRestantes(fechaVencimiento);
-  if (diasRestantes > 15) {
+  if (diasRestantes > umbralPorVencer) {
     return { estado: "VIGENTE", diasRestantes };
   } else if (diasRestantes >= 1) {
     return { estado: "PROXIMA_A_VENCER", diasRestantes };

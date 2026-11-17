@@ -60,11 +60,17 @@ export async function loginUserAction(
         .select("*")
         .or(`usuario.ilike.${cleanUsername},correo.ilike.${cleanUsername}`)
         .or(`password_text.eq.${cleanPassword},contrasena.eq.${cleanPassword}`)
-        .eq("estado", "Activo")
         .maybeSingle();
 
       if (!res.error && res.data) {
         const u = res.data;
+        if ((u.estado || "Activo") !== "Activo") {
+          return {
+            success: false,
+            error:
+              "Su cuenta se encuentra temporalmente deshabilitada por mantenimiento del sistema.",
+          };
+        }
         const perfilNombre = (u.perfil_nombre || u.perfil || "ADMINISTRADOR")
           .toString()
           .trim()
@@ -106,12 +112,18 @@ export async function loginUserAction(
         (u.contrasena || "").trim() === cleanPassword ||
         (cleanUsername === "cvargas" &&
           (cleanPassword === "2201" || cleanPassword === "Tensacon2026!"));
-      const matchEstado = (u.estado || "Activo") === "Activo";
 
-      return matchIdentity && matchPass && matchEstado;
+      return matchIdentity && matchPass;
     });
 
     if (foundLocal) {
+      if ((foundLocal.estado || "Activo") !== "Activo") {
+        return {
+          success: false,
+          error:
+            "Su cuenta se encuentra temporalmente deshabilitada por mantenimiento del sistema.",
+        };
+      }
       const perfilNombre = (foundLocal.perfil_nombre || "ADMINISTRADOR")
         .trim()
         .toUpperCase();
@@ -249,9 +261,13 @@ export async function logoutAction(): Promise<void> {
 }
 
 /**
- * Heartbeat silencioso para mantener sesion_activa = true y actualizar ultimo_pulso
+ * Heartbeat silencioso para mantener sesion_activa = true y actualizar ultimo_pulso.
+ * Si un usuario no-administrador fue deshabilitado por mantenimiento, invalida su sesión.
  */
-export async function registrarPulsoSesionAction(): Promise<{ ok: boolean }> {
+export async function registrarPulsoSesionAction(): Promise<{
+  ok: boolean;
+  forceLogout?: boolean;
+}> {
   const session = await getServerUserSession();
   if (!session?.id) {
     return { ok: false };
@@ -262,6 +278,27 @@ export async function registrarPulsoSesionAction(): Promise<{ ok: boolean }> {
   if (isServerSupabaseConfigured()) {
     try {
       const supabase = await createServerSupabaseClient();
+      if (!session.esAdmin) {
+        const { data: userRow } = await supabase
+          .from("usuarios_sistema")
+          .select("estado, suspendido_por_mantenimiento")
+          .eq("id", session.id)
+          .maybeSingle();
+
+        if (
+          userRow &&
+          (userRow.estado !== "Activo" || userRow.suspendido_por_mantenimiento)
+        ) {
+          await supabase
+            .from("usuarios_sistema")
+            .update({ sesion_activa: false, ultimo_pulso: ahora })
+            .eq("id", session.id);
+          const cookieStore = await cookies();
+          cookieStore.delete("tensacon_session");
+          return { ok: false, forceLogout: true };
+        }
+      }
+
       await supabase
         .from("usuarios_sistema")
         .update({
@@ -280,8 +317,24 @@ export async function registrarPulsoSesionAction(): Promise<{ ok: boolean }> {
       (u) => u.id === session.id
     );
     if (localIdx >= 0) {
+      const localUser = dbLocal.usuarios[localIdx];
+      if (
+        !session.esAdmin &&
+        (localUser.estado !== "Activo" || localUser.suspendido_por_mantenimiento)
+      ) {
+        dbLocal.usuarios[localIdx] = {
+          ...localUser,
+          sesion_activa: false,
+          ultimo_pulso: ahora,
+        };
+        writeLocalDb(dbLocal);
+        const cookieStore = await cookies();
+        cookieStore.delete("tensacon_session");
+        return { ok: false, forceLogout: true };
+      }
+
       dbLocal.usuarios[localIdx] = {
-        ...dbLocal.usuarios[localIdx],
+        ...localUser,
         ultimo_pulso: ahora,
         sesion_activa: true,
       };

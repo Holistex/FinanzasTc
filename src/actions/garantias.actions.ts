@@ -477,7 +477,7 @@ export async function getPolizasGarantiasAction(
   let items: GarantiaItemWithRelations[] = rawItems.map((p) => {
     const mandanteInfo = mandantesMap.get(p.mandante_id);
     const companiaInfo = companiasMap.get(p.compania_id);
-    const { estado, diasRestantes } = calculateEstadoGarantia(p.fecha_vencimiento);
+    const { estado, diasRestantes } = calculateEstadoGarantia(p.fecha_vencimiento, 30);
     const docGestiones = gestionesPorDocMap.get(p.id) || [];
     const ultimaGestion = docGestiones[0] || null;
 

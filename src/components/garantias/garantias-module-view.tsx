@@ -648,8 +648,8 @@ export function GarantiasModuleView({
   const statusPreview = useMemo(() => {
     const targetDate = formData.nueva_fecha_vencimiento || formData.fecha_vencimiento;
     if (!targetDate) return null;
-    return calculateEstadoGarantia(targetDate);
-  }, [formData.fecha_vencimiento, formData.nueva_fecha_vencimiento]);
+    return calculateEstadoGarantia(targetDate, isBoleta ? 15 : 30);
+  }, [formData.fecha_vencimiento, formData.nueva_fecha_vencimiento, isBoleta]);
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto select-none">
@@ -719,7 +719,7 @@ export function GarantiasModuleView({
         {/* Vigentes */}
         <div className="bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-200/80 shadow-xs">
           <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 flex items-center justify-between">
-            <span>Vigentes (&gt;15 d)</span>
+            <span>{isBoleta ? "Vigentes (>15 d)" : "VIGENTES (>30 D)"}</span>
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
           </div>
           <div className="mt-2 text-xl font-extrabold text-emerald-900 font-mono">
@@ -731,7 +731,7 @@ export function GarantiasModuleView({
         {/* Próximas a Vencer */}
         <div className="bg-amber-50/80 p-3.5 rounded-xl border border-amber-300 shadow-xs">
           <div className="text-[10px] font-bold uppercase tracking-wider text-amber-800 flex items-center justify-between">
-            <span>Por Vencer (1-15 d)</span>
+            <span>{isBoleta ? "Por Vencer (1-15 d)" : "POR VENCER (1-30 D)"}</span>
             <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
           </div>
           <div className="mt-2 text-xl font-extrabold text-amber-900 font-mono">
@@ -743,7 +743,7 @@ export function GarantiasModuleView({
         {/* Vencidas */}
         <div className="bg-rose-50/80 p-3.5 rounded-xl border border-rose-300 shadow-xs">
           <div className="text-[10px] font-bold uppercase tracking-wider text-rose-800 flex items-center justify-between">
-            <span>Vencidas (≤ 0 d)</span>
+            <span>{isBoleta ? "Vencidas (≤ 0 d)" : "VENCIDAS (<1 D)"}</span>
             <XCircle className="h-3.5 w-3.5 text-rose-600" />
           </div>
           <div className="mt-2 text-xl font-extrabold text-rose-900 font-mono">

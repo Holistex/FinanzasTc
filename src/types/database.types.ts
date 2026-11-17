@@ -558,6 +558,7 @@ export interface UsuarioSistema {
   perfil_id: string;
   perfil_nombre?: string;
   estado: "Activo" | "Inactivo";
+  suspendido_por_mantenimiento?: boolean | null;
   ultima_conexion?: string | null;
   ultimo_pulso?: string | null;
   sesion_activa?: boolean | null;
