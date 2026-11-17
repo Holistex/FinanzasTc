@@ -119,7 +119,10 @@ export async function getBoletasGarantiasAction(
       on_proyecto: b.on_proyecto || null,
       mandante_razon_social: mandanteInfo?.razon_social || "No asignado",
       mandante_rut: mandanteInfo?.rut || "",
-      compania_razon_social: companiaInfo?.razon_social || "No asignada",
+      compania_razon_social:
+        (b as unknown as Record<string, unknown>).banco_emisor
+          ? String((b as unknown as Record<string, unknown>).banco_emisor)
+          : companiaInfo?.razon_social || "No asignada",
       compania_rut: companiaInfo?.rut || "",
       monto_uf: b.monto_uf !== undefined && b.monto_uf !== null ? b.monto_uf : b.monto,
       contrafianza: b.contrafianza || null,
@@ -207,8 +210,12 @@ export async function upsertBoletaGarantiaAction(input: {
     if (!input.fecha_vencimiento) return { success: false, error: "La fecha de vencimiento es obligatoria." };
 
   let resolvedCompaniaId = input.compania_id;
+  let resolvedBancoId: string | null = null;
+  let resolvedBancoEmisor: string | null = null;
+
   if (resolvedCompaniaId.startsWith("banco:")) {
     const bancoId = resolvedCompaniaId.slice("banco:".length);
+    resolvedBancoId = bancoId;
     const localDb = readLocalDb();
     let bancoNombre =
       (localDb.mantenedor_bancos || []).find((b) => b.id === bancoId)?.nombre || "";
@@ -228,6 +235,7 @@ export async function upsertBoletaGarantiaAction(input: {
           bancoRut = bRow.rut ? String(bRow.rut) : bancoRut;
         }
       }
+      resolvedBancoEmisor = bancoNombre || null;
       if (bancoNombre) {
         const { data: existingComp } = await supabase
           .from("mantenedor_companias")
@@ -241,17 +249,21 @@ export async function upsertBoletaGarantiaAction(input: {
             .from("mantenedor_companias")
             .insert({
               razon_social: bancoNombre,
-              rut: bancoRut || "00000000-0",
-              tipo: "BANCO",
+              rut_compania: bancoRut || "00000000-0",
             })
             .select("id")
             .single();
-          if (!compErr && createdComp?.id) {
-            resolvedCompaniaId = String(createdComp.id);
+          if (compErr || !createdComp?.id) {
+            return {
+              success: false,
+              error: `No se pudo asociar el banco emisor (${bancoNombre}): ${compErr?.message || "error desconocido"}`,
+            };
           }
+          resolvedCompaniaId = String(createdComp.id);
         }
       }
     } else if (bancoNombre) {
+      resolvedBancoEmisor = bancoNombre;
       if (!localDb.mantenedor_companias) localDb.mantenedor_companias = [];
       const existingLocal = localDb.mantenedor_companias.find(
         (c) => c.razon_social.toLowerCase() === bancoNombre.toLowerCase()
@@ -271,6 +283,22 @@ export async function upsertBoletaGarantiaAction(input: {
         resolvedCompaniaId = newCompId;
       }
     }
+  } else if (isServerSupabaseConfigured()) {
+    const supabase = await createServerSupabaseClient();
+    const { data: compRow } = await supabase
+      .from("mantenedor_companias")
+      .select("razon_social")
+      .eq("id", resolvedCompaniaId)
+      .maybeSingle();
+    if (compRow?.razon_social) {
+      resolvedBancoEmisor = String(compRow.razon_social);
+      const { data: bMatch } = await supabase
+        .from("mantenedor_bancos")
+        .select("id")
+        .ilike("nombre", resolvedBancoEmisor)
+        .maybeSingle();
+      if (bMatch?.id) resolvedBancoId = String(bMatch.id);
+    }
   }
 
   const payload = {
@@ -279,6 +307,8 @@ export async function upsertBoletaGarantiaAction(input: {
     on_proyecto: input.on_proyecto?.trim() || null,
     mandante_id: input.mandante_id,
     compania_id: resolvedCompaniaId,
+    ...(resolvedBancoId ? { banco_id: resolvedBancoId } : {}),
+    ...(resolvedBancoEmisor ? { banco_emisor: resolvedBancoEmisor } : {}),
     motivo: input.motivo.trim(),
     monto: Number(input.monto),
     monto_uf: input.monto_uf !== undefined && input.monto_uf !== null ? Number(input.monto_uf) : Number(input.monto),
@@ -544,8 +574,12 @@ export async function upsertPolizaGarantiaAction(input: {
     if (!input.fecha_vencimiento) return { success: false, error: "La fecha de vencimiento es obligatoria." };
 
   let resolvedCompaniaId = input.compania_id;
+  let resolvedBancoId: string | null = null;
+  let resolvedBancoEmisor: string | null = null;
+
   if (resolvedCompaniaId.startsWith("banco:")) {
     const bancoId = resolvedCompaniaId.slice("banco:".length);
+    resolvedBancoId = bancoId;
     const localDb = readLocalDb();
     let bancoNombre =
       (localDb.mantenedor_bancos || []).find((b) => b.id === bancoId)?.nombre || "";
@@ -565,6 +599,7 @@ export async function upsertPolizaGarantiaAction(input: {
           bancoRut = bRow.rut ? String(bRow.rut) : bancoRut;
         }
       }
+      resolvedBancoEmisor = bancoNombre || null;
       if (bancoNombre) {
         const { data: existingComp } = await supabase
           .from("mantenedor_companias")
@@ -578,17 +613,21 @@ export async function upsertPolizaGarantiaAction(input: {
             .from("mantenedor_companias")
             .insert({
               razon_social: bancoNombre,
-              rut: bancoRut || "00000000-0",
-              tipo: "BANCO",
+              rut_compania: bancoRut || "00000000-0",
             })
             .select("id")
             .single();
-          if (!compErr && createdComp?.id) {
-            resolvedCompaniaId = String(createdComp.id);
+          if (compErr || !createdComp?.id) {
+            return {
+              success: false,
+              error: `No se pudo asociar el banco emisor (${bancoNombre}): ${compErr?.message || "error desconocido"}`,
+            };
           }
+          resolvedCompaniaId = String(createdComp.id);
         }
       }
     } else if (bancoNombre) {
+      resolvedBancoEmisor = bancoNombre;
       if (!localDb.mantenedor_companias) localDb.mantenedor_companias = [];
       const existingLocal = localDb.mantenedor_companias.find(
         (c) => c.razon_social.toLowerCase() === bancoNombre.toLowerCase()
@@ -608,6 +647,22 @@ export async function upsertPolizaGarantiaAction(input: {
         resolvedCompaniaId = newCompId;
       }
     }
+  } else if (isServerSupabaseConfigured()) {
+    const supabase = await createServerSupabaseClient();
+    const { data: compRow } = await supabase
+      .from("mantenedor_companias")
+      .select("razon_social")
+      .eq("id", resolvedCompaniaId)
+      .maybeSingle();
+    if (compRow?.razon_social) {
+      resolvedBancoEmisor = String(compRow.razon_social);
+      const { data: bMatch } = await supabase
+        .from("mantenedor_bancos")
+        .select("id")
+        .ilike("nombre", resolvedBancoEmisor)
+        .maybeSingle();
+      if (bMatch?.id) resolvedBancoId = String(bMatch.id);
+    }
   }
 
   const payload = {
@@ -616,6 +671,8 @@ export async function upsertPolizaGarantiaAction(input: {
     on_proyecto: input.on_proyecto?.trim() || null,
     mandante_id: input.mandante_id,
     compania_id: resolvedCompaniaId,
+    ...(resolvedBancoId ? { banco_id: resolvedBancoId } : {}),
+    ...(resolvedBancoEmisor ? { banco_emisor: resolvedBancoEmisor } : {}),
     motivo: input.motivo.trim(),
     monto: Number(input.monto),
     monto_uf: input.monto_uf !== undefined && input.monto_uf !== null ? Number(input.monto_uf) : Number(input.monto),

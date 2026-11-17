@@ -1302,7 +1302,6 @@ export function GarantiasModuleView({
                             return (
                               <option key={b.id} value={optVal}>
                                 {b.nombre}
-                                {b.rut ? ` (${formatRutDisplay(b.rut)})` : ""}
                               </option>
                             );
                           })}
