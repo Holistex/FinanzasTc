@@ -127,57 +127,110 @@ export async function getHistoricoPagosComprasAction(params?: {
     try {
       const supabase = await createServerSupabaseClient();
 
-      // 3.1 Consultar pagos_facturas_compras (solo monto_pagado > 0)
-      const { data: supaPagosFac } = await supabase
-        .from("pagos_facturas_compras")
-        .select("*")
-        .gt("monto_pagado", 0)
-        .order("fecha_real_pago", { ascending: false });
+      const [
+        { data: supaFacs },
+        { data: supaPagosFac },
+        { data: supaPagos },
+        { data: supaColabs },
+      ] = await Promise.all([
+        supabase
+          .from("facturas_compras")
+          .select("*")
+          .neq("tipo_doc", 61)
+          .gt("monto_total", 0),
+        supabase
+          .from("pagos_facturas_compras")
+          .select("*")
+          .gt("monto_pago", 0)
+          .order("fecha_pago", { ascending: false }),
+        supabase
+          .from("pagos_compras")
+          .select("*")
+          .gt("monto_pagado", 0)
+          .order("fecha_real_pago", { ascending: false }),
+        supabase
+          .from("mantenedor_colaboradores")
+          .select("id, nombre"),
+      ]);
+
+      const facMap = new Map<string, Record<string, unknown>>();
+      for (const f of supaFacs || []) {
+        facMap.set(String(f.id), f as unknown as Record<string, unknown>);
+      }
+
+      const colabMap = new Map<string, string>();
+      for (const c of supaColabs || []) {
+        if (c.id && c.nombre) colabMap.set(String(c.id), String(c.nombre));
+      }
 
       const facturasIdRegistrados = new Set(rawPagos.map((p) => p.factura_id).filter(Boolean));
 
-      if (supaPagosFac && supaPagosFac.length > 0) {
-        for (const p of supaPagosFac as PagoCompraHistorico[]) {
-          if (
-            Number(p.monto_pagado || 0) > 0 &&
-            !foliosRegistrados.has(p.folio) &&
-            (!p.factura_id || !facturasIdRegistrados.has(p.factura_id))
-          ) {
-            rawPagos.unshift(p);
-            foliosRegistrados.add(p.folio);
-            if (p.factura_id) facturasIdRegistrados.add(p.factura_id);
-          }
+      const normalizarPagoSupa = (p: Record<string, unknown>): PagoCompraHistorico | null => {
+        const montoPagado = Number(p.monto_pago ?? p.monto_pagado ?? 0);
+        if (montoPagado <= 0) return null;
+        const facId = p.factura_id ? String(p.factura_id) : "";
+        const facRef = facId ? facMap.get(facId) : undefined;
+        const folioNum = Number(p.folio || facRef?.folio || 0);
+        const modRaw = String(p.modalidad || p.modalidad_pago || "DIRECTO").toUpperCase();
+        const modalidadNorm = (
+          ["CHEQUE", "FACTORING", "CONFIRMING", "NETEO_NC", "COMPRA_TC", "DIRECTO"].includes(modRaw)
+            ? modRaw
+            : "DIRECTO"
+        ) as ModalidadPagoCompra;
+
+        return {
+          id: String(p.id || `pago-${facId || folioNum}`),
+          factura_id: facId,
+          rut_proveedor: String(p.rut_proveedor || facRef?.rut_proveedor || ""),
+          razon_social: String(p.razon_social || facRef?.razon_social || ""),
+          folio: folioNum,
+          tipo_doc: Number(p.tipo_doc || facRef?.tipo_doc || 33),
+          modalidad_pago: modalidadNorm,
+          monto_pagado: montoPagado,
+          fecha_real_pago: String(
+            p.fecha_pago ||
+              p.fecha_real_pago ||
+              (p.created_at ? String(p.created_at).slice(0, 10) : "") ||
+              ""
+          ),
+          observacion: p.observacion ? String(p.observacion) : null,
+          comprobante_ref: p.comprobante_ref ? String(p.comprobante_ref) : null,
+          usuario_id: p.usuario_id ? String(p.usuario_id) : null,
+          usuario_nombre: p.usuario_nombre ? String(p.usuario_nombre) : null,
+          pagado_por: p.usuario_nombre ? String(p.usuario_nombre) : null,
+          created_at: String(p.created_at || new Date().toISOString()),
+        };
+      };
+
+      // 3.1 Consolidar pagos_facturas_compras
+      for (const rawP of supaPagosFac || []) {
+        const p = normalizarPagoSupa(rawP as Record<string, unknown>);
+        if (
+          p &&
+          !foliosRegistrados.has(p.folio) &&
+          (!p.factura_id || !facturasIdRegistrados.has(p.factura_id))
+        ) {
+          rawPagos.unshift(p);
+          if (p.folio > 0) foliosRegistrados.add(p.folio);
+          if (p.factura_id) facturasIdRegistrados.add(p.factura_id);
         }
       }
 
-      // 3.2 Consultar pagos_compras (solo monto_pagado > 0)
-      const { data: supaPagos } = await supabase
-        .from("pagos_compras")
-        .select("*")
-        .gt("monto_pagado", 0)
-        .order("fecha_real_pago", { ascending: false });
-
-      if (supaPagos && supaPagos.length > 0) {
-        for (const p of supaPagos as PagoCompraHistorico[]) {
-          if (
-            Number(p.monto_pagado || 0) > 0 &&
-            !foliosRegistrados.has(p.folio) &&
-            (!p.factura_id || !facturasIdRegistrados.has(p.factura_id))
-          ) {
-            rawPagos.unshift(p);
-            foliosRegistrados.add(p.folio);
-            if (p.factura_id) facturasIdRegistrados.add(p.factura_id);
-          }
+      // 3.2 Consolidar pagos_compras
+      for (const rawP of supaPagos || []) {
+        const p = normalizarPagoSupa(rawP as Record<string, unknown>);
+        if (
+          p &&
+          !foliosRegistrados.has(p.folio) &&
+          (!p.factura_id || !facturasIdRegistrados.has(p.factura_id))
+        ) {
+          rawPagos.unshift(p);
+          if (p.folio > 0) foliosRegistrados.add(p.folio);
+          if (p.factura_id) facturasIdRegistrados.add(p.factura_id);
         }
       }
 
-      // 3.3 Consultar facturas saldadas con modalidad explícita en Supabase (excluyendo $0 sin gestión)
-      const { data: supaFacs } = await supabase
-        .from("facturas_compras")
-        .select("*")
-        .neq("tipo_doc", 61)
-        .gt("monto_total", 0);
-
+      // 3.3 Respaldo: facturas saldadas o COMPRA_TC en facturas_compras no presentes en pagos_facturas_compras
       if (supaFacs && supaFacs.length > 0) {
         for (const sFac of supaFacs) {
           const folioNum = Number(sFac.folio || 0);
@@ -210,9 +263,12 @@ export async function getHistoricoPagosComprasAction(params?: {
             else if (mods.includes("COMPRA_TC")) mod = "COMPRA_TC";
             else mod = "DIRECTO";
 
-            const pagadoPorVal = (sFac as unknown as Record<string, unknown>).pagado_por
-              ? String((sFac as unknown as Record<string, unknown>).pagado_por)
-              : null;
+            const sFacRec = sFac as unknown as Record<string, unknown>;
+            const pagadoPorVal = sFacRec.pagado_por ? String(sFacRec.pagado_por) : null;
+            const colabNombre = sFacRec.colaborador_id
+              ? colabMap.get(String(sFacRec.colaborador_id))
+              : undefined;
+            const onProyectoVal = sFacRec.on_proyecto ? String(sFacRec.on_proyecto) : "";
 
             rawPagos.push({
               id: `pago-supa-${sFac.id}`,
@@ -224,19 +280,24 @@ export async function getHistoricoPagosComprasAction(params?: {
               modalidad_pago: mod,
               monto_pagado: montoTotalNum,
               fecha_real_pago:
+                (sFacRec.fecha_pago_real ? String(sFacRec.fecha_pago_real).slice(0, 10) : "") ||
                 sFac.fecha_vencimiento_cheque ||
                 (sFac.updated_at
                   ? String(sFac.updated_at).slice(0, 10)
                   : sFac.fecha_vencimiento || sFac.fecha_docto || new Date().toISOString().slice(0, 10)),
               observacion: mods.includes("COMPRA_TC")
-                ? "Compra TC — Rendición de Trabajador"
+                ? colabNombre
+                  ? `Compra TC — Rendición: ${colabNombre}`
+                  : "Compra TC — Rendición de Trabajador"
                 : sFac.condicion_pago === "CONTADO"
                 ? "Fondo por Rendir / Compra al Contado"
                 : sFac.numero_cheque
                 ? `Cheque #${sFac.numero_cheque}`
                 : "Factura saldada en Tesorería",
               comprobante_ref: mods.includes("COMPRA_TC")
-                ? `TC-${folioNum}`
+                ? onProyectoVal
+                  ? `ON ${onProyectoVal}`
+                  : `TC-${folioNum}`
                 : sFac.condicion_pago === "CONTADO"
                 ? `CONTADO-${folioNum}`
                 : sFac.numero_cheque

@@ -947,45 +947,38 @@ export async function cambiarEstadoCompraAction(input: {
 
             const ahoraIso = new Date().toISOString();
             const folioNum = Number(supaFacturaRow.folio || 0);
-            const pagoTcBase = {
-              id: `pago-tc-${input.id}`,
-              factura_id: input.id,
-              rut_proveedor: String(supaFacturaRow.rut_proveedor || ""),
-              razon_social: String(supaFacturaRow.razon_social || ""),
-              folio: folioNum,
-              tipo_doc: Number(supaFacturaRow.tipo_doc || 33),
-              modalidad_pago: "COMPRA_TC",
-              monto_pagado: montoTotalTc,
-              fecha_real_pago: ahoraIso.slice(0, 10),
-              observacion: obsParts.join(" · "),
-              comprobante_ref: `TC-${folioNum}`,
-              created_at: ahoraIso,
-            };
-            const pagoTcConUsuario = {
-              ...pagoTcBase,
-              usuario_id: usuarioId,
-              usuario_nombre: nombreUsuario,
-            };
-
-            let { error: errPagoTc } = await supabase
+            const { data: existePagoTc } = await supabase
               .from("pagos_facturas_compras")
-              .upsert(pagoTcConUsuario, { onConflict: "id" });
+              .select("id")
+              .eq("factura_id", String(input.id))
+              .maybeSingle();
 
-            if (errPagoTc) {
-              const retryBase = await supabase
+            if (!existePagoTc) {
+              const pagoTcInsert = {
+                factura_id: String(input.id),
+                monto_pago: montoTotalTc,
+                fecha_pago: ahoraIso.slice(0, 10),
+                modalidad: "COMPRA_TC",
+                comprobante_ref: input.onProyecto ? `ON ${input.onProyecto}` : `TC-${folioNum}`,
+                observacion: obsParts.join(" · "),
+                usuario_id: usuarioId || null,
+                usuario_nombre: nombreUsuario,
+                rut_proveedor: String(supaFacturaRow.rut_proveedor || ""),
+                folio: folioNum,
+              };
+
+              const { error: errPagoTc } = await supabase
                 .from("pagos_facturas_compras")
-                .upsert(pagoTcBase, { onConflict: "id" });
-              errPagoTc = retryBase.error;
-            }
+                .insert(pagoTcInsert);
 
-            if (errPagoTc) {
-              const { error: errPc } = await supabase
-                .from("pagos_compras")
-                .upsert(pagoTcConUsuario, { onConflict: "id" });
-              if (errPc) {
-                await supabase
+              if (errPagoTc) {
+                console.error("[CompraTC] Error insertando en pagos_facturas_compras:", errPagoTc.message);
+                const { error: errPc } = await supabase
                   .from("pagos_compras")
-                  .upsert(pagoTcBase, { onConflict: "id" });
+                  .insert(pagoTcInsert);
+                if (errPc) {
+                  console.error("[CompraTC] Error insertando en pagos_compras:", errPc.message);
+                }
               }
             }
           }
@@ -1882,6 +1875,18 @@ export async function registrarPagoFacturaCompraAction(
         }
 
         // 4.1 Insertar pago en tabla pagos_facturas_compras o pagos_compras
+        const pagoFacInsert = {
+          factura_id: String(targetFactura.id),
+          monto_pago: montoPago,
+          fecha_pago: fechaPago,
+          modalidad: modalidadPago,
+          comprobante_ref: numeroComprobante?.trim() || `PAGO-${targetFactura.folio}`,
+          observacion: glosaFinal,
+          usuario_id: usuarioId || null,
+          usuario_nombre: nombreUsuario,
+          rut_proveedor: targetFactura.rut_proveedor,
+          folio: targetFactura.folio,
+        };
         const pagoPayloadBase = {
           id: nuevoPago.id,
           factura_id: targetFactura.id,
@@ -1904,9 +1909,10 @@ export async function registrarPagoFacturaCompraAction(
 
         let { error: errPagosFac } = await supabase
           .from("pagos_facturas_compras")
-          .insert(pagoPayloadConUsuario);
+          .insert(pagoFacInsert);
 
         if (errPagosFac) {
+          console.error("[PagoCompra] Error insertando en pagos_facturas_compras:", errPagosFac.message);
           const retryBase = await supabase
             .from("pagos_facturas_compras")
             .insert(pagoPayloadBase);
