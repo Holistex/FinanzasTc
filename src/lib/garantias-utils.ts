@@ -52,9 +52,13 @@ export function computeGarantiasKpis(items: GarantiaItemWithRelations[]): Garant
   };
 
   for (const item of items) {
-    summary.totalMontoUf += item.monto_uf ?? item.monto ?? 0;
-    if (item.moneda === "CLP") summary.totalMontoClp += item.monto;
-    else if (item.moneda === "USD") summary.totalMontoUsd += item.monto;
+    if (item.moneda === "CLP") {
+      summary.totalMontoClp += Number(item.monto || 0);
+    } else if (item.moneda === "USD") {
+      summary.totalMontoUsd += Number(item.monto || 0);
+    } else {
+      summary.totalMontoUf += Number(item.monto_uf ?? item.monto ?? 0);
+    }
 
     if (item.estado === "VIGENTE") summary.vigentesCount++;
     else if (item.estado === "PROXIMA_A_VENCER") summary.proximasVencerCount++;

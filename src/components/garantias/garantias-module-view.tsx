@@ -418,8 +418,11 @@ export function GarantiasModuleView({
       mandante_id: item.mandante_id,
       compania_id: item.compania_id,
       motivo: item.motivo,
-      monto: String(item.monto_uf ?? item.monto),
-      moneda: "UF",
+      monto:
+        item.moneda === "CLP"
+          ? String(item.monto ?? 0)
+          : String(item.monto_uf ?? item.monto ?? 0),
+      moneda: item.moneda === "CLP" ? "CLP" : "UF",
       fecha_emision: item.fecha_emision,
       fecha_vencimiento: item.fecha_vencimiento,
       obra: item.obra || "",
@@ -554,6 +557,7 @@ export function GarantiasModuleView({
         });
 
         // Also update any modified details
+        const selectedMoneda: MonedaGarantia = isBoleta ? formData.moneda : "UF";
         const resUpdate = await onUpsertAction({
           id: editingItem.id,
           nro_folio: formData.nro_folio,
@@ -561,15 +565,15 @@ export function GarantiasModuleView({
           mandante_id: formData.mandante_id,
           compania_id: formData.compania_id,
           motivo: formData.motivo,
-          monto: numericMonto,
-          monto_uf: numericMonto,
-          moneda: "UF",
+          monto: selectedMoneda === "CLP" ? Math.round(numericMonto) : numericMonto,
+          monto_uf: selectedMoneda === "CLP" ? 0 : numericMonto,
+          moneda: selectedMoneda,
           fecha_emision: formData.fecha_emision,
           fecha_vencimiento: formData.nueva_fecha_vencimiento,
           obra: formData.obra || null,
-          proyecto: formData.proyecto || null,
-          contrafianza: formData.contrafianza || null,
-          contrafianza_compania: formData.contrafianza_compania || null,
+          proyecto: null,
+          contrafianza: isBoleta ? null : formData.contrafianza || null,
+          contrafianza_compania: isBoleta ? null : formData.contrafianza_compania || null,
         });
         if (resUpdate && resUpdate.success === false) {
           setFormError(resUpdate.error || "Error al actualizar el documento.");
@@ -589,6 +593,7 @@ export function GarantiasModuleView({
 
     setIsSubmitting(true);
     try {
+      const selectedMoneda: MonedaGarantia = isBoleta ? formData.moneda : "UF";
       const res = await onUpsertAction({
         id: editingItem?.id,
         nro_folio: formData.nro_folio,
@@ -596,15 +601,15 @@ export function GarantiasModuleView({
         mandante_id: formData.mandante_id,
         compania_id: formData.compania_id,
         motivo: formData.motivo,
-        monto: numericMonto,
-        monto_uf: numericMonto,
-        moneda: "UF",
+        monto: selectedMoneda === "CLP" ? Math.round(numericMonto) : numericMonto,
+        monto_uf: selectedMoneda === "CLP" ? 0 : numericMonto,
+        moneda: selectedMoneda,
         fecha_emision: formData.fecha_emision,
         fecha_vencimiento: formData.fecha_vencimiento,
         obra: formData.obra || null,
-        proyecto: formData.proyecto || null,
-        contrafianza: formData.contrafianza || null,
-        contrafianza_compania: formData.contrafianza_compania || null,
+        proyecto: null,
+        contrafianza: isBoleta ? null : formData.contrafianza || null,
+        contrafianza_compania: isBoleta ? null : formData.contrafianza_compania || null,
         contador_renovaciones: editingItem ? editingItem.contador_renovaciones : 0,
       });
       if (res && res.success === false) {
@@ -701,11 +706,13 @@ export function GarantiasModuleView({
           <div className="text-[10px] text-slate-400 mt-0.5">En registro activo</div>
         </div>
 
-        {/* Monto Total UF */}
+        {/* Monto Total UF / CLP */}
         <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
           <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
-            <span>Total Monto UF</span>
-            <span className="text-[10px] font-mono font-bold text-blue-600">UF</span>
+            <span>{isBoleta ? "Total Monto UF / CLP" : "Total Monto UF"}</span>
+            <span className="text-[10px] font-mono font-bold text-blue-600">
+              {isBoleta && kpis.totalMontoClp > 0 ? "UF / CLP" : "UF"}
+            </span>
           </div>
           <div
             className="mt-2 text-lg font-extrabold text-blue-700 font-mono truncate"
@@ -713,7 +720,13 @@ export function GarantiasModuleView({
           >
             UF {kpis.totalMontoUf.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="text-[10px] text-slate-400 mt-0.5">Unidades de Fomento</div>
+          {isBoleta && kpis.totalMontoClp > 0 ? (
+            <div className="text-xs font-mono font-bold text-slate-700 mt-0.5 truncate">
+              $ {Math.round(kpis.totalMontoClp).toLocaleString("es-CL")} CLP
+            </div>
+          ) : (
+            <div className="text-[10px] text-slate-400 mt-0.5">Unidades de Fomento</div>
+          )}
         </div>
 
         {/* Vigentes */}
@@ -896,7 +909,7 @@ export function GarantiasModuleView({
                 <th className="py-3 px-3.5 text-right whitespace-nowrap">MONTO</th>
                 <th className="py-3 px-3.5 text-center whitespace-nowrap">EMISIÓN</th>
                 <th className="py-3 px-3.5 text-center whitespace-nowrap">VENCIMIENTO</th>
-                <th className="py-3 px-3.5">CONTRAFIANZA</th>
+                {!isBoleta && <th className="py-3 px-3.5">CONTRAFIANZA</th>}
                 <th className="py-3 px-3.5 text-center whitespace-nowrap">GESTIONES</th>
                 <th className="py-3 px-3.5 text-center whitespace-nowrap">ESTADO</th>
                 <th className="py-3 px-3.5 text-center whitespace-nowrap">ACCIONES</th>
@@ -905,7 +918,7 @@ export function GarantiasModuleView({
             <tbody className="divide-y divide-slate-100">
               {tabFilteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-12 text-slate-400">
+                  <td colSpan={isBoleta ? 11 : 12} className="text-center py-12 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <FileText className="h-8 w-8 text-slate-300 stroke-1" />
                       <p className="text-xs font-medium">
@@ -996,16 +1009,17 @@ export function GarantiasModuleView({
                         </div>
                       </td>
 
-                      {/* 6. MONTO (única y exclusivamente en UF) */}
+                      {/* 6. MONTO (UF o CLP) */}
                       <td className="py-3 px-3.5 text-right font-mono font-bold text-blue-700 whitespace-nowrap">
-                        UF{" "}
-                        {Number(item.monto_uf ?? item.monto ?? 0).toLocaleString(
-                          "es-CL",
-                          {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          }
-                        )}
+                        {item.moneda === "CLP"
+                          ? `$ ${Math.round(Number(item.monto || 0)).toLocaleString("es-CL")}`
+                          : `UF ${Number(item.monto_uf ?? item.monto ?? 0).toLocaleString(
+                              "es-CL",
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              }
+                            )}`}
                       </td>
 
                       {/* 7. EMISIÓN */}
@@ -1027,21 +1041,23 @@ export function GarantiasModuleView({
                         </span>
                       </td>
 
-                      {/* 9. CONTRAFIANZA */}
-                      <td className="py-3 px-3.5 max-w-[160px]">
-                        {contrafianzaTexto && contrafianzaTexto.trim() ? (
-                          <span
-                            className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px] font-medium truncate max-w-[160px]"
-                            title={contrafianzaTexto}
-                          >
-                            {contrafianzaTexto}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 font-semibold text-[11px] tracking-wider">
-                            NO
-                          </span>
-                        )}
-                      </td>
+                      {/* 9. CONTRAFIANZA (Solo Pólizas) */}
+                      {!isBoleta && (
+                        <td className="py-3 px-3.5 max-w-[160px]">
+                          {contrafianzaTexto && contrafianzaTexto.trim() ? (
+                            <span
+                              className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px] font-medium truncate max-w-[160px]"
+                              title={contrafianzaTexto}
+                            >
+                              {contrafianzaTexto}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-semibold text-[11px] tracking-wider">
+                              NO
+                            </span>
+                          )}
+                        </td>
+                      )}
 
                       {/* 10. GESTIONES */}
                       <td className="py-3 px-3.5 text-center whitespace-nowrap">
@@ -1225,24 +1241,58 @@ export function GarantiasModuleView({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Monto (UF) <span className="text-red-500">*</span>
+                    {isBoleta ? "Monto" : "Monto (UF)"} <span className="text-red-500">*</span>
                   </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2 text-xs font-mono font-bold text-blue-700">
-                      UF
-                    </span>
-                    <input
-                      type="number"
-                      step="any"
-                      required
-                      placeholder="ej. 1250.00"
-                      value={formData.monto}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, monto: e.target.value }))
-                      }
-                      className="w-full pl-10 pr-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10] font-mono font-bold text-blue-800"
-                    />
-                  </div>
+                  {isBoleta ? (
+                    <div className="flex items-stretch rounded-lg border border-slate-200 overflow-hidden focus-within:ring-2 focus-within:ring-[#E05A10]/20 focus-within:border-[#E05A10] bg-white">
+                      <select
+                        aria-label="Moneda del monto"
+                        value={formData.moneda}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            moneda: e.target.value as MonedaGarantia,
+                          }))
+                        }
+                        className="bg-slate-50 border-r border-slate-200 px-2.5 py-2 text-xs font-mono font-bold text-blue-700 focus:outline-none cursor-pointer"
+                      >
+                        <option value="UF">UF</option>
+                        <option value="CLP">CLP</option>
+                      </select>
+                      <input
+                        type="number"
+                        step={formData.moneda === "CLP" ? "1" : "any"}
+                        required
+                        placeholder={
+                          formData.moneda === "CLP"
+                            ? "ej. 45000000"
+                            : "ej. 1250.00"
+                        }
+                        value={formData.monto}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, monto: e.target.value }))
+                        }
+                        className="w-full px-3 py-2 text-xs font-mono font-bold text-blue-800 focus:outline-none bg-white"
+                      />
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-xs font-mono font-bold text-blue-700">
+                        UF
+                      </span>
+                      <input
+                        type="number"
+                        step="any"
+                        required
+                        placeholder="ej. 1250.00"
+                        value={formData.monto}
+                        onChange={(e) =>
+                          setFormData((prev) => ({ ...prev, monto: e.target.value }))
+                        }
+                        className="w-full pl-10 pr-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10] font-mono font-bold text-blue-800"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1564,9 +1614,14 @@ export function GarantiasModuleView({
                 </div>
               )}
 
-              {/* Fila 5: Obra, Proyecto y Contrafianza */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
+              {/* Fila 5: Obra (y Contrafianza solo en Pólizas) */}
+              <div
+                className={cn(
+                  "grid grid-cols-1 gap-4",
+                  !isBoleta ? "md:grid-cols-2" : ""
+                )}
+              >
+                <div className={isBoleta ? "col-span-full" : ""}>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Nombre de Obra
                   </label>
@@ -1581,39 +1636,26 @@ export function GarantiasModuleView({
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Código de Proyecto
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="ej. MOP-VI-2026"
-                    value={formData.proyecto}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, proyecto: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10] font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Contrafianza (Entidad o Pagaré)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="ej. Banco Santander o Pagaré notarial"
-                    value={formData.contrafianza}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        contrafianza: e.target.value,
-                        contrafianza_compania: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10]"
-                  />
-                </div>
+                {!isBoleta && (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Contrafianza (Entidad o Pagaré)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="ej. Banco Santander o Pagaré notarial"
+                      value={formData.contrafianza}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          contrafianza: e.target.value,
+                          contrafianza_compania: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10]"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Botones de Acción */}

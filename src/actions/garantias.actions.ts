@@ -124,7 +124,12 @@ export async function getBoletasGarantiasAction(
           ? String((b as unknown as Record<string, unknown>).banco_emisor)
           : companiaInfo?.razon_social || "No asignada",
       compania_rut: companiaInfo?.rut || "",
-      monto_uf: b.monto_uf !== undefined && b.monto_uf !== null ? b.monto_uf : b.monto,
+      monto_uf:
+        b.moneda === "CLP"
+          ? 0
+          : b.monto_uf !== undefined && b.monto_uf !== null
+          ? b.monto_uf
+          : b.monto,
       contrafianza: b.contrafianza || null,
       contrafianza_compania: b.contrafianza_compania || null,
       contador_renovaciones: b.contador_renovaciones ?? 0,
@@ -301,6 +306,14 @@ export async function upsertBoletaGarantiaAction(input: {
     }
   }
 
+  const isClp = input.moneda === "CLP";
+  const montoNum = isClp ? Math.round(Number(input.monto)) : Number(input.monto);
+  const montoUfNum = isClp
+    ? 0
+    : input.monto_uf !== undefined && input.monto_uf !== null
+    ? Number(input.monto_uf)
+    : montoNum;
+
   const payload = {
     ...(input.id ? { id: input.id } : {}),
     nro_folio: input.nro_folio.trim().toUpperCase(),
@@ -310,15 +323,15 @@ export async function upsertBoletaGarantiaAction(input: {
     ...(resolvedBancoId ? { banco_id: resolvedBancoId } : {}),
     ...(resolvedBancoEmisor ? { banco_emisor: resolvedBancoEmisor } : {}),
     motivo: input.motivo.trim(),
-    monto: Number(input.monto),
-    monto_uf: input.monto_uf !== undefined && input.monto_uf !== null ? Number(input.monto_uf) : Number(input.monto),
-    moneda: input.moneda || "UF",
+    monto: montoNum,
+    monto_uf: montoUfNum,
+    moneda: isClp ? ("CLP" as MonedaGarantia) : ("UF" as MonedaGarantia),
     fecha_emision: input.fecha_emision,
     fecha_vencimiento: input.fecha_vencimiento,
     obra: input.obra?.trim() || null,
-    proyecto: input.proyecto?.trim() || null,
-    contrafianza: input.contrafianza?.trim() || null,
-    contrafianza_compania: input.contrafianza_compania?.trim() || null,
+    proyecto: null,
+    contrafianza: null,
+    contrafianza_compania: null,
     contador_renovaciones: input.contador_renovaciones !== undefined ? Number(input.contador_renovaciones) : 0,
   };
 
@@ -665,6 +678,14 @@ export async function upsertPolizaGarantiaAction(input: {
     }
   }
 
+  const isClp = input.moneda === "CLP";
+  const montoNum = isClp ? Math.round(Number(input.monto)) : Number(input.monto);
+  const montoUfNum = isClp
+    ? 0
+    : input.monto_uf !== undefined && input.monto_uf !== null
+    ? Number(input.monto_uf)
+    : montoNum;
+
   const payload = {
     ...(input.id ? { id: input.id } : {}),
     nro_folio: input.nro_folio.trim().toUpperCase(),
@@ -674,13 +695,13 @@ export async function upsertPolizaGarantiaAction(input: {
     ...(resolvedBancoId ? { banco_id: resolvedBancoId } : {}),
     ...(resolvedBancoEmisor ? { banco_emisor: resolvedBancoEmisor } : {}),
     motivo: input.motivo.trim(),
-    monto: Number(input.monto),
-    monto_uf: input.monto_uf !== undefined && input.monto_uf !== null ? Number(input.monto_uf) : Number(input.monto),
-    moneda: input.moneda || "UF",
+    monto: montoNum,
+    monto_uf: montoUfNum,
+    moneda: isClp ? ("CLP" as MonedaGarantia) : ("UF" as MonedaGarantia),
     fecha_emision: input.fecha_emision,
     fecha_vencimiento: input.fecha_vencimiento,
     obra: input.obra?.trim() || null,
-    proyecto: input.proyecto?.trim() || null,
+    proyecto: null,
     contrafianza: input.contrafianza?.trim() || null,
     contrafianza_compania: input.contrafianza_compania?.trim() || null,
     contador_renovaciones: input.contador_renovaciones !== undefined ? Number(input.contador_renovaciones) : 0,
