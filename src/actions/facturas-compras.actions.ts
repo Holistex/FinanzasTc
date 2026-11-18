@@ -771,6 +771,10 @@ export async function cambiarEstadoCompraAction(input: {
       payload.on_proyecto = null;
       payload.observacion_tc = null;
     } else if (input.estado === "COMPRA_TC") {
+      payload.estado = "PAGADA";
+      payload.modalidad = "COMPRA_TC";
+      payload.modalidad_pago = "COMPRA_TC";
+      payload.condicion_pago = "CONTADO";
       payload.factoring_id = null;
       payload.factoring_proveedor_id = null;
       payload.confirming_id = null;
@@ -782,6 +786,7 @@ export async function cambiarEstadoCompraAction(input: {
       payload.on_proyecto = input.onProyecto || null;
       payload.observacion_tc = input.observacionTc?.trim() || null;
       payload.monto_saldo = 0;
+      (payload as Record<string, unknown>).saldo_pendiente = 0;
       payload.deuda_proveedor = 0;
     }
 
@@ -896,6 +901,7 @@ export async function cambiarEstadoCompraAction(input: {
           delete safePayload.observacion_tc;
           delete safePayload.deuda_proveedor;
           delete safePayload.pagado_por;
+          delete (safePayload as Record<string, unknown>).saldo_pendiente;
           let { error: err2 } = await supabase
             .from("facturas_compras")
             .update(safePayload)
@@ -911,11 +917,77 @@ export async function cambiarEstadoCompraAction(input: {
           }
 
           if (err2 && input.estado === "COMPRA_TC") {
-            // Si la restricción CHECK de estado aún no permite COMPRA_TC en Supabase, asegurar monto_saldo = 0
             await supabase
               .from("facturas_compras")
-              .update({ monto_saldo: 0, updated_at: new Date().toISOString() })
+              .update({
+                estado: "PAGADA",
+                monto_saldo: 0,
+                updated_at: new Date().toISOString(),
+              })
               .eq("id", input.id);
+          }
+        }
+
+        // Registrar pago efectivo en Histórico Pagos (pagos_facturas_compras / pagos_compras) cuando es COMPRA_TC
+        if (input.estado === "COMPRA_TC" && supaFacturaRow) {
+          const montoTotalTc = Number(supaFacturaRow.monto_total || 0);
+          if (montoTotalTc > 0) {
+            const nombreUsuario =
+              auth.session?.nombre || auth.session?.usuario || "Sistema";
+            const usuarioId = auth.session?.id || null;
+            const colab = db.mantenedor_colaboradores.find(
+              (c) => c.id === input.colaboradorId
+            );
+            const colabLabel = colab
+              ? `${colab.nombre} (${colab.rut})`
+              : `ID: ${input.colaboradorId}`;
+            const obsParts = [`Compra TC — Colaborador: ${colabLabel}`];
+            if (input.onProyecto) obsParts.push(`ON ${input.onProyecto}`);
+            if (input.observacionTc?.trim()) obsParts.push(input.observacionTc.trim());
+
+            const ahoraIso = new Date().toISOString();
+            const folioNum = Number(supaFacturaRow.folio || 0);
+            const pagoTcBase = {
+              id: `pago-tc-${input.id}`,
+              factura_id: input.id,
+              rut_proveedor: String(supaFacturaRow.rut_proveedor || ""),
+              razon_social: String(supaFacturaRow.razon_social || ""),
+              folio: folioNum,
+              tipo_doc: Number(supaFacturaRow.tipo_doc || 33),
+              modalidad_pago: "COMPRA_TC",
+              monto_pagado: montoTotalTc,
+              fecha_real_pago: ahoraIso.slice(0, 10),
+              observacion: obsParts.join(" · "),
+              comprobante_ref: `TC-${folioNum}`,
+              created_at: ahoraIso,
+            };
+            const pagoTcConUsuario = {
+              ...pagoTcBase,
+              usuario_id: usuarioId,
+              usuario_nombre: nombreUsuario,
+            };
+
+            let { error: errPagoTc } = await supabase
+              .from("pagos_facturas_compras")
+              .upsert(pagoTcConUsuario, { onConflict: "id" });
+
+            if (errPagoTc) {
+              const retryBase = await supabase
+                .from("pagos_facturas_compras")
+                .upsert(pagoTcBase, { onConflict: "id" });
+              errPagoTc = retryBase.error;
+            }
+
+            if (errPagoTc) {
+              const { error: errPc } = await supabase
+                .from("pagos_compras")
+                .upsert(pagoTcConUsuario, { onConflict: "id" });
+              if (errPc) {
+                await supabase
+                  .from("pagos_compras")
+                  .upsert(pagoTcBase, { onConflict: "id" });
+              }
+            }
           }
         }
       }
@@ -955,7 +1027,7 @@ export async function cambiarEstadoCompraAction(input: {
       db.facturas_compras[idx] = {
         ...db.facturas_compras[idx],
         ...payload,
-        estado: input.estado,
+        estado: input.estado === "COMPRA_TC" ? "PAGADA" : input.estado,
         modalidad_pago: estadoUpper,
         modalidad: estadoUpper,
         factoring_id: factoringIdSeleccionado,
