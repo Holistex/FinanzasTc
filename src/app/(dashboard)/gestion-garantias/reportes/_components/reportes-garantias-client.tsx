@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
@@ -9,7 +8,6 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
-  FileSpreadsheet,
   FileText,
   Filter,
   Landmark,
@@ -337,120 +335,6 @@ export function ReportesGarantiasClient({
         ? "Solo Vencidas"
         : "Todas (Incluye Vencidas)";
 
-  const handleExportExcel = () => {
-    const wb = XLSX.utils.book_new();
-
-    // Pólizas - Cuadro 1: Por Compañía
-    const polEntRows = polizasPorEntidad.map((g) => {
-      const pct =
-        resumenPolizas.totalUf > 0
-          ? (g.totalUf / resumenPolizas.totalUf) * 100
-          : 0;
-      return {
-        "COMPAÑÍA DE SEGURO": g.entidad,
-        "CANT. DOCS": g.cantDocs,
-        "TOTAL MONTO (UF)": Number(g.totalUf.toFixed(2)),
-        "% PARTICIPACIÓN": `${pct.toFixed(1)}%`,
-      };
-    });
-    polEntRows.push({
-      "COMPAÑÍA DE SEGURO": "TOTAL GENERAL",
-      "CANT. DOCS": resumenPolizas.totalDocs,
-      "TOTAL MONTO (UF)": Number(resumenPolizas.totalUf.toFixed(2)),
-      "% PARTICIPACIÓN": "100.0%",
-    });
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(polEntRows),
-      "Pólizas por Compañía"
-    );
-
-    // Pólizas - Cuadro 2: Por Motivo
-    const polMotRows: Array<Record<string, string | number>> = [];
-    for (const m of polizasPorMotivo) {
-      for (const e of m.entidades) {
-        polMotRows.push({
-          "CÍA. SEGURO": e.entidad,
-          "MOTIVO / TIPO PÓLIZA": m.motivoLabel,
-          "CANT. DOCS": e.cantDocs,
-          "MONTO UF": Number(e.totalUf.toFixed(2)),
-        });
-      }
-      polMotRows.push({
-        "CÍA. SEGURO": "",
-        "MOTIVO / TIPO PÓLIZA": `Total ${m.motivoLabel}`,
-        "CANT. DOCS": m.cantDocs,
-        "MONTO UF": Number(m.totalUf.toFixed(2)),
-      });
-    }
-    polMotRows.push({
-      "CÍA. SEGURO": "",
-      "MOTIVO / TIPO PÓLIZA": "TOTAL GENERAL",
-      "CANT. DOCS": resumenPolizas.totalDocs,
-      "MONTO UF": Number(resumenPolizas.totalUf.toFixed(2)),
-    });
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(polMotRows),
-      "Pólizas por Motivo"
-    );
-
-    // Boletas - Cuadro 1: Por Banco
-    const bolEntRows = boletasPorEntidad.map((g) => ({
-      "BANCO EMISOR": g.entidad,
-      "CANT. DOCS": g.cantDocs,
-      "TOTAL UF": Number(g.totalUf.toFixed(2)),
-      "TOTAL CLP ($)": Math.round(g.totalClp),
-    }));
-    bolEntRows.push({
-      "BANCO EMISOR": "TOTAL GENERAL",
-      "CANT. DOCS": resumenBoletas.totalDocs,
-      "TOTAL UF": Number(resumenBoletas.totalUf.toFixed(2)),
-      "TOTAL CLP ($)": Math.round(resumenBoletas.totalClp),
-    });
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(bolEntRows),
-      "Boletas por Banco"
-    );
-
-    // Boletas - Cuadro 2: Por Motivo
-    const bolMotRows: Array<Record<string, string | number>> = [];
-    for (const m of boletasPorMotivo) {
-      for (const e of m.entidades) {
-        bolMotRows.push({
-          "BANCO EMISOR": e.entidad,
-          "MOTIVO / TIPO BOLETA": m.motivoLabel,
-          "CANT. DOCS": e.cantDocs,
-          "MONTO UF": Number(e.totalUf.toFixed(2)),
-          "MONTO CLP ($)": Math.round(e.totalClp),
-        });
-      }
-      bolMotRows.push({
-        "BANCO EMISOR": "",
-        "MOTIVO / TIPO BOLETA": `Total ${m.motivoLabel}`,
-        "CANT. DOCS": m.cantDocs,
-        "MONTO UF": Number(m.totalUf.toFixed(2)),
-        "MONTO CLP ($)": Math.round(m.totalClp),
-      });
-    }
-    bolMotRows.push({
-      "BANCO EMISOR": "",
-      "MOTIVO / TIPO BOLETA": "TOTAL GENERAL",
-      "CANT. DOCS": resumenBoletas.totalDocs,
-      "MONTO UF": Number(resumenBoletas.totalUf.toFixed(2)),
-      "MONTO CLP ($)": Math.round(resumenBoletas.totalClp),
-    });
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(bolMotRows),
-      "Boletas por Motivo"
-    );
-
-    const fecha = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `Reporte_Garantias_Tensacon_${fecha}.xlsx`);
-  };
-
   const handleExportPDF = () => {
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const fechaEmision = new Date().toLocaleDateString("es-CL");
@@ -672,15 +556,6 @@ export function ReportesGarantiasClient({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            onClick={handleExportExcel}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-colors cursor-pointer"
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>Exportar Excel</span>
-          </button>
-
           <button
             type="button"
             onClick={handleExportPDF}
