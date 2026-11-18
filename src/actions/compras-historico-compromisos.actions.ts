@@ -76,13 +76,15 @@ export async function getHistoricoPagosComprasAction(params?: {
       else if (fc.estado === "COMPRA_TC") mod = "COMPRA_TC";
 
       const colab = fc.colaborador_id ? colabMap.get(fc.colaborador_id) : null;
-      const obsCompraTc = [
-        colab ? `Compra TC — Colaborador: ${colab.nombre} (${colab.rut})` : "Compra TC — Rendición de Trabajador",
-        fc.on_proyecto ? `ON ${fc.on_proyecto}` : null,
-        fc.observacion_tc || null,
-      ]
-        .filter(Boolean)
-        .join(" · ");
+      const colabNombreLocal = colab?.nombre || "";
+      const comentarioLocal = fc.observacion_tc?.trim() || "";
+      const obsCompraTc = comentarioLocal
+        ? colabNombreLocal
+          ? `${colabNombreLocal} — ${comentarioLocal}`
+          : comentarioLocal
+        : colabNombreLocal
+          ? `Rendición: ${colabNombreLocal}`
+          : "Pago Contado / TC";
 
       rawPagos.push({
         id: `pago-derivado-${fc.id}`,
@@ -104,7 +106,9 @@ export async function getHistoricoPagosComprasAction(params?: {
           ? "Saldada 100% por Neteo Nota de Crédito"
           : "Factura saldada en Tesorería",
         comprobante_ref: fc.estado === "COMPRA_TC"
-          ? `TC-${fc.folio}`
+          ? fc.on_proyecto
+            ? `ON ${fc.on_proyecto}`
+            : null
           : fc.condicion_pago === "CONTADO"
           ? `CONTADO-${fc.folio}`
           : fc.numero_cheque
@@ -178,6 +182,42 @@ export async function getHistoricoPagosComprasAction(params?: {
             : "DIRECTO"
         ) as ModalidadPagoCompra;
 
+        const rawObs = p.observacion ? String(p.observacion) : "";
+        const uuidMatch = rawObs.match(/ID:\s*([0-9a-fA-F-]{8,})/);
+        const colabIdFromFac = facRef?.colaborador_id ? String(facRef.colaborador_id) : "";
+        const colabNombre =
+          (colabIdFromFac ? colabMap.get(colabIdFromFac) : undefined) ||
+          (uuidMatch ? colabMap.get(uuidMatch[1]) : undefined) ||
+          "";
+
+        let obsLimpia: string | null = rawObs || null;
+        if (modalidadNorm === "COMPRA_TC") {
+          const comentarioLimpio = rawObs
+            .replace(/Compra TC\s*[—-]\s*/gi, "")
+            .replace(/Colaborador:\s*ID:\s*[0-9a-fA-F-]+/gi, "")
+            .replace(/ID:\s*[0-9a-fA-F-]+/gi, "")
+            .replace(/^[\s·—-]+|[\s·—-]+$/g, "")
+            .trim();
+
+          if (comentarioLimpio && comentarioLimpio !== "Rendición de Trabajador") {
+            obsLimpia =
+              colabNombre && !comentarioLimpio.includes(colabNombre)
+                ? `${colabNombre} — ${comentarioLimpio}`
+                : comentarioLimpio;
+          } else {
+            obsLimpia = colabNombre ? `Rendición: ${colabNombre}` : "Pago Contado / TC";
+          }
+        }
+
+        const rawRef = p.comprobante_ref ? String(p.comprobante_ref).trim() : "";
+        const esRefTcRedundante =
+          rawRef.startsWith("TC-") || rawRef.toUpperCase() === "RENDICIÓN TC / CONTADO";
+        const refLimpia = esRefTcRedundante
+          ? facRef?.on_proyecto
+            ? `ON ${facRef.on_proyecto}`
+            : null
+          : rawRef || null;
+
         return {
           id: String(p.id || `pago-${facId || folioNum}`),
           factura_id: facId,
@@ -193,8 +233,8 @@ export async function getHistoricoPagosComprasAction(params?: {
               (p.created_at ? String(p.created_at).slice(0, 10) : "") ||
               ""
           ),
-          observacion: p.observacion ? String(p.observacion) : null,
-          comprobante_ref: p.comprobante_ref ? String(p.comprobante_ref) : null,
+          observacion: obsLimpia,
+          comprobante_ref: refLimpia,
           usuario_id: p.usuario_id ? String(p.usuario_id) : null,
           usuario_nombre: p.usuario_nombre ? String(p.usuario_nombre) : null,
           pagado_por: p.usuario_nombre ? String(p.usuario_nombre) : null,
@@ -286,9 +326,13 @@ export async function getHistoricoPagosComprasAction(params?: {
                   ? String(sFac.updated_at).slice(0, 10)
                   : sFac.fecha_vencimiento || sFac.fecha_docto || new Date().toISOString().slice(0, 10)),
               observacion: mods.includes("COMPRA_TC")
-                ? colabNombre
-                  ? `Compra TC — Rendición: ${colabNombre}`
-                  : "Compra TC — Rendición de Trabajador"
+                ? sFacRec.observacion_tc && String(sFacRec.observacion_tc).trim()
+                  ? colabNombre
+                    ? `${colabNombre} — ${String(sFacRec.observacion_tc).trim()}`
+                    : String(sFacRec.observacion_tc).trim()
+                  : colabNombre
+                    ? `Rendición: ${colabNombre}`
+                    : "Pago Contado / TC"
                 : sFac.condicion_pago === "CONTADO"
                 ? "Fondo por Rendir / Compra al Contado"
                 : sFac.numero_cheque
@@ -297,7 +341,7 @@ export async function getHistoricoPagosComprasAction(params?: {
               comprobante_ref: mods.includes("COMPRA_TC")
                 ? onProyectoVal
                   ? `ON ${onProyectoVal}`
-                  : `TC-${folioNum}`
+                  : null
                 : sFac.condicion_pago === "CONTADO"
                 ? `CONTADO-${folioNum}`
                 : sFac.numero_cheque

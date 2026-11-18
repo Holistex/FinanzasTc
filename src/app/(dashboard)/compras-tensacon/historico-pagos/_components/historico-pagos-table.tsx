@@ -497,13 +497,19 @@ export function HistoricoPagosTable({
                       {/* OBSERVACIÓN / REF */}
                       <td className="px-4 py-3">
                         <div className="text-xs text-slate-700 font-medium">
-                          {pago.observacion || "Sin observación"}
+                          {(pago.observacion || "Sin observación")
+                            .replace(/Colaborador:\s*ID:\s*[0-9a-fA-F-]+/gi, "")
+                            .replace(/ID:\s*[0-9a-fA-F-]+/gi, "")
+                            .replace(/^[\s·—-]+|[\s·—-]+$/g, "")
+                            .trim() || "Pago Contado / TC"}
                         </div>
-                        {pago.comprobante_ref && (
-                          <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                            Ref: {pago.comprobante_ref}
-                          </div>
-                        )}
+                        {pago.comprobante_ref &&
+                          !pago.comprobante_ref.startsWith("TC-") &&
+                          pago.comprobante_ref.toUpperCase() !== "RENDICIÓN TC / CONTADO" && (
+                            <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                              Ref: {pago.comprobante_ref}
+                            </div>
+                          )}
                       </td>
                     </tr>
                   );

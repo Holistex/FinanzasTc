@@ -935,15 +935,37 @@ export async function cambiarEstadoCompraAction(input: {
             const nombreUsuario =
               auth.session?.nombre || auth.session?.usuario || "Sistema";
             const usuarioId = auth.session?.id || null;
-            const colab = db.mantenedor_colaboradores.find(
-              (c) => c.id === input.colaboradorId
-            );
-            const colabLabel = colab
-              ? `${colab.nombre} (${colab.rut})`
-              : `ID: ${input.colaboradorId}`;
-            const obsParts = [`Compra TC — Colaborador: ${colabLabel}`];
-            if (input.onProyecto) obsParts.push(`ON ${input.onProyecto}`);
-            if (input.observacionTc?.trim()) obsParts.push(input.observacionTc.trim());
+            let colabNombre =
+              db.mantenedor_colaboradores.find((c) => c.id === input.colaboradorId)?.nombre || "";
+
+            if (!colabNombre && input.colaboradorId) {
+              const { data: colabRow } = await supabase
+                .from("mantenedor_colaboradores")
+                .select("nombre")
+                .eq("id", input.colaboradorId)
+                .maybeSingle();
+              if (colabRow?.nombre) {
+                colabNombre = String(colabRow.nombre);
+              } else {
+                const { data: colabAlt } = await supabase
+                  .from("colaboradores")
+                  .select("nombre_completo, nombre")
+                  .eq("id", input.colaboradorId)
+                  .maybeSingle();
+                if (colabAlt) {
+                  colabNombre = String(colabAlt.nombre_completo || colabAlt.nombre || "");
+                }
+              }
+            }
+
+            const comentarioUsuario = input.observacionTc?.trim() || "";
+            const obsLimpia = comentarioUsuario
+              ? colabNombre
+                ? `${colabNombre} — ${comentarioUsuario}`
+                : comentarioUsuario
+              : colabNombre
+                ? `Rendición: ${colabNombre}`
+                : "Pago Contado / TC";
 
             const ahoraIso = new Date().toISOString();
             const folioNum = Number(supaFacturaRow.folio || 0);
@@ -959,8 +981,8 @@ export async function cambiarEstadoCompraAction(input: {
                 monto_pago: montoTotalTc,
                 fecha_pago: ahoraIso.slice(0, 10),
                 modalidad: "COMPRA_TC",
-                comprobante_ref: input.onProyecto ? `ON ${input.onProyecto}` : `TC-${folioNum}`,
-                observacion: obsParts.join(" · "),
+                comprobante_ref: input.onProyecto ? `ON ${input.onProyecto}` : null,
+                observacion: obsLimpia,
                 usuario_id: usuarioId || null,
                 usuario_nombre: nombreUsuario,
                 rut_proveedor: String(supaFacturaRow.rut_proveedor || ""),
@@ -1036,10 +1058,15 @@ export async function cambiarEstadoCompraAction(input: {
           auth.session?.nombre || auth.session?.usuario || "Sistema";
         const usuarioId = auth.session?.id || null;
         const colab = db.mantenedor_colaboradores.find((c) => c.id === input.colaboradorId);
-        const colabLabel = colab ? `${colab.nombre} (${colab.rut})` : `ID: ${input.colaboradorId}`;
-        const obsParts = [`Compra TC — Colaborador: ${colabLabel}`];
-        if (input.onProyecto) obsParts.push(`ON ${input.onProyecto}`);
-        if (input.observacionTc?.trim()) obsParts.push(input.observacionTc.trim());
+        const colabNombreLocal = colab?.nombre || "";
+        const comentarioLocal = input.observacionTc?.trim() || "";
+        const obsLimpiaLocal = comentarioLocal
+          ? colabNombreLocal
+            ? `${colabNombreLocal} — ${comentarioLocal}`
+            : comentarioLocal
+          : colabNombreLocal
+            ? `Rendición: ${colabNombreLocal}`
+            : "Pago Contado / TC";
 
         (db.facturas_compras[idx] as unknown as Record<string, unknown>).pagado_por = nombreUsuario;
 
@@ -1053,8 +1080,8 @@ export async function cambiarEstadoCompraAction(input: {
           monto_pagado: fac.monto_total,
           fecha_real_pago: new Date().toISOString().slice(0, 10),
           modalidad_pago: "COMPRA_TC",
-          comprobante_ref: `TC-${fac.folio}`,
-          observacion: obsParts.join(" · "),
+          comprobante_ref: input.onProyecto ? `ON ${input.onProyecto}` : null,
+          observacion: obsLimpiaLocal,
           usuario_id: usuarioId,
           usuario_nombre: nombreUsuario,
           pagado_por: nombreUsuario,
