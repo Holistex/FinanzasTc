@@ -29,6 +29,8 @@ const KEY_ALIASES: Record<string, string[]> = {
   boletas_garantias: ["garantias_boletas", "gestion_garantias"],
   garantias_polizas: ["polizas_garantias", "gestion_garantias"],
   polizas_garantias: ["garantias_polizas", "gestion_garantias"],
+  garantias_reportes: ["reportes_garantias", "gestion_garantias"],
+  reportes_garantias: ["garantias_reportes", "gestion_garantias"],
   mantenedor_factoring: ["mantenedores"],
   mantenedores: ["mantenedor_factoring"],
   mantenedor_mandantes_companias: ["mandantes_companias"],

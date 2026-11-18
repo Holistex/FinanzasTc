@@ -397,6 +397,12 @@ export const MODULOS_SISTEMA_FINANZAS: ModuloSistema[] = [
     categoria: "GESTIÓN GARANTÍAS",
     descripcion: "Pólizas aseguradoras, cauciones y seguimiento de vigencia.",
   },
+  {
+    id: "garantias_reportes",
+    nombre: "Reportes de Garantías",
+    categoria: "GESTIÓN GARANTÍAS",
+    descripcion: "Reportes consolidados por entidad emisora, motivo y totales comprometidos.",
+  },
 
   // E. REG. LITIGIOS
   {
@@ -465,6 +471,7 @@ export const LEGACY_MODULE_FALLBACKS: Record<string, string[]> = {
   historico_pagos_compras: ["historico_pagos"],
   garantias_boletas: ["boletas_garantias", "gestion_garantias"],
   garantias_polizas: ["polizas_garantias", "gestion_garantias"],
+  garantias_reportes: ["reportes_garantias", "gestion_garantias"],
   mantenedor_factoring: ["mantenedores"],
   mantenedor_mandantes_companias: ["mandantes_companias"],
   maestro_usuarios: ["configuracion_adm"],

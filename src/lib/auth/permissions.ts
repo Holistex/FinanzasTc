@@ -51,6 +51,8 @@ const MODULE_KEY_ALIASES: Record<string, string[]> = {
   boletas_garantias: ["garantias_boletas", "gestion_garantias"],
   garantias_polizas: ["polizas_garantias", "gestion_garantias"],
   polizas_garantias: ["garantias_polizas", "gestion_garantias"],
+  garantias_reportes: ["reportes_garantias", "gestion_garantias"],
+  reportes_garantias: ["garantias_reportes", "gestion_garantias"],
   mantenedor_factoring: ["mantenedores"],
   mantenedores: ["mantenedor_factoring"],
   mantenedor_mandantes_companias: ["mandantes_companias"],
@@ -171,6 +173,7 @@ export const ROUTE_MODULE_MAP: Array<{
   // Gestión Garantías
   { prefix: "/gestion-garantias/boletas-garantias", moduleKey: "garantias_boletas" },
   { prefix: "/gestion-garantias/polizas-garantias", moduleKey: "garantias_polizas" },
+  { prefix: "/gestion-garantias/reportes", moduleKey: "garantias_reportes" },
   { prefix: "/gestion-garantias", moduleKey: "garantias_boletas" },
 
   // Reg. Litigios

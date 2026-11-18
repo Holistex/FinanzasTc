@@ -35,6 +35,7 @@ import {
   Menu,
   X,
   Megaphone,
+  BarChart3,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -197,10 +198,12 @@ export function DashboardSidebar({
 
   const canBoletasGarantia = hasPermission(userSession, "garantias_boletas");
   const canPolizasGarantia = hasPermission(userSession, "garantias_polizas");
+  const canReportesGarantias = hasPermission(userSession, "garantias_reportes");
   const canGarantiasGroup =
     hasPermission(userSession, "gestion_garantias") ||
     canBoletasGarantia ||
-    canPolizasGarantia;
+    canPolizasGarantia ||
+    canReportesGarantias;
 
   const canMultas = hasPermission(userSession, "litigios_multas");
   const canComparendos = hasPermission(userSession, "litigios_comparendos");
@@ -293,6 +296,9 @@ export function DashboardSidebar({
   );
   const isPolizasGarantiasActive = pathname.startsWith(
     "/gestion-garantias/polizas-garantias"
+  );
+  const isReportesGarantiasActive = pathname.startsWith(
+    "/gestion-garantias/reportes"
   );
 
   const isLitigiosSectionActive = pathname.startsWith("/reg-litigios");
@@ -660,6 +666,17 @@ export function DashboardSidebar({
                       isActive={isPolizasGarantiasActive}
                       icon={Shield}
                       label="Pólizas de Garantía"
+                      queryClient={queryClient}
+                      router={router}
+                    />
+                  )}
+
+                  {canReportesGarantias && (
+                    <SidebarSubLink
+                      href="/gestion-garantias/reportes"
+                      isActive={isReportesGarantiasActive}
+                      icon={BarChart3}
+                      label="Reportes"
                       queryClient={queryClient}
                       router={router}
                     />
