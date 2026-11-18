@@ -954,6 +954,11 @@ export function GarantiasModuleView({
                     item.ultima_gestion_estado ||
                     item.gestiones?.[0]?.estado_gestion ||
                     null;
+                  const proximoSeguimiento =
+                    item.ultima_gestion_seguimiento ||
+                    item.gestiones?.find((g) => Boolean(g.fecha_proximo_seguimiento))
+                      ?.fecha_proximo_seguimiento ||
+                    null;
 
                   return (
                     <tr
@@ -1067,37 +1072,46 @@ export function GarantiasModuleView({
 
                       {/* 10. GESTIONES */}
                       <td className="py-3 px-3.5 text-center whitespace-nowrap">
-                        {gestionesCount === 0 ? (
-                          <button
-                            type="button"
-                            onClick={() => openGestionesModal(item)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-orange-50/70 hover:bg-orange-100/80 text-[#E05A10] border border-orange-200/80 transition-colors cursor-pointer shadow-2xs"
-                            title="Registrar primera gestión en bitácora"
-                          >
-                            <Plus className="h-3 w-3" />
-                            <span>Gestión</span>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => openGestionesModal(item)}
-                            className={cn(
-                              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors cursor-pointer max-w-[210px] shadow-2xs",
-                              getGestionBadgeStyle(ultimaGestionEstado || "")
-                            )}
-                            title={`${ultimaGestionEstado || "Ver Gestiones"} (${gestionesCount} ${
-                              gestionesCount === 1 ? "nota registrada" : "notas registradas"
-                            })`}
-                          >
-                            <ClipboardList className="h-3 w-3 shrink-0" />
-                            <span className="truncate">
-                              {ultimaGestionEstado || "Ver Gestiones"}
+                        <div className="inline-flex flex-col items-center gap-1">
+                          {gestionesCount === 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => openGestionesModal(item)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-orange-50/70 hover:bg-orange-100/80 text-[#E05A10] border border-orange-200/80 transition-colors cursor-pointer shadow-2xs"
+                              title="Registrar primera gestión en bitácora"
+                            >
+                              <Plus className="h-3 w-3" />
+                              <span>Gestión</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => openGestionesModal(item)}
+                              className={cn(
+                                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors cursor-pointer max-w-[210px] shadow-2xs",
+                                getGestionBadgeStyle(ultimaGestionEstado || "")
+                              )}
+                              title={`${ultimaGestionEstado || "Ver Gestiones"} (${gestionesCount} ${
+                                gestionesCount === 1 ? "nota registrada" : "notas registradas"
+                              })`}
+                            >
+                              <ClipboardList className="h-3 w-3 shrink-0" />
+                              <span className="truncate">
+                                {ultimaGestionEstado || "Ver Gestiones"}
+                              </span>
+                              <span className="font-mono text-[10px] px-1.5 py-0.2 rounded-full bg-white/80 border border-current/20 shrink-0">
+                                ({gestionesCount})
+                              </span>
+                            </button>
+                          )}
+
+                          {proximoSeguimiento && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+                              <Calendar className="w-3 h-3 text-[#E05A10]" />
+                              Seg: {formatDateCL(proximoSeguimiento)}
                             </span>
-                            <span className="font-mono text-[10px] px-1.5 py-0.2 rounded-full bg-white/80 border border-current/20 shrink-0">
-                              ({gestionesCount})
-                            </span>
-                          </button>
-                        )}
+                          )}
+                        </div>
                       </td>
 
                       {/* 11. ESTADO */}

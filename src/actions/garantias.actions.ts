@@ -154,7 +154,10 @@ export async function getBoletasGarantiasAction(
       gestiones_count: docGestiones.length,
       ultima_gestion_estado: ultimaGestion?.estado_gestion || null,
       ultima_gestion_fecha: ultimaGestion?.created_at || null,
-      ultima_gestion_seguimiento: ultimaGestion?.fecha_proximo_seguimiento || null,
+      ultima_gestion_seguimiento:
+        ultimaGestion?.fecha_proximo_seguimiento ||
+        docGestiones.find((g) => Boolean(g.fecha_proximo_seguimiento))?.fecha_proximo_seguimiento ||
+        null,
       gestiones: docGestiones,
     };
   });
@@ -542,7 +545,10 @@ export async function getPolizasGarantiasAction(
       gestiones_count: docGestiones.length,
       ultima_gestion_estado: ultimaGestion?.estado_gestion || null,
       ultima_gestion_fecha: ultimaGestion?.created_at || null,
-      ultima_gestion_seguimiento: ultimaGestion?.fecha_proximo_seguimiento || null,
+      ultima_gestion_seguimiento:
+        ultimaGestion?.fecha_proximo_seguimiento ||
+        docGestiones.find((g) => Boolean(g.fecha_proximo_seguimiento))?.fecha_proximo_seguimiento ||
+        null,
       gestiones: docGestiones,
     };
   });
