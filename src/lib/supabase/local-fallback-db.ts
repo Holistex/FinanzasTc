@@ -30,9 +30,11 @@ import {
   MantenedorTipoPago,
   CartolaBancaria,
   CartolaLinea,
+  EventoPlataforma,
 } from "@/types/database.types";
 
 export interface LocalDatabaseSchema {
+  eventos_plataforma?: EventoPlataforma[];
   mantenedor_on?: MantenedorON[];
   mantenedor_bancos?: MantenedorBanco[];
   mantenedor_colaboradores?: MantenedorColaborador[];

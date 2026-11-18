@@ -34,6 +34,7 @@ import {
   Banknote,
   Menu,
   X,
+  Megaphone,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -222,6 +223,7 @@ export function DashboardSidebar({
   const canMandantesCompanias = esAdmin && hasPermission(userSession, "mantenedor_mandantes_companias");
   const canUsuarios = esAdmin && hasPermission(userSession, "maestro_usuarios");
   const canPerfiles = esAdmin && hasPermission(userSession, "adm_perfiles");
+  const canEventos = esAdmin;
   const canConfiguracionGroup =
     esAdmin &&
     (canMantenedorOn ||
@@ -229,7 +231,8 @@ export function DashboardSidebar({
       canMantenedoresFactoring ||
       canMandantesCompanias ||
       canUsuarios ||
-      canPerfiles);
+      canPerfiles ||
+      canEventos);
 
   const handleLogout = async () => {
     try {
@@ -313,6 +316,7 @@ export function DashboardSidebar({
   const isUsuariosActive = pathname.startsWith("/configuracion/maestro-usuarios");
   const isPerfilesActive = pathname.startsWith("/configuracion/adm-perfiles");
   const isColaboradoresActive = pathname.startsWith("/configuracion/colaboradores");
+  const isEventosActive = pathname.startsWith("/configuracion/eventos");
 
   const sidebarContent = (
     <>
@@ -858,6 +862,17 @@ export function DashboardSidebar({
                       isActive={isColaboradoresActive}
                       icon={UserCheck}
                       label="Mantenedor Colaboradores"
+                      queryClient={queryClient}
+                      router={router}
+                    />
+                  )}
+
+                  {canEventos && (
+                    <SidebarSubLink
+                      href="/configuracion/eventos"
+                      isActive={isEventosActive}
+                      icon={Megaphone}
+                      label="Eventos"
                       queryClient={queryClient}
                       router={router}
                     />

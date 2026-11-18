@@ -923,3 +923,22 @@ export interface CartolaLinea {
   created_at: string;
 }
 
+export type TipoEventoPlataforma =
+  | "ADVERTENCIA"
+  | "INFORME_VERDE"
+  | "INFORMATIVO"
+  | "CRITICO";
+
+export interface EventoPlataforma {
+  id: string;
+  tipo_evento: TipoEventoPlataforma;
+  titulo?: string | null;
+  mensaje: string;
+  fecha_desde: string;
+  fecha_hasta: string;
+  perfil_destino: string;
+  activo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
