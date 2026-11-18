@@ -276,7 +276,7 @@ export function GarantiasModuleView({
 
     setIsSavingGestion(true);
     try {
-      const saved = await registrarGestionGarantiaAction({
+      const res = await registrarGestionGarantiaAction({
         tipo_documento: tipo,
         documento_id: selectedDocForGestiones.id,
         estado_gestion: gestionForm.estado_gestion,
@@ -284,6 +284,12 @@ export function GarantiasModuleView({
         fecha_proximo_seguimiento: gestionForm.fecha_proximo_seguimiento || null,
       });
 
+      if (!res.success || !res.data) {
+        setGestionFormError(res.error || "Error al guardar la gestión en bitácora.");
+        return;
+      }
+
+      const saved = res.data;
       const updatedList = [saved, ...gestionesList];
       setGestionesList(updatedList);
       setGestionForm((prev) => ({
@@ -1735,18 +1741,19 @@ export function GarantiasModuleView({
                 </div>
                 <div>
                   <span className="text-[10px] uppercase tracking-wider text-slate-400 block">
-                    Monto en UF
+                    MONTO DOCUMENTO
                   </span>
                   <span className="font-mono font-bold text-orange-400">
-                    UF{" "}
-                    {Number(
-                      selectedDocForGestiones.monto_uf ??
-                        selectedDocForGestiones.monto ??
-                        0
-                    ).toLocaleString("es-CL", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+                    {selectedDocForGestiones.moneda === "CLP"
+                      ? `$ ${Math.round(Number(selectedDocForGestiones.monto || 0)).toLocaleString("es-CL")}`
+                      : `UF ${Number(
+                          selectedDocForGestiones.monto_uf ||
+                            selectedDocForGestiones.monto ||
+                            0
+                        ).toLocaleString("es-CL", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}`}
                   </span>
                 </div>
                 <div>

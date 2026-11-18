@@ -52,9 +52,10 @@ export async function getBoletasGarantiasAction(
         supabase.from("mantenedor_mandantes").select("id, razon_social, rut_mandante"),
         supabase.from("mantenedor_companias").select("id, razon_social, rut_compania"),
         supabase
-          .from("gestiones_garantias")
+          .from("historial_renovaciones_garantias")
           .select("*")
-          .eq("tipo_documento", "BOLETA")
+          .or("tipo_garantia.eq.BOLETA,tipo_documento.eq.BOLETA")
+          .not("estado_gestion", "is", null)
           .order("created_at", { ascending: false }),
       ]);
 
@@ -68,7 +69,22 @@ export async function getBoletasGarantiasAction(
         );
       }
       if (!gestionesRes.error && gestionesRes.data) {
-        rawGestiones = (gestionesRes.data as GestionGarantia[]) || [];
+        rawGestiones = (gestionesRes.data as Array<Record<string, unknown>>)
+          .filter((r) => Boolean(r.estado_gestion))
+          .map((r) => ({
+            id: String(r.id),
+            tipo_documento: (String(r.tipo_documento || r.tipo_garantia || "BOLETA") as "BOLETA" | "POLIZA"),
+            documento_id: String(r.documento_id || r.garantia_id || ""),
+            estado_gestion: String(r.estado_gestion || ""),
+            observacion: String(r.observacion || r.descripcion || ""),
+            fecha_proximo_seguimiento: r.proximo_seguimiento
+              ? String(r.proximo_seguimiento)
+              : r.fecha_proximo_seguimiento
+              ? String(r.fecha_proximo_seguimiento)
+              : null,
+            usuario_nombre: r.usuario_nombre ? String(r.usuario_nombre) : null,
+            created_at: String(r.created_at || new Date().toISOString()),
+          }));
       }
     } catch {
       // Fallback a local DB
@@ -432,9 +448,10 @@ export async function getPolizasGarantiasAction(
         supabase.from("mantenedor_mandantes").select("id, razon_social, rut_mandante"),
         supabase.from("mantenedor_companias").select("id, razon_social, rut_compania"),
         supabase
-          .from("gestiones_garantias")
+          .from("historial_renovaciones_garantias")
           .select("*")
-          .eq("tipo_documento", "POLIZA")
+          .or("tipo_garantia.eq.POLIZA,tipo_documento.eq.POLIZA")
+          .not("estado_gestion", "is", null)
           .order("created_at", { ascending: false }),
       ]);
 
@@ -448,7 +465,22 @@ export async function getPolizasGarantiasAction(
         );
       }
       if (!gestionesRes.error && gestionesRes.data) {
-        rawGestiones = (gestionesRes.data as GestionGarantia[]) || [];
+        rawGestiones = (gestionesRes.data as Array<Record<string, unknown>>)
+          .filter((r) => Boolean(r.estado_gestion))
+          .map((r) => ({
+            id: String(r.id),
+            tipo_documento: (String(r.tipo_documento || r.tipo_garantia || "BOLETA") as "BOLETA" | "POLIZA"),
+            documento_id: String(r.documento_id || r.garantia_id || ""),
+            estado_gestion: String(r.estado_gestion || ""),
+            observacion: String(r.observacion || r.descripcion || ""),
+            fecha_proximo_seguimiento: r.proximo_seguimiento
+              ? String(r.proximo_seguimiento)
+              : r.fecha_proximo_seguimiento
+              ? String(r.fecha_proximo_seguimiento)
+              : null,
+            usuario_nombre: r.usuario_nombre ? String(r.usuario_nombre) : null,
+            created_at: String(r.created_at || new Date().toISOString()),
+          }));
       }
     } catch {
       // Fallback a local DB
@@ -958,14 +990,29 @@ export async function getGestionesGarantiaAction(
     try {
       const supabase = await createServerSupabaseClient();
       const { data, error } = await supabase
-        .from("gestiones_garantias")
+        .from("historial_renovaciones_garantias")
         .select("*")
-        .eq("tipo_documento", tipoDocumento)
-        .eq("documento_id", documentoId)
+        .or(`garantia_id.eq.${documentoId},documento_id.eq.${documentoId}`)
+        .not("estado_gestion", "is", null)
         .order("created_at", { ascending: false });
 
       if (!error && data) {
-        remoteGestiones = data as GestionGarantia[];
+        remoteGestiones = (data as Array<Record<string, unknown>>)
+          .filter((r) => Boolean(r.estado_gestion))
+          .map((r) => ({
+            id: String(r.id),
+            tipo_documento: (String(r.tipo_documento || r.tipo_garantia || tipoDocumento) as "BOLETA" | "POLIZA"),
+            documento_id: String(r.documento_id || r.garantia_id || documentoId),
+            estado_gestion: String(r.estado_gestion || ""),
+            observacion: String(r.observacion || r.descripcion || ""),
+            fecha_proximo_seguimiento: r.proximo_seguimiento
+              ? String(r.proximo_seguimiento)
+              : r.fecha_proximo_seguimiento
+              ? String(r.fecha_proximo_seguimiento)
+              : null,
+            usuario_nombre: r.usuario_nombre ? String(r.usuario_nombre) : null,
+            created_at: String(r.created_at || new Date().toISOString()),
+          }));
       }
     } catch {
       // Fallback a local DB
@@ -995,85 +1042,120 @@ export async function registrarGestionGarantiaAction(input: {
   estado_gestion: string;
   observacion: string;
   fecha_proximo_seguimiento?: string | null;
-}): Promise<GestionGarantia> {
-  const targetKey =
-    input.tipo_documento === "BOLETA" ? "garantias_boletas" : "garantias_polizas";
-  const auth = await assertCanManage([targetKey]);
-  if (!auth.authorized) {
-    throw new Error(auth.error || "Acceso denegado.");
-  }
-
-  if (!input.documento_id) {
-    throw new Error("ID del documento es obligatorio.");
-  }
-  if (!input.estado_gestion || !input.estado_gestion.trim()) {
-    throw new Error("Debe seleccionar el estado de la gestión.");
-  }
-  if (!input.observacion || !input.observacion.trim()) {
-    throw new Error("La descripción / detalle de la gestión es obligatoria.");
-  }
-
-  // Capturar el usuario activo en segundo plano
-  const session = await getServerUserSession();
-  const usuarioNombre = session?.nombre || session?.usuario || "Usuario Sistema";
-  const nowIso = new Date().toISOString();
-
-  const path =
-    input.tipo_documento === "BOLETA"
-      ? "/gestion-garantias/boletas-garantias"
-      : "/gestion-garantias/polizas-garantias";
-
-  const payload = {
-    tipo_documento: input.tipo_documento,
-    documento_id: input.documento_id,
-    estado_gestion: input.estado_gestion.trim(),
-    observacion: input.observacion.trim(),
-    fecha_proximo_seguimiento: input.fecha_proximo_seguimiento?.trim() || null,
-    usuario_nombre: usuarioNombre,
-  };
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const { data, error } = await supabase
-      .from("gestiones_garantias")
-      .insert(payload)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Error al registrar gestión de garantía en Supabase: ${error.message}`);
+}): Promise<{ success: boolean; data?: GestionGarantia; error?: string }> {
+  try {
+    const targetKey =
+      input.tipo_documento === "BOLETA" ? "garantias_boletas" : "garantias_polizas";
+    const auth = await assertCanManage([targetKey]);
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
 
-    if (data) {
-      // Sincronizar también en local DB para mantener consistencia inmediata
-      try {
-        const db = readLocalDb();
-        if (!db.gestiones_garantias) db.gestiones_garantias = [];
-        db.gestiones_garantias.unshift(data as GestionGarantia);
-        writeLocalDb(db);
-      } catch {
-        // ignore
+    if (!input.documento_id) {
+      return { success: false, error: "ID del documento es obligatorio." };
+    }
+    if (!input.estado_gestion || !input.estado_gestion.trim()) {
+      return { success: false, error: "Debe seleccionar el estado de la gestión." };
+    }
+    if (!input.observacion || !input.observacion.trim()) {
+      return { success: false, error: "La descripción / detalle de la gestión es obligatoria." };
+    }
+
+    // Capturar el usuario activo en segundo plano
+    const session = await getServerUserSession();
+    const usuarioNombre = session?.nombre || session?.usuario || "Usuario Sistema";
+    const nowIso = new Date().toISOString();
+
+    const supaPayload = {
+      garantia_id: String(input.documento_id),
+      documento_id: String(input.documento_id),
+      tipo_garantia: input.tipo_documento,
+      tipo_documento: input.tipo_documento,
+      estado_gestion: input.estado_gestion.trim(),
+      proximo_seguimiento: input.fecha_proximo_seguimiento?.trim() || null,
+      descripcion: input.observacion.trim(),
+      observacion: input.observacion.trim(),
+      usuario_nombre: usuarioNombre,
+    };
+
+    const localEntryBase = {
+      tipo_documento: input.tipo_documento,
+      documento_id: String(input.documento_id),
+      estado_gestion: input.estado_gestion.trim(),
+      observacion: input.observacion.trim(),
+      fecha_proximo_seguimiento: input.fecha_proximo_seguimiento?.trim() || null,
+      usuario_nombre: usuarioNombre,
+    };
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { data, error } = await supabase
+        .from("historial_renovaciones_garantias")
+        .insert(supaPayload)
+        .select()
+        .single();
+
+      if (error) {
+        return {
+          success: false,
+          error: `Error al registrar gestión de garantía en Supabase: ${error.message}`,
+        };
       }
-      revalidatePath(path);
-      return data as GestionGarantia;
+
+      if (data) {
+        const mapped: GestionGarantia = {
+          id: String(data.id),
+          tipo_documento: input.tipo_documento,
+          documento_id: String(data.documento_id || data.garantia_id || input.documento_id),
+          estado_gestion: String(data.estado_gestion || localEntryBase.estado_gestion),
+          observacion: String(data.observacion || data.descripcion || localEntryBase.observacion),
+          fecha_proximo_seguimiento: data.proximo_seguimiento
+            ? String(data.proximo_seguimiento)
+            : localEntryBase.fecha_proximo_seguimiento,
+          usuario_nombre: data.usuario_nombre ? String(data.usuario_nombre) : usuarioNombre,
+          created_at: String(data.created_at || nowIso),
+        };
+
+        try {
+          const db = readLocalDb();
+          if (!db.gestiones_garantias) db.gestiones_garantias = [];
+          db.gestiones_garantias.unshift(mapped);
+          writeLocalDb(db);
+        } catch {
+          // ignore
+        }
+
+        revalidatePath("/gestion-garantias/boletas-garantias");
+        revalidatePath("/gestion-garantias/polizas-garantias");
+        return { success: true, data: mapped };
+      }
     }
+
+    const db = readLocalDb();
+    if (!db.gestiones_garantias) {
+      db.gestiones_garantias = [];
+    }
+
+    const newEntry: GestionGarantia = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `gg-${Date.now()}`,
+      ...localEntryBase,
+      created_at: nowIso,
+    };
+
+    db.gestiones_garantias.unshift(newEntry);
+    writeLocalDb(db);
+
+    revalidatePath("/gestion-garantias/boletas-garantias");
+    revalidatePath("/gestion-garantias/polizas-garantias");
+    return { success: true, data: newEntry };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : "Error inesperado al registrar gestión de garantía.",
+    };
   }
-
-  const db = readLocalDb();
-  if (!db.gestiones_garantias) {
-    db.gestiones_garantias = [];
-  }
-
-  const newEntry: GestionGarantia = {
-    id: crypto.randomUUID ? crypto.randomUUID() : `gg-${Date.now()}`,
-    ...payload,
-    created_at: nowIso,
-  };
-
-  db.gestiones_garantias.unshift(newEntry);
-  writeLocalDb(db);
-
-  revalidatePath(path);
-  return newEntry;
 }
 
