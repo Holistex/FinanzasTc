@@ -135,111 +135,147 @@ export async function getColaboradoresAction(
  */
 export async function upsertColaboradorAction(
   input: UpsertColaboradorInput
-): Promise<MantenedorColaborador> {
-  const auth = await assertIsAdmin();
-  if (!auth.authorized) {
-    throw new Error(auth.error || "Acceso denegado.");
-  }
-
-  const cleanRut = cleanColaboradorRut(input.rut);
-  if (!cleanRut || cleanRut.length < 2 || !/^[0-9]+[0-9K]$/.test(cleanRut)) {
-    throw new Error("El RUT ingresado no es válido (ej. 12.345.678-9).");
-  }
-
-  const cleanNombre = (input.nombre || "").trim().toUpperCase();
-  if (!cleanNombre) {
-    throw new Error("El Nombre completo del colaborador es obligatorio.");
-  }
-
-  const cleanCargo = (input.cargo || "").trim().toUpperCase();
-  if (!cleanCargo) {
-    throw new Error("El Cargo del colaborador es obligatorio.");
-  }
-
-  const now = new Date().toISOString();
-  const db = readLocalDb();
-  if (!db.mantenedor_colaboradores) {
-    db.mantenedor_colaboradores = [];
-  }
-
-  // Buscar coincidencia por RUT limpio o por ID
-  const existingIdx = db.mantenedor_colaboradores.findIndex(
-    (c) =>
-      cleanColaboradorRut(c.rut) === cleanRut ||
-      (Boolean(input.id) && c.id === input.id)
-  );
-
-  let record: MantenedorColaborador;
-  const targetActivo = input.activo !== undefined ? input.activo : true;
-
-  if (existingIdx !== -1) {
-    record = {
-      ...db.mantenedor_colaboradores[existingIdx],
-      rut: cleanRut,
-      nombre: cleanNombre,
-      cargo: cleanCargo,
-      activo: targetActivo,
-      updated_at: now,
-    };
-    db.mantenedor_colaboradores[existingIdx] = record;
-  } else {
-    record = {
-      id: input.id || crypto.randomUUID(),
-      rut: cleanRut,
-      nombre: cleanNombre,
-      cargo: cleanCargo,
-      activo: targetActivo,
-      created_at: now,
-      updated_at: now,
-    };
-    db.mantenedor_colaboradores.push(record);
-  }
-
-  // Garantizar que no queden duplicados residuales con el mismo RUT limpio en local
-  const seenRuts = new Set<string>();
-  db.mantenedor_colaboradores = db.mantenedor_colaboradores.filter((item) => {
-    const r = cleanColaboradorRut(item.rut);
-    if (seenRuts.has(r)) return false;
-    seenRuts.add(r);
-    return true;
-  });
-
-  writeLocalDb(db);
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const { data, error } = await supabase
-      .from("mantenedor_colaboradores")
-      .upsert(
-        {
-          rut: cleanRut,
-          nombre: cleanNombre,
-          cargo: cleanCargo,
-          activo: targetActivo,
-          updated_at: now,
-        },
-        { onConflict: "rut" }
-      )
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Error al guardar colaborador en Supabase: ${error.message}`);
+): Promise<{ success: boolean; data?: MantenedorColaborador; error?: string }> {
+  try {
+    const auth = await assertIsAdmin();
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
 
-    if (data) {
+    const cleanRut = cleanColaboradorRut(input.rut);
+    if (!cleanRut || cleanRut.length < 2 || !/^[0-9]+[0-9K]$/.test(cleanRut)) {
+      return {
+        success: false,
+        error: "El RUT ingresado no es válido (ej. 12.345.678-9).",
+      };
+    }
+
+    const cleanNombre = (input.nombre || "").trim().toUpperCase();
+    if (!cleanNombre) {
+      return {
+        success: false,
+        error: "El Nombre completo del colaborador es obligatorio.",
+      };
+    }
+
+    const cleanCargo = (input.cargo || "").trim().toUpperCase();
+    if (!cleanCargo) {
+      return {
+        success: false,
+        error: "El Cargo del colaborador es obligatorio.",
+      };
+    }
+
+    const now = new Date().toISOString();
+    const db = readLocalDb();
+    if (!db.mantenedor_colaboradores) {
+      db.mantenedor_colaboradores = [];
+    }
+
+    // Buscar coincidencia por RUT limpio o por ID
+    const existingIdx = db.mantenedor_colaboradores.findIndex(
+      (c) =>
+        cleanColaboradorRut(c.rut) === cleanRut ||
+        (Boolean(input.id) && c.id === input.id)
+    );
+
+    let record: MantenedorColaborador;
+    const targetActivo = input.activo !== undefined ? input.activo : true;
+
+    if (existingIdx !== -1) {
       record = {
-        ...data,
-        rut: cleanColaboradorRut(data.rut),
-        nombre: (data.nombre || "").trim().toUpperCase(),
-        cargo: (data.cargo || "").trim(),
-        activo: data.activo !== false,
-      } as MantenedorColaborador;
+        ...db.mantenedor_colaboradores[existingIdx],
+        rut: cleanRut,
+        nombre: cleanNombre,
+        cargo: cleanCargo,
+        activo: targetActivo,
+        updated_at: now,
+      };
+      db.mantenedor_colaboradores[existingIdx] = record;
+    } else {
+      record = {
+        id: input.id || crypto.randomUUID(),
+        rut: cleanRut,
+        nombre: cleanNombre,
+        cargo: cleanCargo,
+        activo: targetActivo,
+        created_at: now,
+        updated_at: now,
+      };
+      db.mantenedor_colaboradores.push(record);
     }
-  }
 
-  revalidatePath("/configuracion/colaboradores");
-  return record;
+    // Garantizar que no queden duplicados residuales con el mismo RUT limpio en local
+    const seenRuts = new Set<string>();
+    db.mantenedor_colaboradores = db.mantenedor_colaboradores.filter((item) => {
+      const r = cleanColaboradorRut(item.rut);
+      if (seenRuts.has(r)) return false;
+      seenRuts.add(r);
+      return true;
+    });
+
+    writeLocalDb(db);
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { data: existingByRut } = await supabase
+        .from("mantenedor_colaboradores")
+        .select("id")
+        .eq("rut", cleanRut)
+        .maybeSingle();
+
+      const targetId = existingByRut?.id || input.id || null;
+      const supaPayload = {
+        rut: cleanRut,
+        nombre: cleanNombre,
+        cargo: cleanCargo,
+        activo: targetActivo,
+        updated_at: now,
+      };
+
+      const { data, error } = targetId
+        ? await supabase
+            .from("mantenedor_colaboradores")
+            .update(supaPayload)
+            .eq("id", targetId)
+            .select()
+            .single()
+        : await supabase
+            .from("mantenedor_colaboradores")
+            .insert(supaPayload)
+            .select()
+            .single();
+
+      if (error) {
+        return {
+          success: false,
+          error: `Error al guardar colaborador en Supabase: ${error.message}`,
+        };
+      }
+
+      if (data) {
+        record = {
+          ...data,
+          rut: cleanColaboradorRut(data.rut),
+          nombre: (data.nombre || "").trim().toUpperCase(),
+          cargo: (data.cargo || "").trim(),
+          activo: data.activo !== false,
+        } as MantenedorColaborador;
+      }
+    }
+
+    revalidatePath("/configuracion/colaboradores");
+    revalidatePath("/compras-tensacon/facturas-compras");
+    return { success: true, data: record };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : "Error inesperado al guardar colaborador.",
+    };
+  }
 }
 
 /**
@@ -249,41 +285,55 @@ export async function toggleColaboradorStatusAction(
   id: string,
   rut: string,
   activo: boolean
-): Promise<boolean> {
-  const auth = await assertIsAdmin();
-  if (!auth.authorized) {
-    throw new Error(auth.error || "Acceso denegado.");
-  }
-
-  const cleanRut = cleanColaboradorRut(rut);
-  const now = new Date().toISOString();
-  const db = readLocalDb();
-
-  if (db.mantenedor_colaboradores) {
-    const item = db.mantenedor_colaboradores.find(
-      (c) => c.id === id || cleanColaboradorRut(c.rut) === cleanRut
-    );
-    if (item) {
-      item.activo = activo;
-      item.updated_at = now;
-      writeLocalDb(db);
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auth = await assertIsAdmin();
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
-  }
 
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const { error } = await supabase
-      .from("mantenedor_colaboradores")
-      .update({ activo, updated_at: now })
-      .or(`id.eq.${id},rut.eq.${cleanRut}`);
+    const cleanRut = cleanColaboradorRut(rut);
+    const now = new Date().toISOString();
+    const db = readLocalDb();
 
-    if (error) {
-      throw new Error(`Error al actualizar estado de colaborador en Supabase: ${error.message}`);
+    if (db.mantenedor_colaboradores) {
+      const item = db.mantenedor_colaboradores.find(
+        (c) => c.id === id || cleanColaboradorRut(c.rut) === cleanRut
+      );
+      if (item) {
+        item.activo = activo;
+        item.updated_at = now;
+        writeLocalDb(db);
+      }
     }
-  }
 
-  revalidatePath("/configuracion/colaboradores");
-  return true;
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { error } = await supabase
+        .from("mantenedor_colaboradores")
+        .update({ activo, updated_at: now })
+        .or(`id.eq.${id},rut.eq.${cleanRut}`);
+
+      if (error) {
+        return {
+          success: false,
+          error: `Error al actualizar estado de colaborador en Supabase: ${error.message}`,
+        };
+      }
+    }
+
+    revalidatePath("/configuracion/colaboradores");
+    revalidatePath("/compras-tensacon/facturas-compras");
+    return { success: true };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : "Error inesperado al actualizar estado.",
+    };
+  }
 }
 
 /**

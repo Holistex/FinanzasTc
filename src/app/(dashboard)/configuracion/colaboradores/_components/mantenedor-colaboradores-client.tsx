@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   TablePagination,
   GLOBAL_PAGE_SIZE,
@@ -48,6 +49,7 @@ export function MantenedorColaboradoresClient({
   isAdmin,
   canManage = false,
 }: MantenedorColaboradoresClientProps) {
+  const router = useRouter();
   const [activeMainTab, setActiveMainTab] = useState<"COLABORADORES" | "TIPOS_PAGO">("COLABORADORES");
   const [data, setData] = useState<MantenedorColaborador[]>(initialData);
   const [searchTerm, setSearchTerm] = useState("");
@@ -125,7 +127,16 @@ export function MantenedorColaboradoresClient({
     );
 
     try {
-      await toggleColaboradorStatusAction(item.id, item.rut, newStatus);
+      const res = await toggleColaboradorStatusAction(item.id, item.rut, newStatus);
+      if (!res.success) {
+        setData((prev) =>
+          prev.map((c) =>
+            c.id === item.id || c.rut === item.rut
+              ? { ...c, activo: currentStatus }
+              : c
+          )
+        );
+      }
     } catch {
       // Revertir en caso de error
       setData((prev) =>
@@ -160,13 +171,20 @@ export function MantenedorColaboradoresClient({
 
     setIsSubmittingForm(true);
     try {
-      const saved = await upsertColaboradorAction({
+      const res = await upsertColaboradorAction({
         id: editingItem?.id,
         rut: cleanRut,
         nombre: formNombre.trim().toUpperCase(),
         cargo: formCargo.trim().toUpperCase(),
         activo: formActivo,
       });
+
+      if (!res.success || !res.data) {
+        setFormError(res.error || "Error al guardar el colaborador.");
+        return;
+      }
+
+      const saved = res.data;
 
       setData((prev) => {
         const idx = prev.findIndex(
@@ -185,6 +203,7 @@ export function MantenedorColaboradoresClient({
       });
 
       setIsFormModalOpen(false);
+      router.refresh();
     } catch (err: any) {
       setFormError(err?.message || "Error al guardar el colaborador.");
     } finally {
