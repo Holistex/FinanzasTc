@@ -103,6 +103,8 @@ export function MultasModuleView({
   const [formData, setFormData] = useState({
     procedencia: "",
     entidad: "",
+    rut_trabajador: "",
+    nombre_trabajador: "",
     nro_multa: "",
     fecha_publicacion: new Date().toISOString().slice(0, 10),
     montoRaw: "",
@@ -157,12 +159,17 @@ export function MultasModuleView({
         }
       }
 
-      // 3. Search query (incluye procedencia, entidad, nro_multa, resolucion, observaciones)
+      // 3. Search query (incluye procedencia, entidad, trabajador, rut, nro_multa, resolucion, observaciones)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
+        const qClean = q.replace(/[.\-\s]/g, "");
+        const rutClean = (item.rut_trabajador || "").toLowerCase().replace(/[.\-\s]/g, "");
         const match =
           item.procedencia.toLowerCase().includes(q) ||
           (item.entidad || "").toLowerCase().includes(q) ||
+          (item.nombre_trabajador || "").toLowerCase().includes(q) ||
+          (item.rut_trabajador || "").toLowerCase().includes(q) ||
+          (qClean.length > 0 && rutClean.includes(qClean)) ||
           item.nro_multa.toLowerCase().includes(q) ||
           (item.nro_resolucion || "").toLowerCase().includes(q) ||
           (item.observaciones || "").toLowerCase().includes(q);
@@ -188,6 +195,8 @@ export function MultasModuleView({
     setFormData({
       procedencia: "",
       entidad: "Dirección del Trabajo",
+      rut_trabajador: "",
+      nombre_trabajador: "",
       nro_multa: "",
       fecha_publicacion: new Date().toISOString().slice(0, 10),
       montoRaw: "",
@@ -206,6 +215,8 @@ export function MultasModuleView({
     setFormData({
       procedencia: item.procedencia,
       entidad: item.entidad || "Dirección del Trabajo",
+      rut_trabajador: item.rut_trabajador || "",
+      nombre_trabajador: item.nombre_trabajador || "",
       nro_multa: item.nro_multa,
       fecha_publicacion: item.fecha_publicacion,
       montoRaw: item.monto_sancion ? Number(item.monto_sancion).toLocaleString("es-CL") : "",
@@ -255,6 +266,8 @@ export function MultasModuleView({
         id: editingItem?.id,
         procedencia: formData.procedencia.trim(),
         entidad: formData.entidad.trim(),
+        rut_trabajador: formData.rut_trabajador.trim() || null,
+        nombre_trabajador: formData.nombre_trabajador.trim() || null,
         nro_multa: formData.nro_multa.trim(),
         fecha_publicacion: formData.fecha_publicacion,
         monto_sancion: monto,
@@ -430,7 +443,7 @@ export function MultasModuleView({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar por N° Multa, Procedencia, Entidad, Resolución u Observaciones..."
+              placeholder="Buscar por N° Multa, Trabajador, RUT, Procedencia, Entidad o Resolución..."
               className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10] bg-white text-slate-900 placeholder-slate-400"
             />
           </div>
@@ -477,6 +490,7 @@ export function MultasModuleView({
               <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
                 <th className="py-3 px-3.5 whitespace-nowrap">PROCEDENCIA</th>
                 <th className="py-3 px-3.5 whitespace-nowrap">ENTIDAD</th>
+                <th className="py-3 px-3.5 whitespace-nowrap">TRABAJADOR</th>
                 <th className="py-3 px-3.5 whitespace-nowrap">N° MULTA</th>
                 <th className="py-3 px-3.5 whitespace-nowrap">PUBLICADO EL</th>
                 <th className="py-3 px-3.5 text-right whitespace-nowrap">MONTO SANCIÓN</th>
@@ -528,6 +542,24 @@ export function MultasModuleView({
                         >
                           {item.entidad || "Dirección del Trabajo"}
                         </span>
+                      </td>
+
+                      {/* 2.5 TRABAJADOR */}
+                      <td className="py-3 px-3.5 whitespace-nowrap">
+                        {item.nombre_trabajador || item.rut_trabajador ? (
+                          <div>
+                            <div className="font-bold text-slate-900 truncate max-w-[180px]">
+                              {item.nombre_trabajador || "Sin nombre"}
+                            </div>
+                            {item.rut_trabajador && (
+                              <div className="text-xs font-mono text-slate-500">
+                                {item.rut_trabajador}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
                       </td>
 
                       {/* 3. N° MULTA */}
@@ -706,6 +738,43 @@ export function MultasModuleView({
                     <option value="Municipalidad de San Bernardo" />
                     <option value="Superintendencia de Seguridad Social (SUSESO)" />
                   </datalist>
+                </div>
+
+                {/* Trabajador Asociado (Opcional) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      RUT Trabajador (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.rut_trabajador}
+                      onChange={(e) => {
+                        const clean = e.target.value.replace(/[^0-9kK]/g, "").toUpperCase().slice(0, 9);
+                        const formatted =
+                          clean.length <= 1
+                            ? clean
+                            : `${clean.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, ".")}-${clean.slice(-1)}`;
+                        setFormData({ ...formData, rut_trabajador: formatted });
+                      }}
+                      placeholder="Ej. 12.345.678-9"
+                      className="w-full px-3 py-1.5 text-xs rounded-md bg-white border border-slate-300 text-slate-900 placeholder-slate-400 font-mono focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Nombre Trabajador (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.nombre_trabajador}
+                      onChange={(e) =>
+                        setFormData({ ...formData, nombre_trabajador: e.target.value })
+                      }
+                      placeholder="Ej. Juan Pérez González"
+                      className="w-full px-3 py-1.5 text-xs rounded-md bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10]"
+                    />
+                  </div>
                 </div>
 
                 {/* N° Multa */}

@@ -114,6 +114,7 @@ export function JuiciosModuleView({
   // Form Fields para Causa
   const [formData, setFormData] = useState({
     rit_ruc: "",
+    rut_trabajador: "",
     nombre_trabajador: "",
     materia: "",
     cuantiaRaw: "", // CLP formateado
@@ -195,9 +196,13 @@ export function JuiciosModuleView({
       // 3. Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
+        const qClean = q.replace(/[.\-\s]/g, "");
+        const rutClean = (item.rut_trabajador || "").toLowerCase().replace(/[.\-\s]/g, "");
         const match =
           item.rit_ruc.toLowerCase().includes(q) ||
           item.nombre_trabajador.toLowerCase().includes(q) ||
+          (item.rut_trabajador || "").toLowerCase().includes(q) ||
+          (qClean.length > 0 && rutClean.includes(qClean)) ||
           item.materia.toLowerCase().includes(q) ||
           (item.observaciones || "").toLowerCase().includes(q) ||
           (item.ultima_audiencia?.resultado_dictamen || "").toLowerCase().includes(q) ||
@@ -226,6 +231,7 @@ export function JuiciosModuleView({
     setEditingItem(null);
     setFormData({
       rit_ruc: "",
+      rut_trabajador: "",
       nombre_trabajador: "",
       materia: "",
       cuantiaRaw: "",
@@ -244,6 +250,7 @@ export function JuiciosModuleView({
     const monto = item.cuantia_clp !== undefined ? item.cuantia_clp : item.cuantia;
     setFormData({
       rit_ruc: item.rit_ruc,
+      rut_trabajador: item.rut_trabajador || "",
       nombre_trabajador: item.nombre_trabajador,
       materia: item.materia,
       cuantiaRaw: monto ? Number(monto).toLocaleString("es-CL") : "",
@@ -330,6 +337,7 @@ export function JuiciosModuleView({
       const res = await onUpsertAction({
         id: editingItem?.id,
         rit_ruc: formData.rit_ruc.trim(),
+        rut_trabajador: formData.rut_trabajador.trim() || null,
         nombre_trabajador: formData.nombre_trabajador.trim(),
         materia: formData.materia.trim(),
         cuantia: cuantiaVal,
@@ -817,10 +825,15 @@ export function JuiciosModuleView({
                       </td>
 
                       {/* 2. NOMBRE TRABAJADOR */}
-                      <td className="py-3 px-3.5 font-bold text-slate-900">
-                        <div className="truncate max-w-[210px]" title={item.nombre_trabajador}>
+                      <td className="py-3 px-3.5">
+                        <div className="font-bold text-slate-900 truncate max-w-[210px]" title={item.nombre_trabajador}>
                           {item.nombre_trabajador}
                         </div>
+                        {item.rut_trabajador && (
+                          <div className="text-xs font-mono text-slate-500">
+                            {item.rut_trabajador}
+                          </div>
+                        )}
                       </td>
 
                       {/* 3. MATERIA */}
@@ -999,6 +1012,30 @@ export function JuiciosModuleView({
                     }
                     placeholder="Ej. Cristián Valenzuela Morales"
                     className="w-full px-3 py-1.5 text-xs rounded-md bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10]"
+                  />
+                </div>
+
+                {/* RUT Trabajador */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    RUT Trabajador
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.rut_trabajador}
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/[^0-9kK]/g, "").toUpperCase().slice(0, 9);
+                      const formatted =
+                        clean.length <= 1
+                          ? clean
+                          : `${clean.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, ".")}-${clean.slice(-1)}`;
+                      setFormData({
+                        ...formData,
+                        rut_trabajador: formatted,
+                      });
+                    }}
+                    placeholder="Ej. 12.345.678-9"
+                    className="w-full px-3 py-1.5 text-xs rounded-md bg-white border border-slate-300 text-slate-900 placeholder-slate-400 font-mono focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10]"
                   />
                 </div>
 

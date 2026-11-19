@@ -188,6 +188,13 @@ export function CompromisosTable({
             CONFIRMING
           </span>
         );
+      case "ACUERDO_LITIGIO":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-50 text-[#E05A10] border border-orange-200">
+            <Landmark className="h-3 w-3 text-[#E05A10]" />
+            ACUERDO LITIGIO (TRANSF.)
+          </span>
+        );
     }
   };
 
@@ -336,6 +343,7 @@ export function CompromisosTable({
               <option value="CHEQUE">Cheques a Fecha</option>
               <option value="FACTORING">Factoring Proveedores</option>
               <option value="CONFIRMING">Confirming</option>
+              <option value="ACUERDO_LITIGIO">Acuerdo Litigio (Transf.)</option>
             </select>
           </div>
 

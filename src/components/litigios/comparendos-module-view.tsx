@@ -60,12 +60,14 @@ type ComparendosTab = "PENDIENTES" | "PAGADAS";
 interface ComparendosModuleViewProps {
   initialItems: LitigioComparendo[];
   initialKpis: LitigiosComparendosKpis;
+  bancos?: Array<{ id: string; nombre: string }>;
   canManage?: boolean;
 }
 
 export function ComparendosModuleView({
   initialItems,
   initialKpis,
+  bancos = [],
   canManage = true,
 }: ComparendosModuleViewProps) {
   const router = useRouter();
@@ -112,12 +114,15 @@ export function ComparendosModuleView({
   const [formError, setFormError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
+    rut_trabajador: "",
     nombre_trabajador: "",
     fecha_finiquito: "",
     reserva_derechos: false,
     causal_termino: "",
     fecha_comparendo: new Date().toISOString().slice(0, 10),
     asistencia_empresa: true,
+    asistente_empresa: "",
+    motivo_inasistencia: "",
     motivo_observacion: "",
     estado: "PENDIENTE" as EstadoComparendo,
   });
@@ -186,8 +191,12 @@ export function ComparendosModuleView({
       // 5. Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
+        const qClean = q.replace(/[.\-\s]/g, "");
+        const rutClean = (item.rut_trabajador || "").toLowerCase().replace(/[.\-\s]/g, "");
         const match =
           item.nombre_trabajador.toLowerCase().includes(q) ||
+          (item.rut_trabajador || "").toLowerCase().includes(q) ||
+          (qClean.length > 0 && rutClean.includes(qClean)) ||
           item.causal_termino.toLowerCase().includes(q) ||
           (item.motivo_observacion || "").toLowerCase().includes(q);
         if (!match) return false;
@@ -211,12 +220,15 @@ export function ComparendosModuleView({
   const handleOpenCreateModal = () => {
     setEditingItem(null);
     setFormData({
+      rut_trabajador: "",
       nombre_trabajador: "",
       fecha_finiquito: "",
       reserva_derechos: false,
       causal_termino: "Art. 161 (Necesidades de la empresa)",
       fecha_comparendo: new Date().toISOString().slice(0, 10),
       asistencia_empresa: true,
+      asistente_empresa: "",
+      motivo_inasistencia: "",
       motivo_observacion: "",
       estado: "PENDIENTE",
     });
@@ -228,12 +240,15 @@ export function ComparendosModuleView({
   const handleOpenEditModal = (item: LitigioComparendo) => {
     setEditingItem(item);
     setFormData({
+      rut_trabajador: item.rut_trabajador || "",
       nombre_trabajador: item.nombre_trabajador,
       fecha_finiquito: item.fecha_finiquito || "",
       reserva_derechos: item.reserva_derechos,
       causal_termino: item.causal_termino,
       fecha_comparendo: item.fecha_comparendo,
       asistencia_empresa: item.asistencia_empresa,
+      asistente_empresa: item.asistente_empresa || "",
+      motivo_inasistencia: item.motivo_inasistencia || "",
       motivo_observacion: item.motivo_observacion || "",
       estado: item.estado,
     });
@@ -258,17 +273,28 @@ export function ComparendosModuleView({
       setFormError("La fecha de comparendo es obligatoria.");
       return;
     }
+    if (formData.asistencia_empresa && !formData.asistente_empresa.trim()) {
+      setFormError("Debe indicar quién asiste por la empresa.");
+      return;
+    }
+    if (!formData.asistencia_empresa && !formData.motivo_inasistencia.trim()) {
+      setFormError("Debe indicar el motivo de inasistencia.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       const res = await upsertLitigioComparendoAction({
         id: editingItem?.id,
+        rut_trabajador: formData.rut_trabajador.trim() || null,
         nombre_trabajador: formData.nombre_trabajador.trim(),
         fecha_finiquito: formData.fecha_finiquito || null,
         reserva_derechos: formData.reserva_derechos,
         causal_termino: formData.causal_termino.trim(),
         fecha_comparendo: formData.fecha_comparendo,
         asistencia_empresa: formData.asistencia_empresa,
+        asistente_empresa: formData.asistencia_empresa ? formData.asistente_empresa.trim() : null,
+        motivo_inasistencia: !formData.asistencia_empresa ? formData.motivo_inasistencia.trim() : null,
         motivo_observacion: formData.motivo_observacion.trim() || null,
         estado: editingItem ? editingItem.estado : "PENDIENTE",
       });
@@ -603,14 +629,19 @@ export function ComparendosModuleView({
                         isSaldado ? "bg-emerald-50/10" : "bg-white"
                       )}
                     >
-                      {/* 1. NOMBRE: Nombre completo del ex-trabajador / reclamante */}
+                      {/* 1. NOMBRE: Nombre completo del ex-trabajador / reclamante + RUT */}
                       <td className="py-3 px-3.5 font-medium text-slate-900">
                         <div
-                          className="truncate max-w-[220px] font-semibold text-slate-900"
+                          className="truncate max-w-[220px] font-bold text-slate-900"
                           title={item.nombre_trabajador}
                         >
                           {item.nombre_trabajador}
                         </div>
+                        {item.rut_trabajador && (
+                          <div className="text-xs font-mono text-slate-500">
+                            {item.rut_trabajador}
+                          </div>
+                        )}
                         {item.monto_acuerdo_total > 0 && (
                           <div className="text-[10px] text-slate-500 font-mono mt-0.5">
                             Acuerdo: {formatCLP(item.monto_acuerdo_total)}
@@ -669,25 +700,37 @@ export function ComparendosModuleView({
                         </div>
                       </td>
 
-                      {/* 6. ASISTENCIA EMPRESA: Badge indicador (🟢 SÍ / 🔴 NO) */}
-                      <td className="py-3 px-3.5 text-center whitespace-nowrap">
-                        {item.asistencia_empresa ? (
-                          <span
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200"
-                            title="Asistencia confirmada / Recomendada por asesoría jurídica"
-                          >
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                            SÍ
-                          </span>
-                        ) : (
-                          <span
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200"
-                            title="No concurrencia convenida tras análisis legal de improcedencia"
-                          >
-                            <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                            NO
-                          </span>
-                        )}
+                      {/* 6. ASISTENCIA EMPRESA: Badge indicador (🟢 SÍ / 🔴 NO) + detalle */}
+                      <td className="py-3 px-3.5 text-center">
+                        <div className="inline-flex flex-col items-center gap-1 max-w-[180px]">
+                          {item.asistencia_empresa ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap"
+                              title="Asistencia confirmada / Recomendada por asesoría jurídica"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              SÍ
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap"
+                              title="No concurrencia convenida tras análisis legal de improcedencia"
+                            >
+                              <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                              NO
+                            </span>
+                          )}
+                          {item.asistencia_empresa && item.asistente_empresa && (
+                            <span className="text-xs text-slate-600 line-clamp-2 text-center leading-tight">
+                              {item.asistente_empresa}
+                            </span>
+                          )}
+                          {!item.asistencia_empresa && item.motivo_inasistencia && (
+                            <span className="text-xs text-slate-600 line-clamp-2 text-center leading-tight">
+                              {item.motivo_inasistencia}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* 7. MOTIVO / OBSERVACIÓN: Resumen del reclamo administrativo limitado a 2 líneas */}
@@ -832,6 +875,27 @@ export function ComparendosModuleView({
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                {/* RUT Trabajador */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    RUT Trabajador
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.rut_trabajador}
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/[^0-9kK]/g, "").toUpperCase().slice(0, 9);
+                      const formatted =
+                        clean.length <= 1
+                          ? clean
+                          : `${clean.slice(0, -1).replace(/\B(?=(\d{3})+(?!\d))/g, ".")}-${clean.slice(-1)}`;
+                      setFormData({ ...formData, rut_trabajador: formatted });
+                    }}
+                    placeholder="Ej. 12.345.678-9"
+                    className="w-full px-3 py-1.5 text-xs rounded-md bg-white border border-slate-300 text-slate-900 placeholder-slate-400 font-mono focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10]"
+                  />
+                </div>
+
                 {/* Nombre Trabajador */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -934,18 +998,62 @@ export function ComparendosModuleView({
                   </label>
                   <select
                     value={formData.asistencia_empresa ? "SI" : "NO"}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const si = e.target.value === "SI";
                       setFormData({
                         ...formData,
-                        asistencia_empresa: e.target.value === "SI",
-                      })
-                    }
+                        asistencia_empresa: si,
+                        asistente_empresa: si ? formData.asistente_empresa : "",
+                        motivo_inasistencia: !si ? formData.motivo_inasistencia : "",
+                      });
+                    }}
                     className="w-full px-3 py-1.5 text-xs rounded-md bg-white border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10]"
                   >
                     <option value="SI">🟢 SÍ - Concurre representante legal / abogado</option>
                     <option value="NO">🔴 NO - No asistir por estrategia jurídica</option>
                   </select>
                 </div>
+
+                {/* Condicional Asistencia Empresa */}
+                {formData.asistencia_empresa ? (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      ¿Quién asiste por la empresa? *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.asistente_empresa}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          asistente_empresa: e.target.value,
+                        })
+                      }
+                      placeholder="Ej. Abogado Rodrigo Díaz / RRHH"
+                      className="w-full px-3 py-1.5 text-xs rounded-md bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10]"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Motivo de Inasistencia *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.motivo_inasistencia}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          motivo_inasistencia: e.target.value,
+                        })
+                      }
+                      placeholder="Ej. Improcedencia legal / notificación fuera de plazo"
+                      className="w-full px-3 py-1.5 text-xs rounded-md bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#E05A10]/20 focus:border-[#E05A10]"
+                    />
+                  </div>
+                )}
 
                 {/* Motivo / Observación */}
                 <div className="sm:col-span-2">
@@ -1005,6 +1113,7 @@ export function ComparendosModuleView({
             setAcuerdoComparendo(null);
           }}
           comparendo={acuerdoComparendo}
+          bancos={bancos}
           onSaveAcuerdo={async (comparendoId, montoTotal, cuotas) => {
             const res = await saveAcuerdoComparendoAction(comparendoId, montoTotal, cuotas);
             if (!res.success) {

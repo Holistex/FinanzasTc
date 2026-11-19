@@ -17,8 +17,22 @@ import {
   LitigioComparendo,
   CuotaComparendo,
   EstadoCuotaComparendo,
+  MetodoPagoCuotaComparendo,
 } from "@/types/database.types";
 import { cn, formatDateCL, formatCLP, formatCLPInput, parseCLPInput } from "@/lib/utils";
+
+const BANCOS_FALLBACK = [
+  "Banco de Chile",
+  "Banco Santander",
+  "BancoEstado",
+  "BCI",
+  "Banco Itaú",
+  "Scotiabank",
+  "Banco Security",
+  "Banco BICE",
+  "Banco Consorcio",
+  "Banco Falabella",
+];
 
 export interface CuotaDraftItem extends Partial<CuotaComparendo> {
   monto_raw?: string;
@@ -28,6 +42,7 @@ interface PlanCuotasModalProps {
   isOpen: boolean;
   onClose: () => void;
   comparendo: LitigioComparendo;
+  bancos?: Array<{ id: string; nombre: string }>;
   onSaveAcuerdo: (
     comparendoId: string,
     montoTotal: number,
@@ -40,6 +55,7 @@ export function PlanCuotasModal({
   isOpen,
   onClose,
   comparendo,
+  bancos = [],
   onSaveAcuerdo,
   canManage = true,
 }: PlanCuotasModalProps) {
@@ -109,6 +125,9 @@ export function PlanCuotasModal({
         monto_raw: formatCLPInput(montoCuota),
         fecha_vencimiento_cuota: d.toISOString().slice(0, 10),
         estado_cuota: "PENDIENTE",
+        metodo_pago: "TRANSFERENCIA",
+        numero_cheque: null,
+        banco_emisor: null,
         fecha_pago_real: null,
       });
     }
@@ -202,6 +221,9 @@ export function PlanCuotasModal({
         monto_raw: "",
         fecha_vencimiento_cuota: lastDate.toISOString().slice(0, 10),
         estado_cuota: "PENDIENTE" as EstadoCuotaComparendo,
+        metodo_pago: "TRANSFERENCIA",
+        numero_cheque: null,
+        banco_emisor: null,
         fecha_pago_real: null,
       },
     ];
@@ -253,6 +275,18 @@ export function PlanCuotasModal({
       return;
     }
 
+    for (let i = 0; i < cuotasDraft.length; i++) {
+      const q = cuotasDraft[i];
+      if (q.metodo_pago === "CHEQUE") {
+        if (!q.numero_cheque?.trim() || !q.banco_emisor?.trim()) {
+          setErrorMessage(
+            `En la cuota ${q.numero_cuota || i + 1} con Cheque debe ingresar N° de Cheque y Banco Emisor.`
+          );
+          return;
+        }
+      }
+    }
+
     // Validación de cuadratura
     if (Math.abs(sumaMontoCuotas - totalMontoAcuerdoParsed) > 10) {
       const confirmDiff = window.confirm(
@@ -264,15 +298,21 @@ export function PlanCuotasModal({
     setIsSubmitting(true);
     try {
       // Limpiar campos y enviar montos numéricos limpios a la Server Action
-      const cleanedCuotas: Array<Partial<CuotaComparendo>> = cuotasDraft.map((q, idx) => ({
-        id: q.id,
-        comparendo_id: comparendo.id,
-        numero_cuota: q.numero_cuota || idx + 1,
-        monto_cuota: Number(q.monto_cuota || parseCLPInput(q.monto_raw)),
-        fecha_vencimiento_cuota: q.fecha_vencimiento_cuota,
-        estado_cuota: q.estado_cuota || "PENDIENTE",
-        fecha_pago_real: q.estado_cuota === "PAGADA" ? q.fecha_pago_real : null,
-      }));
+      const cleanedCuotas: Array<Partial<CuotaComparendo>> = cuotasDraft.map((q, idx) => {
+        const metodo = q.metodo_pago === "CHEQUE" ? "CHEQUE" : "TRANSFERENCIA";
+        return {
+          id: q.id,
+          comparendo_id: comparendo.id,
+          numero_cuota: q.numero_cuota || idx + 1,
+          monto_cuota: Number(q.monto_cuota || parseCLPInput(q.monto_raw)),
+          fecha_vencimiento_cuota: q.fecha_vencimiento_cuota,
+          estado_cuota: q.estado_cuota || "PENDIENTE",
+          metodo_pago: metodo,
+          numero_cheque: metodo === "CHEQUE" ? q.numero_cheque?.trim() || null : null,
+          banco_emisor: metodo === "CHEQUE" ? q.banco_emisor?.trim() || null : null,
+          fecha_pago_real: q.estado_cuota === "PAGADA" ? q.fecha_pago_real : null,
+        };
+      });
 
       await onSaveAcuerdo(comparendo.id, totalMontoAcuerdoParsed, cleanedCuotas);
       onClose();
@@ -414,101 +454,187 @@ export function PlanCuotasModal({
                 {/* Header tabla cuotas */}
                 <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-slate-50 text-[10px] font-bold text-slate-600 uppercase tracking-wider">
                   <div className="col-span-2">N° Cuota</div>
-                  <div className="col-span-3 text-right">MONTO ($ CLP)</div>
+                  <div className="col-span-2 text-right">MONTO ($ CLP)</div>
                   <div className="col-span-3">Vencimiento</div>
-                  <div className="col-span-3 text-center">Estado</div>
+                  <div className="col-span-2">Método</div>
+                  <div className="col-span-2 text-center">Estado</div>
                   <div className="col-span-1 text-center">Acción</div>
                 </div>
 
                 {/* Fila de cada cuota */}
                 {cuotasDraft.map((q, idx) => {
                   const isPagada = q.estado_cuota === "PAGADA";
+                  const isCheque = q.metodo_pago === "CHEQUE";
+                  const bancosLista =
+                    bancos.length > 0 ? bancos.map((b) => b.nombre) : BANCOS_FALLBACK;
 
                   return (
                     <div
                       key={idx}
                       className={cn(
-                        "grid grid-cols-12 gap-2 px-3 py-2.5 items-center text-xs transition-colors",
+                        "px-3 py-2.5 text-xs transition-colors space-y-2",
                         isPagada ? "bg-emerald-50/20" : "bg-white hover:bg-slate-50/50"
                       )}
                     >
-                      {/* N° Cuota */}
-                      <div className="col-span-2 font-semibold text-slate-800 flex items-center gap-1">
-                        <span className="h-5 w-5 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-700">
-                          {q.numero_cuota || idx + 1}
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          de {cuotasDraft.length}
-                        </span>
-                      </div>
+                      <div className="grid grid-cols-12 gap-2 items-center">
+                        {/* N° Cuota */}
+                        <div className="col-span-2 font-semibold text-slate-800 flex items-center gap-1">
+                          <span className="h-5 w-5 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-700 shrink-0">
+                            {q.numero_cuota || idx + 1}
+                          </span>
+                          <span className="text-[11px] text-slate-500">
+                            de {cuotasDraft.length}
+                          </span>
+                        </div>
 
-                      {/* Monto de Cuota con Máscara Dinámica CLP */}
-                      <div className="col-span-3 text-right">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={q.monto_raw !== undefined ? q.monto_raw : formatCLPInput(q.monto_cuota)}
-                          onChange={(e) => handleUpdateCuotaMonto(idx, e.target.value)}
-                          placeholder="$ 800.000"
-                          disabled={!canManage}
-                          className="w-full text-right font-mono font-bold px-2 py-1 text-xs rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-[#E05A10] bg-white text-slate-900"
-                        />
-                      </div>
+                        {/* Monto de Cuota con Máscara Dinámica CLP */}
+                        <div className="col-span-2 text-right">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={q.monto_raw !== undefined ? q.monto_raw : formatCLPInput(q.monto_cuota)}
+                            onChange={(e) => handleUpdateCuotaMonto(idx, e.target.value)}
+                            placeholder="$ 800.000"
+                            disabled={!canManage}
+                            className="w-full text-right font-mono font-bold px-2 py-1 text-xs rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-[#E05A10] bg-white text-slate-900"
+                          />
+                        </div>
 
-                      {/* Fecha Vencimiento */}
-                      <div className="col-span-3">
-                        <input
-                          type="date"
-                          value={q.fecha_vencimiento_cuota || ""}
-                          onChange={(e) =>
-                            handleUpdateCuotaField(
-                              idx,
-                              "fecha_vencimiento_cuota",
-                              e.target.value
-                            )
-                          }
-                          disabled={!canManage}
-                          className="w-full font-mono text-[11px] px-2 py-1 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-[#E05A10] bg-white"
-                        />
-                      </div>
+                        {/* Fecha Vencimiento */}
+                        <div className="col-span-3">
+                          <input
+                            type="date"
+                            value={q.fecha_vencimiento_cuota || ""}
+                            onChange={(e) =>
+                              handleUpdateCuotaField(
+                                idx,
+                                "fecha_vencimiento_cuota",
+                                e.target.value
+                              )
+                            }
+                            disabled={!canManage}
+                            className="w-full font-mono text-[11px] px-2 py-1 rounded border border-slate-300 focus:outline-none focus:ring-1 focus:ring-[#E05A10] bg-white"
+                          />
+                        </div>
 
-                      {/* Estado Cuota: Toggle o Select */}
-                      <div className="col-span-3 flex items-center justify-center gap-1">
-                        <select
-                          value={q.estado_cuota || "PENDIENTE"}
-                          onChange={(e) =>
-                            handleUpdateCuotaField(
-                              idx,
-                              "estado_cuota",
-                              e.target.value as EstadoCuotaComparendo
-                            )
-                          }
-                          disabled={!canManage}
-                          className={cn(
-                            "w-full text-[11px] font-bold px-2 py-1 rounded border transition-colors",
-                            isPagada
-                              ? "bg-emerald-50 text-emerald-800 border-emerald-300"
-                              : "bg-amber-50 text-amber-800 border-amber-300"
-                          )}
-                        >
-                          <option value="PENDIENTE">🟡 PENDIENTE</option>
-                          <option value="PAGADA">🟢 PAGADA</option>
-                        </select>
-                      </div>
-
-                      {/* Acción eliminar cuota */}
-                      <div className="col-span-1 text-center">
-                        {canManage && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveCuota(idx)}
-                            className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                            title="Eliminar esta cuota"
+                        {/* Método de Pago */}
+                        <div className="col-span-2">
+                          <select
+                            value={q.metodo_pago || "TRANSFERENCIA"}
+                            onChange={(e) =>
+                              handleUpdateCuotaField(
+                                idx,
+                                "metodo_pago",
+                                e.target.value as MetodoPagoCuotaComparendo
+                              )
+                            }
+                            disabled={!canManage}
+                            className="w-full text-[11px] font-semibold px-1.5 py-1 rounded border border-slate-300 bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#E05A10]"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
+                            <option value="TRANSFERENCIA">Transferencia</option>
+                            <option value="CHEQUE">Cheque</option>
+                          </select>
+                        </div>
+
+                        {/* Estado Cuota: Toggle o Select */}
+                        <div className="col-span-2 flex items-center justify-center gap-1">
+                          <select
+                            value={q.estado_cuota || "PENDIENTE"}
+                            onChange={(e) =>
+                              handleUpdateCuotaField(
+                                idx,
+                                "estado_cuota",
+                                e.target.value as EstadoCuotaComparendo
+                              )
+                            }
+                            disabled={!canManage}
+                            className={cn(
+                              "w-full text-[11px] font-bold px-1.5 py-1 rounded border transition-colors",
+                              isPagada
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                : "bg-amber-50 text-amber-800 border-amber-300"
+                            )}
+                          >
+                            <option value="PENDIENTE">🟡 PENDIENTE</option>
+                            <option value="PAGADA">🟢 PAGADA</option>
+                          </select>
+                        </div>
+
+                        {/* Acción eliminar cuota */}
+                        <div className="col-span-1 text-center">
+                          {canManage && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCuota(idx)}
+                              className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                              title="Eliminar esta cuota"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
+
+                      {/* Sub-bloque condicional cuando metodo_pago === 'CHEQUE' */}
+                      {isCheque && (
+                        <div className="bg-amber-50/60 border border-amber-200 rounded-lg p-3 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-900 mb-1">
+                              N° de Cheque *
+                            </label>
+                            <input
+                              type="text"
+                              value={q.numero_cheque || ""}
+                              onChange={(e) =>
+                                handleUpdateCuotaField(idx, "numero_cheque", e.target.value)
+                              }
+                              placeholder="Ej. 1045892"
+                              disabled={!canManage}
+                              className="w-full px-2.5 py-1 text-xs font-mono rounded border border-amber-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#E05A10]"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-900 mb-1">
+                              Banco Emisor *
+                            </label>
+                            <select
+                              value={q.banco_emisor || ""}
+                              onChange={(e) =>
+                                handleUpdateCuotaField(idx, "banco_emisor", e.target.value)
+                              }
+                              disabled={!canManage}
+                              className="w-full px-2.5 py-1 text-xs rounded border border-amber-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#E05A10]"
+                            >
+                              <option value="">Seleccionar banco...</option>
+                              {bancosLista.map((bNombre) => (
+                                <option key={bNombre} value={bNombre}>
+                                  {bNombre}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-900 mb-1">
+                              Fecha Vencimiento / Cobro *
+                            </label>
+                            <input
+                              type="date"
+                              value={q.fecha_vencimiento_cuota || ""}
+                              onChange={(e) =>
+                                handleUpdateCuotaField(
+                                  idx,
+                                  "fecha_vencimiento_cuota",
+                                  e.target.value
+                                )
+                              }
+                              disabled={!canManage}
+                              className="w-full px-2.5 py-1 text-xs font-mono rounded border border-amber-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#E05A10]"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

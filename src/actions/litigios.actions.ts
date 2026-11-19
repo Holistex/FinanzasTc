@@ -139,6 +139,8 @@ export async function upsertLitigioMultaAction(input: {
   id?: string;
   procedencia: string;
   entidad?: string | null;
+  rut_trabajador?: string | null;
+  nombre_trabajador?: string | null;
   nro_multa: string;
   fecha_publicacion: string;
   monto_sancion: number;
@@ -165,6 +167,8 @@ export async function upsertLitigioMultaAction(input: {
       ...(input.id ? { id: input.id } : {}),
       procedencia: input.procedencia.trim(),
       entidad: input.entidad?.trim() || "Dirección del Trabajo",
+      rut_trabajador: input.rut_trabajador?.trim() || null,
+      nombre_trabajador: input.nombre_trabajador?.trim() || null,
       nro_multa: input.nro_multa.trim().toUpperCase(),
       fecha_publicacion: input.fecha_publicacion,
       monto_sancion: Number(input.monto_sancion),
@@ -570,6 +574,7 @@ export interface AudienciaInputItem {
 export interface UpsertLitigioJuicioInput {
   id?: string;
   rit_ruc: string;
+  rut_trabajador?: string | null;
   nombre_trabajador: string;
   materia: string;
   cuantia: number;
@@ -597,6 +602,7 @@ export async function upsertLitigioJuicioAction(
     const payload = {
       ...(input.id ? { id: input.id } : {}),
       rit_ruc: input.rit_ruc.trim().toUpperCase(),
+      rut_trabajador: input.rut_trabajador?.trim() || null,
       nombre_trabajador: input.nombre_trabajador.trim(),
       materia: input.materia.trim(),
       cuantia: cuantiaVal,
@@ -1057,15 +1063,20 @@ export async function upsertLitigioComparendoAction(
     const now = new Date().toISOString();
     const id = data.id || `comp-${Date.now()}`;
 
+    const asistenciaEmpresa =
+      data.asistencia_empresa !== undefined ? Boolean(data.asistencia_empresa) : true;
+
     const payload: LitigioComparendo = {
       id,
+      rut_trabajador: data.rut_trabajador?.trim() || null,
       nombre_trabajador: data.nombre_trabajador || "",
       fecha_finiquito: data.fecha_finiquito || null,
       reserva_derechos: Boolean(data.reserva_derechos),
       causal_termino: data.causal_termino || "",
       fecha_comparendo: data.fecha_comparendo || now.slice(0, 10),
-      asistencia_empresa:
-        data.asistencia_empresa !== undefined ? Boolean(data.asistencia_empresa) : true,
+      asistencia_empresa: asistenciaEmpresa,
+      asistente_empresa: asistenciaEmpresa ? data.asistente_empresa?.trim() || null : null,
+      motivo_inasistencia: !asistenciaEmpresa ? data.motivo_inasistencia?.trim() || null : null,
       motivo_observacion: data.motivo_observacion?.trim() || null,
       monto_acuerdo_total: Number(data.monto_acuerdo_total || 0),
       estado: data.estado || "PENDIENTE",
@@ -1079,12 +1090,15 @@ export async function upsertLitigioComparendoAction(
         .from("litigios_comparendos")
         .upsert({
           id: payload.id,
+          rut_trabajador: payload.rut_trabajador,
           nombre_trabajador: payload.nombre_trabajador,
           fecha_finiquito: payload.fecha_finiquito,
           reserva_derechos: payload.reserva_derechos,
           causal_termino: payload.causal_termino,
           fecha_comparendo: payload.fecha_comparendo,
           asistencia_empresa: payload.asistencia_empresa,
+          asistente_empresa: payload.asistente_empresa,
+          motivo_inasistencia: payload.motivo_inasistencia,
           motivo_observacion: payload.motivo_observacion,
           monto_acuerdo_total: payload.monto_acuerdo_total,
           estado: payload.estado,
@@ -1121,6 +1135,7 @@ export async function upsertLitigioComparendoAction(
 
     safeRevalidatePath("/reg-litigios/comparendos");
     safeRevalidatePath("/reg-litigios/calendario");
+    safeRevalidatePath("/compras-tensacon/compromisos");
     return { success: true, data: payload };
   } catch (err: any) {
     return { success: false, error: err?.message || "Error inesperado al guardar el comparendo." };
@@ -1146,18 +1161,24 @@ export async function saveAcuerdoComparendoAction(
       nuevoEstado = allPaid ? "PAGADO" : "ACUERDO_EN_PAGO";
     }
 
-    const formattedCuotas: CuotaComparendo[] = cuotas.map((q, idx) => ({
-      id: q.id || `cuota-${comparendoId}-${idx + 1}-${Date.now()}`,
-      comparendo_id: comparendoId,
-      numero_cuota: q.numero_cuota || idx + 1,
-      monto_cuota: Number(q.monto_cuota || 0),
-      fecha_vencimiento_cuota: q.fecha_vencimiento_cuota || now.slice(0, 10),
-      estado_cuota: q.estado_cuota || "PENDIENTE",
-      fecha_pago_real:
-        q.estado_cuota === "PAGADA" ? q.fecha_pago_real || now.slice(0, 10) : null,
-      created_at: q.created_at || now,
-      updated_at: now,
-    }));
+    const formattedCuotas: CuotaComparendo[] = cuotas.map((q, idx) => {
+      const metodoPago = q.metodo_pago === "CHEQUE" ? "CHEQUE" : "TRANSFERENCIA";
+      return {
+        id: q.id || `cuota-${comparendoId}-${idx + 1}-${Date.now()}`,
+        comparendo_id: comparendoId,
+        numero_cuota: q.numero_cuota || idx + 1,
+        monto_cuota: Number(q.monto_cuota || 0),
+        fecha_vencimiento_cuota: q.fecha_vencimiento_cuota || now.slice(0, 10),
+        estado_cuota: q.estado_cuota || "PENDIENTE",
+        metodo_pago: metodoPago,
+        numero_cheque: metodoPago === "CHEQUE" ? q.numero_cheque?.trim() || null : null,
+        banco_emisor: metodoPago === "CHEQUE" ? q.banco_emisor?.trim() || null : null,
+        fecha_pago_real:
+          q.estado_cuota === "PAGADA" ? q.fecha_pago_real || now.slice(0, 10) : null,
+        created_at: q.created_at || now,
+        updated_at: now,
+      };
+    });
 
     if (isServerSupabaseConfigured()) {
       const supabase = await createServerSupabaseClient();
@@ -1192,6 +1213,9 @@ export async function saveAcuerdoComparendoAction(
             monto_cuota: q.monto_cuota,
             fecha_vencimiento_cuota: q.fecha_vencimiento_cuota,
             estado_cuota: q.estado_cuota,
+            metodo_pago: q.metodo_pago,
+            numero_cheque: q.numero_cheque,
+            banco_emisor: q.banco_emisor,
             fecha_pago_real: q.fecha_pago_real,
             updated_at: now,
           }))
@@ -1222,6 +1246,7 @@ export async function saveAcuerdoComparendoAction(
 
     safeRevalidatePath("/reg-litigios/comparendos");
     safeRevalidatePath("/reg-litigios/calendario");
+    safeRevalidatePath("/compras-tensacon/compromisos");
 
     const updatedComp = db.litigios_comparendos[compIdx] || {
       id: comparendoId,
@@ -1318,6 +1343,7 @@ export async function togglePagoCuotaComparendoAction(
     writeLocalDb(db);
     safeRevalidatePath("/reg-litigios/comparendos");
     safeRevalidatePath("/reg-litigios/calendario");
+    safeRevalidatePath("/compras-tensacon/compromisos");
 
     return {
       success: true,
@@ -1371,6 +1397,7 @@ export async function deleteLitigioComparendoAction(id: string): Promise<{ succe
     writeLocalDb(db);
     safeRevalidatePath("/reg-litigios/comparendos");
     safeRevalidatePath("/reg-litigios/calendario");
+    safeRevalidatePath("/compras-tensacon/compromisos");
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || "Error inesperado al eliminar comparendo." };

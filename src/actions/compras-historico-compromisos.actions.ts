@@ -515,9 +515,8 @@ export async function getCompromisosComprasAction(params?: {
   const db = readLocalDb();
   let rawCompromisos: CompromisoCompra[] = [];
 
-  // Fecha base del sistema: 18 de octubre de 2026 (Semana 42)
-  const baseDate = new Date(2026, 9, 18, 12, 0, 0);
-  const baseDateStr = "2026-10-18";
+  // Fecha base actual para proyección de semanas vigentes
+  const baseDate = new Date();
 
   // 1. Intentar consultar vista en Supabase si está disponible
   if (isServerSupabaseConfigured()) {
@@ -680,6 +679,87 @@ export async function getCompromisosComprasAction(params?: {
       } catch {
         // Fallback local completado
       }
+    }
+  }
+
+  // 2.5 Incorporar Cuotas de Comparendos Pendientes (Litigios -> Compromisos)
+  const cuotasExistentesIds = new Set<string>();
+  if (isServerSupabaseConfigured()) {
+    try {
+      const supabase = await createServerSupabaseClient();
+      const [{ data: supaCuotas }, { data: supaComps }] = await Promise.all([
+        supabase
+          .from("litigios_cuotas_comparendo")
+          .select("*")
+          .eq("estado_cuota", "PENDIENTE"),
+        supabase
+          .from("litigios_comparendos")
+          .select("id, nombre_trabajador, rut_trabajador"),
+      ]);
+
+      const compMap = new Map<
+        string,
+        { nombre_trabajador: string; rut_trabajador?: string | null }
+      >();
+      for (const comp of (supaComps || []) as Array<Record<string, unknown>>) {
+        compMap.set(String(comp.id), {
+          nombre_trabajador: String(comp.nombre_trabajador || "Trabajador"),
+          rut_trabajador: comp.rut_trabajador ? String(comp.rut_trabajador) : null,
+        });
+      }
+
+      for (const q of (supaCuotas || []) as Array<Record<string, unknown>>) {
+        const montoCuota = Number(q.monto_cuota || 0);
+        if (montoCuota <= 0) continue;
+        const qId = `comp-cuota-${q.id}`;
+        cuotasExistentesIds.add(qId);
+
+        const compInfo = compMap.get(String(q.comparendo_id));
+        const metodo = String(q.metodo_pago || "TRANSFERENCIA").toUpperCase();
+        const isCheque = metodo === "CHEQUE";
+        const nroCheque = q.numero_cheque ? String(q.numero_cheque) : "";
+        const bancoEmisor = q.banco_emisor ? String(q.banco_emisor) : "";
+
+        rawCompromisos.push({
+          id: qId,
+          modalidad: isCheque ? "CHEQUE" : "ACUERDO_LITIGIO",
+          rut_proveedor: compInfo?.rut_trabajador || "SIN RUT",
+          razon_social: `${compInfo?.nombre_trabajador || "Trabajador"} — Acuerdo Comparendo`,
+          referencia_doc:
+            isCheque && nroCheque
+              ? `Cuota ${q.numero_cuota} — Cheque #${nroCheque}${bancoEmisor ? ` (${bancoEmisor})` : ""}`
+              : `Cuota ${q.numero_cuota} — Transferencia`,
+          fecha_vencimiento: toDateOnlyString(String(q.fecha_vencimiento_cuota || "")),
+          monto: montoCuota,
+          created_at: String(q.created_at || new Date().toISOString()),
+        });
+      }
+    } catch (err) {
+      console.error("[Compromisos] Error proyectando cuotas de comparendos:", err);
+    }
+  } else {
+    const compLocalMap = new Map(
+      (db.litigios_comparendos || []).map((c) => [c.id, c])
+    );
+    for (const q of db.litigios_cuotas_comparendo || []) {
+      if (q.estado_cuota !== "PENDIENTE" || Number(q.monto_cuota || 0) <= 0) continue;
+      const qId = `comp-cuota-${q.id}`;
+      if (cuotasExistentesIds.has(qId)) continue;
+      const comp = compLocalMap.get(q.comparendo_id);
+      const isCheque = q.metodo_pago === "CHEQUE";
+      rawCompromisos.push({
+        id: qId,
+        modalidad: isCheque ? "CHEQUE" : "ACUERDO_LITIGIO",
+        rut_proveedor: comp?.rut_trabajador || "SIN RUT",
+        razon_social: `${comp?.nombre_trabajador || "Trabajador"} — Acuerdo Comparendo`,
+        referencia_doc:
+          isCheque && q.numero_cheque
+            ? `Cuota ${q.numero_cuota} — Cheque #${q.numero_cheque}${q.banco_emisor ? ` (${q.banco_emisor})` : ""}`
+            : `Cuota ${q.numero_cuota} — Transferencia`,
+        fecha_vencimiento: toDateOnlyString(q.fecha_vencimiento_cuota),
+        monto: Number(q.monto_cuota || 0),
+        created_at: q.created_at || new Date().toISOString(),
+      });
     }
   }
 

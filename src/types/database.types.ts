@@ -505,7 +505,11 @@ export function buildNormalizedPermisosMatrix(
   return result;
 }
 
-export type ModalidadCompromiso = "CHEQUE" | "FACTORING" | "CONFIRMING";
+export type ModalidadCompromiso =
+  | "CHEQUE"
+  | "FACTORING"
+  | "CONFIRMING"
+  | "ACUERDO_LITIGIO";
 
 export interface CompromisoCompra {
   id: string;
@@ -736,6 +740,8 @@ export interface LitigioMulta {
   id: string;
   procedencia: string;
   entidad?: string | null;
+  rut_trabajador?: string | null;
+  nombre_trabajador?: string | null;
   nro_multa: string;
   fecha_publicacion: string; // YYYY-MM-DD
   monto_sancion: number;
@@ -772,6 +778,7 @@ export interface LitigioAudienciaJuicio {
 export interface LitigioJuicio {
   id: string;
   rit_ruc: string;
+  rut_trabajador?: string | null;
   nombre_trabajador: string;
   materia: string;
   cuantia: number;
@@ -826,6 +833,8 @@ export interface CalendarioLitigiosKpis {
 export type EstadoComparendo = "PENDIENTE" | "ACUERDO_EN_PAGO" | "PAGADO";
 export type EstadoCuotaComparendo = "PENDIENTE" | "PAGADA";
 
+export type MetodoPagoCuotaComparendo = "TRANSFERENCIA" | "CHEQUE";
+
 export interface CuotaComparendo {
   id: string;
   comparendo_id: string;
@@ -833,6 +842,9 @@ export interface CuotaComparendo {
   monto_cuota: number;
   fecha_vencimiento_cuota: string; // YYYY-MM-DD
   estado_cuota: EstadoCuotaComparendo;
+  metodo_pago?: MetodoPagoCuotaComparendo | null;
+  numero_cheque?: string | null;
+  banco_emisor?: string | null;
   fecha_pago_real?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -840,12 +852,15 @@ export interface CuotaComparendo {
 
 export interface LitigioComparendo {
   id: string;
+  rut_trabajador?: string | null;
   nombre_trabajador: string;
   fecha_finiquito?: string | null; // YYYY-MM-DD
   reserva_derechos: boolean;
   causal_termino: string;
   fecha_comparendo: string; // YYYY-MM-DD
   asistencia_empresa: boolean;
+  asistente_empresa?: string | null;
+  motivo_inasistencia?: string | null;
   motivo_observacion?: string | null;
   monto_acuerdo_total: number;
   estado: EstadoComparendo;
