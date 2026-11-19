@@ -33,7 +33,7 @@ export default async function DashboardLayout({
       <div className="flex-1 flex flex-col min-w-0 w-full lg:pl-64 min-h-screen">
         <GlobalEventBanner eventos={eventosVigentes} />
         {/* Main Content Area: Sin encabezado redundante para maximizar la superficie útil */}
-        <main className="flex-1 px-3 py-4 sm:px-6 lg:p-5 max-w-[1650px] w-full mx-auto min-w-0 overflow-x-hidden">
+        <main className="flex-1 w-full max-w-[1680px] mx-auto px-4 lg:px-6 py-4 min-w-0 overflow-x-hidden">
           {children}
         </main>
       </div>

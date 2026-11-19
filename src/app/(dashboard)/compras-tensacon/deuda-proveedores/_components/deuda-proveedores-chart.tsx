@@ -56,13 +56,13 @@ export function DeudaProveedoresChart({
 }: DeudaProveedoresChartProps) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  // Dimensiones compactas optimizadas (h-[230px] / h-[250px])
-  const width = 800;
-  const height = 195;
-  const paddingLeft = 55;
-  const paddingRight = 20;
-  const paddingTop = 26;
-  const paddingBottom = 30;
+  // Dimensiones proporcionales estables cross-platform (h-[250px], min 880px para evitar colisión de etiquetas)
+  const width = Math.max(880, data.length * 80);
+  const height = 225;
+  const paddingLeft = 58;
+  const paddingRight = 28;
+  const paddingTop = 28;
+  const paddingBottom = 38;
 
   const chartWidth = width - paddingLeft - paddingRight;
   const chartHeight = height - paddingTop - paddingBottom;
@@ -167,13 +167,18 @@ export function DeudaProveedoresChart({
         </div>
       </div>
 
-      {/* Contenedor Gráfico Compacto (h-[230px] / h-[250px]) */}
-      <div className="relative w-full h-[210px] sm:h-[230px] flex items-center justify-center overflow-hidden">
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          preserveAspectRatio="none"
-          className="w-full h-full select-none"
+      {/* Contenedor Gráfico con altura controlada h-[250px] y scroll horizontal suave si supera 12 meses */}
+      <div className="w-full overflow-x-auto">
+        <div
+          className={`relative h-[250px] flex items-center justify-center ${
+            data.length > 12 ? "min-w-[1040px] w-full" : "min-w-[880px] w-full"
+          }`}
         >
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            preserveAspectRatio="xMidYMid meet"
+            className="w-full h-full select-none"
+          >
           <defs>
             {/* Gradiente inferior translúcido */}
             <linearGradient id="deudaRedGradientCompact" x1="0" y1="0" x2="0" y2="1">
@@ -378,6 +383,7 @@ export function DeudaProveedoresChart({
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

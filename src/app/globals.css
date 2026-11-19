@@ -12,6 +12,13 @@
     color-scheme: light;
   }
 
+  html, body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
   body {
     @apply bg-[#F8FAFC] text-[#0F172A] antialiased selection:bg-[#E05A10] selection:text-white;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11", "tnum";
@@ -19,7 +26,8 @@
 }
 
 /* Tabular numbers para montos financieros y folios SII */
-.tabular-nums {
+.tabular-nums,
+.font-mono {
   font-variant-numeric: tabular-nums;
 }
 

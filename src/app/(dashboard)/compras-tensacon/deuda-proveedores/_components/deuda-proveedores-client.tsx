@@ -164,35 +164,35 @@ export function DeudaProveedoresClient({ initialData }: DeudaProveedoresClientPr
   return (
     <div className="space-y-5">
       {/* 1. KPI CARDS SUPERIORES */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
         {/* KPI 1: Total Deuda Proveedores */}
-        <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm hover:shadow transition-shadow border-l-4 border-l-red-600">
+        <div className="min-w-0 bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm hover:shadow transition-shadow border-l-4 border-l-red-600">
           <div className="flex items-center justify-between text-slate-500 text-xs">
             <span className="font-semibold uppercase tracking-wider text-slate-600 text-[10px]">
               Total Deuda Proveedores
             </span>
-            <div className="h-7 w-7 rounded-lg bg-red-50 flex items-center justify-center text-red-600">
+            <div className="h-7 w-7 rounded-lg bg-red-50 flex items-center justify-center text-red-600 shrink-0">
               <TrendingDown className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-1.5">
-            <span className="text-xl sm:text-2xl font-black font-mono tracking-tight text-red-600">
+            <span className="text-xl xl:text-2xl font-black font-mono tracking-tight tabular-nums whitespace-nowrap text-red-600">
               {formatCLP(kpis.totalDeudaProveedores)}
             </span>
           </div>
           <p className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-600" />
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-600 shrink-0" />
             Cartera total pendiente exigible
           </p>
         </div>
 
         {/* KPI 2: Mes Mayor Vencimiento */}
-        <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm hover:shadow transition-shadow border-l-4 border-l-amber-500">
+        <div className="min-w-0 bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm hover:shadow transition-shadow border-l-4 border-l-amber-500">
           <div className="flex items-center justify-between text-slate-500 text-xs">
             <span className="font-semibold uppercase tracking-wider text-slate-600 text-[10px]">
               Mes Mayor Vencimiento
             </span>
-            <div className="h-7 w-7 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600">
+            <div className="h-7 w-7 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
               <Calendar className="h-4 w-4" />
             </div>
           </div>
@@ -200,7 +200,7 @@ export function DeudaProveedoresClient({ initialData }: DeudaProveedoresClientPr
             <div className="text-base font-bold text-slate-900 truncate">
               {kpis.mesMayorDeuda?.mesNombre || "N/A"}
             </div>
-            <div className="text-xs font-semibold text-amber-700 font-mono">
+            <div className="text-xs font-semibold text-amber-700 font-mono tabular-nums whitespace-nowrap">
               {kpis.mesMayorDeuda ? formatCLP(kpis.mesMayorDeuda.monto) : "$0"}
             </div>
           </div>
@@ -210,25 +210,25 @@ export function DeudaProveedoresClient({ initialData }: DeudaProveedoresClientPr
         </div>
 
         {/* KPI 3: Deuda Vencida vs Por Vencer */}
-        <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm hover:shadow transition-shadow border-l-4 border-l-rose-500">
+        <div className="min-w-0 bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm hover:shadow transition-shadow border-l-4 border-l-rose-500">
           <div className="flex items-center justify-between text-slate-500 text-xs">
             <span className="font-semibold uppercase tracking-wider text-slate-600 text-[10px]">
               Estado de Vencimientos
             </span>
-            <div className="h-7 w-7 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600">
+            <div className="h-7 w-7 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
               <Clock className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-1.5 space-y-0.5">
-            <div className="flex items-center justify-between text-[11px]">
+            <div className="flex items-center justify-between gap-2 text-[11px]">
               <span className="text-rose-600 font-medium">Vencida:</span>
-              <span className="font-bold text-rose-700 font-mono">
+              <span className="font-bold text-rose-700 font-mono tabular-nums whitespace-nowrap">
                 {formatCLP(kpis.deudaVencida)}
               </span>
             </div>
-            <div className="flex items-center justify-between text-[11px]">
+            <div className="flex items-center justify-between gap-2 text-[11px]">
               <span className="text-emerald-600 font-medium">Por Vencer:</span>
-              <span className="font-bold text-emerald-700 font-mono">
+              <span className="font-bold text-emerald-700 font-mono tabular-nums whitespace-nowrap">
                 {formatCLP(kpis.deudaPorVencer)}
               </span>
             </div>
@@ -258,22 +258,22 @@ export function DeudaProveedoresClient({ initialData }: DeudaProveedoresClientPr
         </div>
 
         {/* KPI 4: Documentos y Proveedores */}
-        <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm hover:shadow transition-shadow border-l-4 border-l-slate-700">
+        <div className="min-w-0 bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm hover:shadow transition-shadow border-l-4 border-l-slate-700">
           <div className="flex items-center justify-between text-slate-500 text-xs">
             <span className="font-semibold uppercase tracking-wider text-slate-600 text-[10px]">
               Documentos & Proveedores
             </span>
-            <div className="h-7 w-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-700">
+            <div className="h-7 w-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-700 shrink-0">
               <Building2 className="h-4 w-4" />
             </div>
           </div>
-          <div className="mt-1.5 flex items-baseline gap-2">
-            <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
+          <div className="mt-1.5 flex items-baseline gap-2 whitespace-nowrap">
+            <span className="text-xl xl:text-2xl font-black text-slate-900 font-mono tabular-nums">
               {kpis.totalFacturas}
             </span>
             <span className="text-[10px] text-slate-500">facturas</span>
             <span className="text-slate-300">|</span>
-            <span className="text-base font-bold text-slate-800 font-mono">
+            <span className="text-base font-bold text-slate-800 font-mono tabular-nums">
               {kpis.totalProveedores}
             </span>
             <span className="text-[10px] text-slate-500">provs</span>
