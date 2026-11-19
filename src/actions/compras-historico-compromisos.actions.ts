@@ -515,8 +515,15 @@ export async function getCompromisosComprasAction(params?: {
   const db = readLocalDb();
   let rawCompromisos: CompromisoCompra[] = [];
 
-  // Fecha base actual para proyección de semanas vigentes
-  const baseDate = new Date();
+  // Fecha base actual en hora Chile (America/Santiago) para proyección de semanas vigentes
+  const chileNowStr = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Santiago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  const [by, bm, bd] = chileNowStr.split("-").map(Number);
+  const baseDate = new Date(by, bm - 1, bd, 12, 0, 0);
 
   // 1. Intentar consultar vista en Supabase si está disponible
   if (isServerSupabaseConfigured()) {

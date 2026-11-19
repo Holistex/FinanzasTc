@@ -20,9 +20,38 @@ import {
 } from "lucide-react";
 import { CompromisoCompra, ModalidadCompromiso } from "@/types/database.types";
 import { SemanaOption, CompromisosComprasKPIs, getCompromisosComprasAction } from "@/actions/compras-historico-compromisos.actions";
-import { formatCLP, formatDateCL, formatRutDisplay, toDateOnlyString } from "@/lib/utils";
+import { formatCLP, formatDateCL, formatRutDisplay } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/lib/prefetch-helpers";
+
+/**
+ * Normaliza cualquier fecha (string ISO, YYYY-MM-DD o Date) a clave pura YYYY-MM-DD
+ * extrayendo los primeros 10 caracteres limpios sin desfase horario.
+ */
+const toDateKeyYYYYMMDD = (val?: string | Date | null): string => {
+  if (!val) return "";
+  if (typeof val === "string") return val.trim().slice(0, 10);
+  return val.toISOString().slice(0, 10);
+};
+
+/**
+ * Determina la clave de semana (semanaKey) para una fecha de vencimiento
+ * usando la misma normalización YYYY-MM-DD tanto para conteo en <select> como para filtrado.
+ */
+const getSemanaKeyForItem = (
+  fechaVencimiento: string | Date | null | undefined,
+  semanas: SemanaOption[]
+): string => {
+  const dateKey = toDateKeyYYYYMMDD(fechaVencimiento);
+  if (!dateKey) return "";
+  const match = semanas.find((s) => {
+    if (s.id === "TODAS") return false;
+    const inicio = toDateKeyYYYYMMDD(s.fechaInicio);
+    const fin = toDateKeyYYYYMMDD(s.fechaFin);
+    return Boolean(inicio && fin && dateKey >= inicio && dateKey <= fin);
+  });
+  return match ? match.id : "";
+};
 
 interface CompromisosTableProps {
   initialData: CompromisoCompra[];
@@ -49,6 +78,7 @@ export function CompromisosTable({
   });
 
   const data = queryData?.data ?? initialData;
+  const activeSemanas = queryData?.semanasDisponibles ?? semanasDisponibles;
   const [selectedSemanaId, setSelectedSemanaId] = useState<string>("TODAS");
   const [selectedModalidad, setSelectedModalidad] = useState<string>("TODAS");
   const [searchTerm, setSearchTerm] = useState("");
@@ -59,49 +89,81 @@ export function CompromisosTable({
     setCurrentPage(1);
   }, [selectedSemanaId, selectedModalidad, searchTerm]);
 
+  // Fecha actual dinámica en zona horaria America/Santiago (DD/MM/YYYY)
+  const todayChileDisplay = useMemo(() => {
+    try {
+      return new Intl.DateTimeFormat("es-CL", {
+        timeZone: "America/Santiago",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })
+        .format(new Date())
+        .replace(/-/g, "/");
+    } catch {
+      const now = new Date();
+      const d = String(now.getDate()).padStart(2, "0");
+      const m = String(now.getMonth() + 1).padStart(2, "0");
+      return `${d}/${m}/${now.getFullYear()}`;
+    }
+  }, []);
+
+  // Recalcular conteo de cada <option> usando exactamente la misma clave semanaKey que el filtro
+  const semanasConConteo = useMemo(() => {
+    const countsBySemanaKey = new Map<string, number>();
+    for (const item of data) {
+      const semanaKey = getSemanaKeyForItem(item.fecha_vencimiento, activeSemanas);
+      if (semanaKey) {
+        countsBySemanaKey.set(semanaKey, (countsBySemanaKey.get(semanaKey) ?? 0) + 1);
+      }
+    }
+    return activeSemanas.map((sem) => ({
+      ...sem,
+      count: sem.id === "TODAS" ? data.length : (countsBySemanaKey.get(sem.id) ?? 0),
+    }));
+  }, [data, activeSemanas]);
+
   // Encontrar el objeto de semana seleccionado
   const selectedSemanaObj = useMemo(() => {
-    return semanasDisponibles.find((s) => s.id === selectedSemanaId);
-  }, [selectedSemanaId, semanasDisponibles]);
+    return semanasConConteo.find((s) => s.id === selectedSemanaId);
+  }, [selectedSemanaId, semanasConConteo]);
 
-  // Filtrado de compromisos
+  // Filtrado de compromisos usando exactamente la misma clave semanaKey y normalización YYYY-MM-DD
   const filteredData = useMemo(() => {
-    return data.filter((item) => {
-      // 1. Filtro de semana por rango de fechas textual YYYY-MM-DD (sin desfase horario)
-      if (selectedSemanaId !== "TODAS" && selectedSemanaObj?.fechaInicio && selectedSemanaObj?.fechaFin) {
-        const itemFecha = toDateOnlyString(item.fecha_vencimiento);
-        if (!itemFecha) return false;
-        if (
-          itemFecha < selectedSemanaObj.fechaInicio ||
-          itemFecha > selectedSemanaObj.fechaFin
-        ) {
-          return false;
+    return data
+      .filter((item) => {
+        // 1. Filtro de semana ("TODAS" muestra la totalidad sin filtrar por fecha)
+        if (selectedSemanaId !== "TODAS") {
+          const itemSemanaKey = getSemanaKeyForItem(item.fecha_vencimiento, activeSemanas);
+          if (itemSemanaKey !== selectedSemanaId) {
+            return false;
+          }
         }
-      }
 
-      // 2. Filtro de modalidad
-      if (selectedModalidad !== "TODAS") {
-        if (item.modalidad !== selectedModalidad) return false;
-      }
+        // 2. Filtro de modalidad
+        if (selectedModalidad !== "TODAS") {
+          if (item.modalidad !== selectedModalidad) return false;
+        }
 
-      // 3. Búsqueda general
-      if (searchTerm.trim()) {
-        const term = searchTerm.toLowerCase();
-        const match =
-          item.razon_social.toLowerCase().includes(term) ||
-          item.rut_proveedor.toLowerCase().includes(term) ||
-          item.referencia_doc.toLowerCase().includes(term);
-        if (!match) return false;
-      }
+        // 3. Búsqueda general
+        if (searchTerm.trim()) {
+          const term = searchTerm.toLowerCase();
+          const match =
+            item.razon_social.toLowerCase().includes(term) ||
+            item.rut_proveedor.toLowerCase().includes(term) ||
+            item.referencia_doc.toLowerCase().includes(term);
+          if (!match) return false;
+        }
 
-      return true;
-    }).sort((a, b) => {
-      // Ordenar por fecha de vencimiento más próxima primero
-      const dateA = toDateOnlyString(a.fecha_vencimiento);
-      const dateB = toDateOnlyString(b.fecha_vencimiento);
-      return dateA.localeCompare(dateB);
-    });
-  }, [data, selectedSemanaId, selectedSemanaObj, selectedModalidad, searchTerm]);
+        return true;
+      })
+      .sort((a, b) => {
+        // Ordenar por fecha de vencimiento más próxima primero
+        const dateA = toDateKeyYYYYMMDD(a.fecha_vencimiento);
+        const dateB = toDateKeyYYYYMMDD(b.fecha_vencimiento);
+        return dateA.localeCompare(dateB);
+      });
+  }, [data, activeSemanas, selectedSemanaId, selectedModalidad, searchTerm]);
 
   // Recalcular métricas de acuerdo al filtro actual
   const currentKpis = useMemo(() => {
@@ -323,7 +385,7 @@ export function CompromisosTable({
               onChange={(e) => setSelectedSemanaId(e.target.value)}
               className="px-3 py-2 text-sm font-medium border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#E05A10] text-slate-800 min-w-[280px]"
             >
-              {semanasDisponibles.map((sem) => (
+              {semanasConConteo.map((sem) => (
                 <option key={sem.id} value={sem.id}>
                   {sem.label} ({sem.count} compromisos)
                 </option>
@@ -394,8 +456,8 @@ export function CompromisosTable({
             </span>{" "}
             • <span className="font-medium text-slate-700">{filteredData.length}</span> compromisos
           </div>
-          <div className="text-xs text-slate-500">
-            Base de cálculo de días restantes al día de hoy (18/10/2026)
+          <div className="text-xs text-slate-500" suppressHydrationWarning>
+            Base de cálculo de días restantes al día de hoy ({todayChileDisplay})
           </div>
         </div>
       </div>
