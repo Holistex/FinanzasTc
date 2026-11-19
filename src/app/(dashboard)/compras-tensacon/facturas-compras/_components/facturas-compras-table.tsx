@@ -226,14 +226,20 @@ export function FacturasComprasTable({
     });
   };
 
+  const getSaldoPendienteFactura = (f: FacturaCompra): number => {
+    const raw =
+      (f as unknown as Record<string, unknown>).saldo_pendiente ??
+      f.monto_saldo ??
+      f.monto_total;
+    return Math.max(0, Number(raw || 0));
+  };
+
   // 1. Facturas Cartera / Deuda Directa con Proveedor (saldo > 0 y no modalidades especiales ni empresas relacionadas)
   const facturasCartera = useMemo(() => {
     return data.filter((f) => {
       if (f.tipo_doc === 61) return false;
       if (esEmpresaRelacionada(f.rut_proveedor)) return false;
-      const saldoPendiente = Number(
-        f.monto_saldo !== undefined && f.monto_saldo !== null ? f.monto_saldo : f.monto_total
-      );
+      const saldoPendiente = getSaldoPendienteFactura(f);
       if (saldoPendiente <= 0) return false;
       if (f.condicion_pago === "CONTADO") return false;
 
@@ -268,9 +274,7 @@ export function FacturasComprasTable({
       if (mods.includes("PAGADA") || mods.includes("COMPRA_TC") || mods.includes("NETEO_NC")) {
         return false;
       }
-      const saldoPendiente = Number(
-        f.monto_saldo !== undefined && f.monto_saldo !== null ? f.monto_saldo : f.monto_total
-      );
+      const saldoPendiente = getSaldoPendienteFactura(f);
       return saldoPendiente > 0;
     });
   }, [data]);
@@ -278,13 +282,7 @@ export function FacturasComprasTable({
   const totalEmpRelacionada = useMemo(
     () =>
       facturasEmpRelacionada.reduce(
-        (acc, f) =>
-          acc +
-          Number(
-            f.monto_saldo !== undefined && f.monto_saldo !== null
-              ? f.monto_saldo
-              : f.monto_total
-          ),
+        (acc, f) => acc + getSaldoPendienteFactura(f),
         0
       ),
     [facturasEmpRelacionada]
@@ -439,7 +437,7 @@ export function FacturasComprasTable({
         return { total, count, providers };
       }
       const total = filteredFacNc.reduce(
-        (s, item) => s + (item.monto_saldo !== undefined ? item.monto_saldo : item.monto_total),
+        (s, item) => s + getSaldoPendienteFactura(item),
         0
       );
       const count = filteredFacNc.length;
@@ -450,7 +448,7 @@ export function FacturasComprasTable({
     }
 
     const total = filteredCurrentTab.reduce(
-      (s, item) => s + (item.monto_saldo !== undefined ? item.monto_saldo : item.monto_total),
+      (s, item) => s + getSaldoPendienteFactura(item),
       0
     );
     const count = filteredCurrentTab.length;
@@ -873,7 +871,7 @@ export function FacturasComprasTable({
                 ) : (
                   paginateArray(filteredCurrentTab, currentPage, GLOBAL_PAGE_SIZE).map((factura) => {
                     const docInfo = getTipoDocLabel(factura.tipo_doc);
-                    const saldo = factura.monto_saldo !== undefined ? factura.monto_saldo : factura.monto_total;
+                    const saldo = getSaldoPendienteFactura(factura);
                     const totalNeteado = (factura.neteos || []).reduce((sum, n) => sum + Number(n.monto_neteado || 0), 0);
                     const totalCheques = (factura.cheques || []).reduce((sum, c) => sum + Number(c.monto_cheque || 0), 0);
                     const tieneAjusteParcial = saldo < factura.monto_total;
@@ -1227,7 +1225,7 @@ export function FacturasComprasTable({
                         const docInfo = getTipoDocLabel(doc.tipo_doc);
                         const isNC = doc.tipo_doc === 61;
                         const saldoNC = doc.saldo_restante_nc !== undefined ? doc.saldo_restante_nc : doc.monto_total;
-                        const saldoFactura = doc.monto_saldo !== undefined ? doc.monto_saldo : doc.monto_total;
+                        const saldoFactura = getSaldoPendienteFactura(doc);
 
                         return (
                           <tr key={doc.id} className="hover:bg-slate-50/80 transition-colors group">

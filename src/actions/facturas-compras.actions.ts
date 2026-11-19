@@ -147,8 +147,14 @@ export async function getFacturasComprasAction(
           fecha_acuse_recibo: r.fecha_acuse_recibo ? String(r.fecha_acuse_recibo) : null,
           condicion_pago: (r.condicion_pago as CondicionPago) || (r.deuda_proveedor === 0 ? "CONTADO" : "CREDITO"),
           monto_total: Number(r.monto_total || 0),
-          monto_saldo: r.condicion_pago === "CONTADO" || estadoFinal === "COMPRA_TC" ? 0 : r.monto_saldo !== undefined && r.monto_saldo !== null ? Number(r.monto_saldo) : Number(r.monto_total || 0),
-          deuda_proveedor: r.condicion_pago === "CONTADO" || estadoFinal === "COMPRA_TC" ? 0 : Number(r.deuda_proveedor ?? r.monto_saldo ?? r.monto_total),
+          monto_saldo:
+            r.condicion_pago === "CONTADO" || estadoFinal === "COMPRA_TC"
+              ? 0
+              : Number(r.saldo_pendiente ?? r.monto_saldo ?? r.monto_total ?? 0),
+          deuda_proveedor:
+            r.condicion_pago === "CONTADO" || estadoFinal === "COMPRA_TC"
+              ? 0
+              : Number(r.deuda_proveedor ?? r.saldo_pendiente ?? r.monto_saldo ?? r.monto_total ?? 0),
           estado: estadoFinal,
           modalidad_pago: (r.modalidad_pago as string) || (r.modalidad as string) || estadoFinal,
           modalidad: (r.modalidad as string) || (r.modalidad_pago as string) || estadoFinal,
@@ -1769,7 +1775,12 @@ export async function registrarPagoFacturaCompraAction(
     let targetFactura: FacturaCompra | null = facturaIdx !== -1 ? db.facturas_compras[facturaIdx] : null;
 
     let saldoActual = targetFactura
-      ? Number(targetFactura.monto_saldo !== undefined && targetFactura.monto_saldo !== null ? targetFactura.monto_saldo : targetFactura.monto_total)
+      ? Number(
+          (targetFactura as unknown as Record<string, unknown>).saldo_pendiente ??
+            targetFactura.monto_saldo ??
+            targetFactura.monto_total ??
+            0
+        )
       : 0;
 
     // Si no está en Local DB o si Supabase está activo, consultar Supabase
@@ -1783,6 +1794,13 @@ export async function registrarPagoFacturaCompraAction(
           .single();
 
         if (!supaErr && supaFac) {
+          const supaRec = supaFac as unknown as Record<string, unknown>;
+          saldoActual = Number(
+            supaRec.saldo_pendiente ??
+              supaRec.monto_saldo ??
+              supaRec.monto_total ??
+              0
+          );
           if (!targetFactura) {
             targetFactura = {
               id: String(supaFac.id),
@@ -1795,17 +1813,14 @@ export async function registrarPagoFacturaCompraAction(
               fecha_docto: String(supaFac.fecha_docto || ""),
               fecha_vencimiento: String(supaFac.fecha_vencimiento || ""),
               monto_total: Number(supaFac.monto_total || 0),
-              monto_saldo: supaFac.monto_saldo !== undefined && supaFac.monto_saldo !== null ? Number(supaFac.monto_saldo) : Number(supaFac.monto_total || 0),
-              deuda_proveedor: Number(supaFac.deuda_proveedor ?? supaFac.monto_saldo ?? supaFac.monto_total),
+              monto_saldo: saldoActual,
+              deuda_proveedor: Number(supaFac.deuda_proveedor ?? saldoActual),
               estado: (supaFac.estado as EstadoFacturaCompra) || "DEUDA_PROVEEDOR",
               created_at: String(supaFac.created_at || new Date().toISOString()),
             };
+          } else {
+            targetFactura.estado = (supaFac.estado as EstadoFacturaCompra) || targetFactura.estado;
           }
-          saldoActual = Number(
-            supaFac.monto_saldo !== undefined && supaFac.monto_saldo !== null
-              ? supaFac.monto_saldo
-              : supaFac.monto_total
-          );
         }
       } catch (err) {
         console.error("Error al consultar factura en Supabase:", err);
@@ -1816,8 +1831,14 @@ export async function registrarPagoFacturaCompraAction(
       throw new Error("Factura de compra no encontrada.");
     }
 
-    const nuevoSaldo = Math.max(0, Math.round(saldoActual - montoPago));
-    const estaSaldada = nuevoSaldo === 0;
+    const nuevoSaldo = Math.max(0, Math.round(saldoActual - Number(montoPago)));
+    const estaSaldada = nuevoSaldo <= 0;
+    const estadoVigente = ["FACTORING", "CONFIRMING"].includes(
+      String(targetFactura.estado || "").toUpperCase()
+    )
+      ? targetFactura.estado
+      : ("PENDIENTE" as EstadoFacturaCompra);
+    const nuevoEstado: EstadoFacturaCompra = estaSaldada ? "PAGADA" : estadoVigente;
     const nowIso = new Date().toISOString();
     const nombreUsuario =
       auth.session?.nombre || auth.session?.usuario || "Sistema";
@@ -1869,18 +1890,20 @@ export async function registrarPagoFacturaCompraAction(
     // 3. Actualizar la factura en Local DB
     if (facturaIdx !== -1) {
       db.facturas_compras[facturaIdx].monto_saldo = nuevoSaldo;
+      (db.facturas_compras[facturaIdx] as unknown as Record<string, unknown>).saldo_pendiente = nuevoSaldo;
       db.facturas_compras[facturaIdx].deuda_proveedor = estaSaldada ? 0 : nuevoSaldo;
+      db.facturas_compras[facturaIdx].estado = nuevoEstado;
       if (estaSaldada) {
-        db.facturas_compras[facturaIdx].estado = "PAGADA";
         (db.facturas_compras[facturaIdx] as unknown as Record<string, unknown>).modalidad = "PAGADA";
         (db.facturas_compras[facturaIdx] as unknown as Record<string, unknown>).modalidad_pago = "PAGADA";
       }
       db.facturas_compras[facturaIdx].updated_at = nowIso;
     } else {
       targetFactura.monto_saldo = nuevoSaldo;
+      (targetFactura as unknown as Record<string, unknown>).saldo_pendiente = nuevoSaldo;
       targetFactura.deuda_proveedor = estaSaldada ? 0 : nuevoSaldo;
+      targetFactura.estado = nuevoEstado;
       if (estaSaldada) {
-        targetFactura.estado = "PAGADA";
         (targetFactura as unknown as Record<string, unknown>).modalidad = "PAGADA";
         (targetFactura as unknown as Record<string, unknown>).modalidad_pago = "PAGADA";
       }
@@ -1961,14 +1984,18 @@ export async function registrarPagoFacturaCompraAction(
           }
         }
 
-        // 4.2 Actualizar factura en Supabase (sincronizando monto_saldo, saldo_pendiente, estado, modalidad_pago y pagado_por)
+        // 4.2 Actualizar factura en Supabase (sincronizando saldo_pendiente, monto_saldo, estado, modalidad_pago y pagado_por)
         const updateFacturaPayload: Record<string, unknown> = {
-          monto_saldo: nuevoSaldo,
           saldo_pendiente: nuevoSaldo,
+          monto_saldo: nuevoSaldo,
           deuda_proveedor: estaSaldada ? 0 : nuevoSaldo,
-          estado: estaSaldada ? "PAGADA" : targetFactura.estado,
-          modalidad_pago: estaSaldada ? "PAGADA" : (targetFactura as unknown as Record<string, unknown>).modalidad_pago || targetFactura.estado,
-          modalidad: estaSaldada ? "PAGADA" : (targetFactura as unknown as Record<string, unknown>).modalidad || targetFactura.estado,
+          estado: nuevoEstado,
+          modalidad_pago: estaSaldada
+            ? "PAGADA"
+            : (targetFactura as unknown as Record<string, unknown>).modalidad_pago || nuevoEstado,
+          modalidad: estaSaldada
+            ? "PAGADA"
+            : (targetFactura as unknown as Record<string, unknown>).modalidad || nuevoEstado,
           pagado_por: nombreUsuario,
           updated_at: nowIso,
         };
@@ -1979,15 +2006,27 @@ export async function registrarPagoFacturaCompraAction(
           .eq("id", targetFactura.id);
 
         if (updateErr) {
-          // Fallback con columnas estándar mínimas
-          await supabase
+          // Fallback asegurando saldo_pendiente + monto_saldo + estado
+          const { error: fallbackErr } = await supabase
             .from("facturas_compras")
             .update({
+              saldo_pendiente: nuevoSaldo,
               monto_saldo: nuevoSaldo,
-              estado: estaSaldada ? "PAGADA" : targetFactura.estado,
+              estado: nuevoEstado,
               updated_at: nowIso,
             })
             .eq("id", targetFactura.id);
+
+          if (fallbackErr) {
+            await supabase
+              .from("facturas_compras")
+              .update({
+                monto_saldo: nuevoSaldo,
+                estado: nuevoEstado,
+                updated_at: nowIso,
+              })
+              .eq("id", targetFactura.id);
+          }
         }
       } catch (supaErr) {
         console.error("Error al actualizar pago en Supabase:", supaErr);
