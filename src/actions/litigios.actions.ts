@@ -61,6 +61,7 @@ export async function getLitigiosMultasAction(
   filters?: MultasFilterParams
 ): Promise<{ items: LitigioMulta[]; kpis: LitigiosMultasKpis }> {
   let rawItems: LitigioMulta[] = [];
+  let supabaseLoaded = false;
 
   if (isServerSupabaseConfigured()) {
     try {
@@ -72,13 +73,14 @@ export async function getLitigiosMultasAction(
 
       if (!error && data) {
         rawItems = data as LitigioMulta[];
+        supabaseLoaded = true;
       }
     } catch {
       // Fallback local DB
     }
   }
 
-  if (rawItems.length === 0) {
+  if (!supabaseLoaded) {
     const db = readLocalDb();
     rawItems = [...(db.litigios_multas || [])];
   }
@@ -430,6 +432,7 @@ export async function getLitigiosJuiciosAction(
 ): Promise<{ items: LitigioJuicio[]; kpis: LitigiosJuiciosKpis }> {
   let rawItems: LitigioJuicio[] = [];
   let allAudiencias: LitigioAudienciaJuicio[] = [];
+  let supabaseLoaded = false;
 
   if (isServerSupabaseConfigured()) {
     try {
@@ -447,6 +450,7 @@ export async function getLitigiosJuiciosAction(
 
       if (!jErr && jData) {
         rawItems = jData as LitigioJuicio[];
+        supabaseLoaded = true;
       }
       if (aData) {
         allAudiencias = aData as LitigioAudienciaJuicio[];
@@ -456,7 +460,7 @@ export async function getLitigiosJuiciosAction(
     }
   }
 
-  if (rawItems.length === 0) {
+  if (!supabaseLoaded) {
     const db = readLocalDb();
     rawItems = [...(db.litigios_juicios || [])];
     allAudiencias = [...(db.litigios_audiencias_juicio || [])];
@@ -734,6 +738,7 @@ export async function getCalendarioLitigiosAction(
   filters?: CalendarioFilterParams
 ): Promise<{ items: EventoCalendarioLitigio[]; kpis: CalendarioLitigiosKpis }> {
   let events: EventoCalendarioLitigio[] = [];
+  let supabaseLoaded = false;
 
   if (isServerSupabaseConfigured()) {
     try {
@@ -744,7 +749,8 @@ export async function getCalendarioLitigiosAction(
         .select("*")
         .order("fecha_evento", { ascending: true });
 
-      if (!viewError && viewData && viewData.length > 0) {
+      if (!viewError && viewData) {
+        supabaseLoaded = true;
         events = viewData.map((row: any) => ({
           evento_id: row.evento_id || row.id,
           tipo_evento: row.tipo_evento,
@@ -769,7 +775,7 @@ export async function getCalendarioLitigiosAction(
   }
 
   // Si no se obtuvieron eventos desde la vista de Supabase, consolidar localmente
-  if (events.length === 0) {
+  if (!supabaseLoaded) {
     const db = readLocalDb();
     const juicios = db.litigios_juicios || [];
     const audiencias = db.litigios_audiencias_juicio || [];
@@ -938,6 +944,7 @@ export async function getLitigiosComparendosAction(
 ): Promise<{ items: LitigioComparendo[]; kpis: LitigiosComparendosKpis }> {
   let rawComparendos: LitigioComparendo[] = [];
   let rawCuotas: CuotaComparendo[] = [];
+  let supabaseLoaded = false;
 
   if (isServerSupabaseConfigured()) {
     try {
@@ -949,6 +956,7 @@ export async function getLitigiosComparendosAction(
 
       if (!compErr && compData) {
         rawComparendos = compData as LitigioComparendo[];
+        supabaseLoaded = true;
 
         const { data: cuotasData, error: cuotasErr } = await supabase
           .from("litigios_cuotas_comparendo")
@@ -964,7 +972,7 @@ export async function getLitigiosComparendosAction(
     }
   }
 
-  if (rawComparendos.length === 0) {
+  if (!supabaseLoaded) {
     const db = readLocalDb();
     rawComparendos = structuredClone(db.litigios_comparendos || []);
     rawCuotas = structuredClone(db.litigios_cuotas_comparendo || []);
