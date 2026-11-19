@@ -148,13 +148,25 @@ export async function getFacturasComprasAction(
           condicion_pago: (r.condicion_pago as CondicionPago) || (r.deuda_proveedor === 0 ? "CONTADO" : "CREDITO"),
           monto_total: Number(r.monto_total || 0),
           saldo_pendiente:
-            r.condicion_pago === "CONTADO" || estadoFinal === "COMPRA_TC"
+            r.condicion_pago === "CONTADO" || estadoFinal === "COMPRA_TC" || estadoFinal === "PAGADA"
               ? 0
-              : Number(r.saldo_pendiente ?? r.monto_saldo ?? r.monto_total ?? 0),
+              : Number(
+                  r.saldo_pendiente !== null &&
+                    r.saldo_pendiente !== undefined &&
+                    !(Number(r.saldo_pendiente) === 0 && Number(r.monto_saldo ?? r.monto_total ?? 0) > 0)
+                    ? r.saldo_pendiente
+                    : (r.monto_saldo ?? r.monto_total ?? 0)
+                ),
           monto_saldo:
-            r.condicion_pago === "CONTADO" || estadoFinal === "COMPRA_TC"
+            r.condicion_pago === "CONTADO" || estadoFinal === "COMPRA_TC" || estadoFinal === "PAGADA"
               ? 0
-              : Number(r.saldo_pendiente ?? r.monto_saldo ?? r.monto_total ?? 0),
+              : Number(
+                  r.saldo_pendiente !== null &&
+                    r.saldo_pendiente !== undefined &&
+                    !(Number(r.saldo_pendiente) === 0 && Number(r.monto_saldo ?? r.monto_total ?? 0) > 0)
+                    ? r.saldo_pendiente
+                    : (r.monto_saldo ?? r.monto_total ?? 0)
+                ),
           deuda_proveedor:
             r.condicion_pago === "CONTADO" || estadoFinal === "COMPRA_TC"
               ? 0
@@ -355,11 +367,15 @@ export async function getFacturasComprasAction(
         }
       } else {
         const fcRec = fc as unknown as Record<string, unknown>;
+        const sp = fcRec.saldo_pendiente;
+        const ms = fc.monto_saldo;
         const rawSaldoDb =
-          fcRec.saldo_pendiente !== null && fcRec.saldo_pendiente !== undefined
-            ? Number(fcRec.saldo_pendiente)
-            : fc.monto_saldo !== undefined && fc.monto_saldo !== null
-            ? Number(fc.monto_saldo)
+          sp !== null &&
+          sp !== undefined &&
+          !(Number(sp) === 0 && Number(ms ?? fc.monto_total ?? 0) > 0)
+            ? Number(sp)
+            : ms !== undefined && ms !== null
+            ? Number(ms)
             : fc.monto_total;
         const saldoCalculado = Math.max(0, Math.min(rawSaldoDb, fc.monto_total - totalNeteado));
         fc.monto_saldo = saldoCalculado;
@@ -589,7 +605,8 @@ export async function importarComprasCsvAction(
           fecha_acuse_recibo: r.fecha_acuse_recibo,
           condicion_pago: r.condicion_pago,
           monto_total: r.monto_total,
-          monto_saldo: r.monto_saldo,
+          monto_saldo: r.tipo_doc === 61 || r.monto_total <= 0 ? 0 : r.monto_saldo,
+          saldo_pendiente: r.tipo_doc === 61 || r.monto_total <= 0 ? 0 : r.monto_saldo,
           deuda_proveedor: r.deuda_proveedor,
           estado: r.estado,
           periodo_libro: r.periodo_libro ?? null,
@@ -1809,11 +1826,15 @@ export async function registrarPagoFacturaCompraAction(
 
         if (!supaErr && supaFac) {
           const supaRec = supaFac as unknown as Record<string, unknown>;
+          const sp = supaRec.saldo_pendiente;
+          const ms = supaRec.monto_saldo;
+          const useFallback =
+            String(supaFac.estado || "").toUpperCase() !== "PAGADA" &&
+            (sp === null ||
+              sp === undefined ||
+              (Number(sp) === 0 && Number(ms ?? supaRec.monto_total ?? 0) > 0));
           saldoActual = Number(
-            supaRec.saldo_pendiente ??
-              supaRec.monto_saldo ??
-              supaRec.monto_total ??
-              0
+            useFallback ? (ms ?? supaRec.monto_total ?? 0) : (sp ?? 0)
           );
           if (!targetFactura) {
             targetFactura = {

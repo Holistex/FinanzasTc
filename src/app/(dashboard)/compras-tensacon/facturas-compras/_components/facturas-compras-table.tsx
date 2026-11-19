@@ -228,10 +228,14 @@ export function FacturasComprasTable({
 
   const getSaldoPendienteFactura = (f: FacturaCompra): number => {
     const rec = f as unknown as Record<string, unknown>;
-    const raw =
-      rec.saldo_pendiente !== null && rec.saldo_pendiente !== undefined
-        ? rec.saldo_pendiente
-        : (f.monto_saldo ?? f.monto_total);
+    const sp = rec.saldo_pendiente;
+    const ms = f.monto_saldo;
+    const useFallback =
+      f.estado !== "PAGADA" &&
+      (sp === null ||
+        sp === undefined ||
+        (Number(sp) === 0 && Number(ms ?? f.monto_total ?? 0) > 0));
+    const raw = useFallback ? (ms ?? f.monto_total) : sp;
     return Math.max(0, Number(raw || 0));
   };
 
