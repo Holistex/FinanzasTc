@@ -31,7 +31,63 @@ const MESES_OPCIONES = [
   { value: "12", label: "Diciembre" },
 ];
 
-const ANIOS_OPCIONES = ["2025", "2026", "2027"];
+const ANIOS_OPCIONES = ["2020", "2021", "2022", "2023", "2024", "2025", "2026", "2027"];
+
+const MES_ALIAS_MAP: Array<{ pattern: RegExp; value: string }> = [
+  { pattern: /\b(enero|ene)\b/i, value: "01" },
+  { pattern: /\b(febrero|feb)\b/i, value: "02" },
+  { pattern: /\b(marzo|mar)\b/i, value: "03" },
+  { pattern: /\b(abril|abr)\b/i, value: "04" },
+  { pattern: /\b(mayo|may)\b/i, value: "05" },
+  { pattern: /\b(junio|jun)\b/i, value: "06" },
+  { pattern: /\b(julio|jul)\b/i, value: "07" },
+  { pattern: /\b(agosto|ago)\b/i, value: "08" },
+  { pattern: /\b(septiembre|sept|sep|set)\b/i, value: "09" },
+  { pattern: /\b(octubre|oct)\b/i, value: "10" },
+  { pattern: /\b(noviembre|nov)\b/i, value: "11" },
+  { pattern: /\b(diciembre|dic)\b/i, value: "12" },
+];
+
+/**
+ * Autodetecta año (2020–2027) y mes (01–12) desde nombres oficiales SII (_202209.csv)
+ * o nombres manuales (sept 2022.csv, 09-2022.csv, 2022-09.csv, etc.).
+ */
+function detectPeriodoFromFilename(
+  filename: string
+): { anio: string; mes: string } | null {
+  const baseName = filename.replace(/\.csv$/i, "");
+
+  // 1. Formato oficial SII o compacto: _YYYYMM o YYYYMM
+  const compactMatch = baseName.match(/(?:^|[^0-9])(202[0-7])(0[1-9]|1[0-2])(?:[^0-9]|$)/);
+  if (compactMatch) {
+    return { anio: compactMatch[1], mes: compactMatch[2] };
+  }
+
+  // 2. Formato YYYY-MM / YYYY_MM / YYYY MM
+  const ymdMatch = baseName.match(/(?:^|[^0-9])(202[0-7])[-_\s.](0[1-9]|1[0-2])(?:[^0-9]|$)/);
+  if (ymdMatch) {
+    return { anio: ymdMatch[1], mes: ymdMatch[2] };
+  }
+
+  // 3. Formato MM-YYYY / MM_YYYY / MM YYYY (ej. 09-2022.csv)
+  const mdyMatch = baseName.match(/(?:^|[^0-9])(0[1-9]|1[0-2])[-_\s.](202[0-7])(?:[^0-9]|$)/);
+  if (mdyMatch) {
+    return { anio: mdyMatch[2], mes: mdyMatch[1] };
+  }
+
+  // 4. Nombre de mes en español + año (ej. sept 2022.csv, septiembre_2022.csv)
+  const normalizedName = baseName.replace(/[_-]+/g, " ");
+  const yearMatch = normalizedName.match(/\b(202[0-7])\b/);
+  if (yearMatch) {
+    for (const entry of MES_ALIAS_MAP) {
+      if (entry.pattern.test(normalizedName)) {
+        return { anio: yearMatch[1], mes: entry.value };
+      }
+    }
+  }
+
+  return null;
+}
 
 interface CsvImportComprasModalProps {
   isOpen: boolean;
@@ -84,16 +140,12 @@ export function CsvImportComprasModal({
     setErrorMessage(null);
     setSummary(null);
 
-    // Autodetección inteligente de _YYYYMM en el nombre del archivo (ej. RCV_COMPRA_REGISTRO_99510510-1_202609.csv)
-    const periodMatch = file.name.match(/_(\d{4})(0[1-9]|1[0-2])(?:[._-]|$)/);
-    if (periodMatch) {
-      const detectedAnio = periodMatch[1];
-      const detectedMes = periodMatch[2];
-      if (ANIOS_OPCIONES.includes(detectedAnio)) {
-        setSelectedAnio(detectedAnio);
-      }
-      setSelectedMes(detectedMes);
-      setAutoDetectedPeriodo(`${detectedAnio}-${detectedMes}`);
+    // Autodetección inteligente de período desde el nombre del archivo
+    const detected = detectPeriodoFromFilename(file.name);
+    if (detected && ANIOS_OPCIONES.includes(detected.anio)) {
+      setSelectedAnio(detected.anio);
+      setSelectedMes(detected.mes);
+      setAutoDetectedPeriodo(`${detected.anio}-${detected.mes}`);
     } else {
       setAutoDetectedPeriodo(null);
     }
