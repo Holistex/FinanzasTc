@@ -142,7 +142,7 @@ export function CompromisosTable({
 
         // 2. Filtro de modalidad
         if (selectedModalidad !== "TODAS") {
-          if (item.modalidad !== selectedModalidad) return false;
+          if ((item.modalidad?.toUpperCase() ?? "") !== selectedModalidad) return false;
         }
 
         // 3. Búsqueda general
@@ -174,9 +174,10 @@ export function CompromisosTable({
 
     filteredData.forEach((item) => {
       total += item.monto;
-      if (item.modalidad === "CHEQUE") cheques += item.monto;
-      else if (item.modalidad === "FACTORING") factoring += item.monto;
-      else if (item.modalidad === "CONFIRMING") confirming += item.monto;
+      const mod = item.modalidad?.toUpperCase() ?? "";
+      if (mod === "CHEQUE") cheques += item.monto;
+      else if (mod === "FACTORING") factoring += item.monto;
+      else if (mod === "CONFIRMING") confirming += item.monto;
     });
 
     return {
@@ -228,7 +229,8 @@ export function CompromisosTable({
   };
 
   const getModalidadBadge = (modalidad: ModalidadCompromiso) => {
-    switch (modalidad) {
+    const mod = modalidad?.toUpperCase() ?? "";
+    switch (mod) {
       case "CHEQUE":
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
@@ -255,6 +257,12 @@ export function CompromisosTable({
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-50 text-[#E05A10] border border-orange-200">
             <Landmark className="h-3 w-3 text-[#E05A10]" />
             ACUERDO LITIGIO (TRANSF.)
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+            {mod || "COMPROMISO"}
           </span>
         );
     }

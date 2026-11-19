@@ -539,7 +539,7 @@ export async function getCompromisosComprasAction(params?: {
       if (!error && viewData && viewData.length > 0) {
         rawCompromisos = (viewData as unknown as Array<Record<string, unknown>>).map((r) => ({
           id: String(r.id),
-          modalidad: r.modalidad as ModalidadCompromiso,
+          modalidad: String(r.modalidad || "").trim().toUpperCase() as ModalidadCompromiso,
           rut_proveedor: String(r.rut_proveedor || ""),
           razon_social: String(r.razon_social || ""),
           referencia_doc: String(r.referencia_doc || ""),
@@ -891,13 +891,14 @@ export async function getCompromisosComprasAction(params?: {
 
   for (const c of filtered) {
     granTotalSemana += c.monto;
-    if (c.modalidad === "CHEQUE") {
+    const mod = (c.modalidad || "").toUpperCase();
+    if (mod === "CHEQUE") {
       totalCheques += c.monto;
       cantidadCheques++;
-    } else if (c.modalidad === "FACTORING") {
+    } else if (mod === "FACTORING") {
       totalFactoring += c.monto;
       cantidadFactoring++;
-    } else if (c.modalidad === "CONFIRMING") {
+    } else if (mod === "CONFIRMING") {
       totalConfirming += c.monto;
       cantidadConfirming++;
     }
