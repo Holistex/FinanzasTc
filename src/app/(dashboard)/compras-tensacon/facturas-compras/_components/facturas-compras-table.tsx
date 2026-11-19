@@ -268,6 +268,21 @@ export function FacturasComprasTable({
     });
   }, [data]);
 
+  const totalEmpRelacionada = useMemo(
+    () =>
+      facturasEmpRelacionada.reduce(
+        (acc, f) =>
+          acc +
+          Number(
+            f.monto_saldo !== undefined && f.monto_saldo !== null
+              ? f.monto_saldo
+              : f.monto_total
+          ),
+        0
+      ),
+    [facturasEmpRelacionada]
+  );
+
   // 2. Facturas con Cheques: [f.estado, f.modalidad_pago, f.modalidad].some(v => v?.toUpperCase() === 'CHEQUE') o vinculadas
   const facturasCheques = useMemo(() => {
     return data.filter((f) => {
@@ -440,104 +455,155 @@ export function FacturasComprasTable({
 
   return (
     <div className="space-y-6">
-      {/* 1. KPIs Superiores (Con navegación directa a pestañas) */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {/* KPI 1: Total Compras */}
-        <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm hover:shadow-md transition-all">
-          <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider">Total Compras</span>
-            <FileSpreadsheet className="h-4 w-4 text-[#E05A10]" />
+      {/* 1. KPIs Superiores (2 Tarjetas Grandes + Cuadrícula 2x2 Compacta) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+        {/* A. Mitad Izquierda: 2 Tarjetas Principales de Altura Completa */}
+        <div className="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* KPI 1: Total Compras */}
+          <div className="h-full flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm hover:shadow-md transition-all">
+            <div className="flex items-center justify-between text-slate-500 mb-2">
+              <span className="text-xs font-semibold uppercase tracking-wider">Total Compras</span>
+              <FileSpreadsheet className="h-4 w-4 text-[#E05A10]" />
+            </div>
+            <div className="text-2xl font-bold text-slate-900 tracking-tight font-mono">
+              {formatCLP(kpis.totalCompras)}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-2 flex items-center justify-between">
+              <span>{kpis.cantidadTotal} facturas DTE 33/34</span>
+              <span className="font-mono text-slate-400">RCV SII</span>
+            </div>
           </div>
-          <div className="text-xl font-bold text-slate-900 tracking-tight font-mono">
-            {formatCLP(kpis.totalCompras)}
-          </div>
-          <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
-            <span>{kpis.cantidadTotal} facturas DTE 33/34</span>
-            <span className="font-mono text-slate-400">RCV SII</span>
+
+          {/* KPI 2: Deuda Proveedor */}
+          <div
+            onClick={() => setActiveTab("CARTERA")}
+            className={cn(
+              "h-full flex flex-col justify-between rounded-xl border border-blue-200/80 bg-blue-50/40 p-4 shadow-sm hover:shadow-md transition-all cursor-pointer",
+              activeTab === "CARTERA" && "ring-2 ring-blue-500/80 bg-blue-50/80 shadow-md"
+            )}
+          >
+            <div className="flex items-center justify-between text-blue-700 mb-2">
+              <span className="text-xs font-semibold uppercase tracking-wider">Deuda Proveedor</span>
+              <Building2 className="h-4 w-4 text-blue-600" />
+            </div>
+            <div className="text-2xl font-bold text-blue-900 tracking-tight font-mono">
+              {formatCLP(kpis.totalDeudaProveedor)}
+            </div>
+            <div className="text-[11px] text-blue-700/80 mt-2 flex items-center justify-between">
+              <span>{kpis.cantidadDeudaProveedor} docs pendientes</span>
+              <span className="font-medium underline decoration-blue-300">Ver Cartera</span>
+            </div>
           </div>
         </div>
 
-        {/* KPI 2: Deuda Proveedor */}
-        <div
-          onClick={() => setActiveTab("CARTERA")}
-          className={cn(
-            "rounded-xl border border-blue-100 bg-blue-50/40 p-4 shadow-sm hover:shadow-md transition-all cursor-pointer",
-            activeTab === "CARTERA" && "ring-2 ring-blue-500/80 bg-blue-50/80 shadow-md"
-          )}
-        >
-          <div className="flex items-center justify-between text-blue-700 mb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider">Deuda Proveedor</span>
-            <Building2 className="h-4 w-4 text-blue-600" />
+        {/* B. Mitad Derecha: Cuadrícula 2x2 Compacta */}
+        <div className="lg:col-span-6 grid grid-cols-2 grid-rows-2 gap-2.5">
+          {/* Celda 1: EMP. RELACIONADA */}
+          <div
+            onClick={() => setActiveTab("EMP_RELACIONADA")}
+            className={cn(
+              "px-3.5 py-2.5 rounded-xl border border-slate-200/90 bg-white shadow-2xs flex flex-col justify-between hover:shadow-sm transition-all cursor-pointer",
+              activeTab === "EMP_RELACIONADA" && "ring-2 ring-indigo-500/80 bg-indigo-50/30"
+            )}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                EMP. RELACIONADA
+              </span>
+              <Building2 className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+            </div>
+            <div className="text-base sm:text-lg font-black text-slate-900 font-mono leading-tight my-0.5">
+              {formatCLP(totalEmpRelacionada)}
+            </div>
+            <div className="flex items-center justify-between gap-1 text-[11px]">
+              <span className="text-slate-400 truncate">
+                {facturasEmpRelacionada.length} docs internos
+              </span>
+              <span className="font-semibold text-indigo-600 hover:underline shrink-0">
+                Ver Relacionadas
+              </span>
+            </div>
           </div>
-          <div className="text-xl font-bold text-blue-900 tracking-tight font-mono">
-            {formatCLP(kpis.totalDeudaProveedor)}
-          </div>
-          <div className="text-[11px] text-blue-700/80 mt-1 flex items-center justify-between">
-            <span>{kpis.cantidadDeudaProveedor} docs pendientes</span>
-            <span className="font-medium underline decoration-blue-300">Ver Cartera</span>
-          </div>
-        </div>
 
-        {/* KPI 3: Factoring Proveedores */}
-        <div
-          onClick={() => setActiveTab("FACTORING")}
-          className={cn(
-            "rounded-xl border border-purple-100 bg-purple-50/40 p-4 shadow-sm hover:shadow-md transition-all cursor-pointer",
-            activeTab === "FACTORING" && "ring-2 ring-purple-500/80 bg-purple-50/80 shadow-md"
-          )}
-        >
-          <div className="flex items-center justify-between text-purple-700 mb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider">En Factoring</span>
-            <Layers className="h-4 w-4 text-purple-600" />
+          {/* Celda 2: EN FACTORING */}
+          <div
+            onClick={() => setActiveTab("FACTORING")}
+            className={cn(
+              "px-3.5 py-2.5 rounded-xl border border-purple-200/80 bg-white shadow-2xs flex flex-col justify-between hover:shadow-sm transition-all cursor-pointer",
+              activeTab === "FACTORING" && "ring-2 ring-purple-500/80 bg-purple-50/40"
+            )}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                EN FACTORING
+              </span>
+              <Layers className="h-3.5 w-3.5 text-purple-600 shrink-0" />
+            </div>
+            <div className="text-base sm:text-lg font-black text-purple-700 font-mono leading-tight my-0.5">
+              {formatCLP(kpis.totalFactoring)}
+            </div>
+            <div className="flex items-center justify-between gap-1 text-[11px]">
+              <span className="text-slate-400 truncate">
+                {kpis.cantidadFactoring} docs cedidos
+              </span>
+              <span className="font-semibold text-purple-600 hover:underline shrink-0">
+                Ver Factoring
+              </span>
+            </div>
           </div>
-          <div className="text-xl font-bold text-purple-900 tracking-tight font-mono">
-            {formatCLP(kpis.totalFactoring)}
-          </div>
-          <div className="text-[11px] text-purple-700/80 mt-1 flex items-center justify-between">
-            <span>{kpis.cantidadFactoring} docs cedidos</span>
-            <span className="font-medium underline decoration-purple-300">Ver Factoring</span>
-          </div>
-        </div>
 
-        {/* KPI 4: Confirming */}
-        <div
-          onClick={() => setActiveTab("CONFIRMING")}
-          className={cn(
-            "rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 shadow-sm hover:shadow-md transition-all cursor-pointer",
-            activeTab === "CONFIRMING" && "ring-2 ring-emerald-500/80 bg-emerald-50/80 shadow-md"
-          )}
-        >
-          <div className="flex items-center justify-between text-emerald-700 mb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider">En Confirming</span>
-            <CreditCard className="h-4 w-4 text-emerald-600" />
+          {/* Celda 3: EN CONFIRMING */}
+          <div
+            onClick={() => setActiveTab("CONFIRMING")}
+            className={cn(
+              "px-3.5 py-2.5 rounded-xl border border-emerald-200/80 bg-white shadow-2xs flex flex-col justify-between hover:shadow-sm transition-all cursor-pointer",
+              activeTab === "CONFIRMING" && "ring-2 ring-emerald-500/80 bg-emerald-50/40"
+            )}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                EN CONFIRMING
+              </span>
+              <CreditCard className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+            </div>
+            <div className="text-base sm:text-lg font-black text-emerald-700 font-mono leading-tight my-0.5">
+              {formatCLP(kpis.totalConfirming)}
+            </div>
+            <div className="flex items-center justify-between gap-1 text-[11px]">
+              <span className="text-slate-400 truncate">
+                {kpis.cantidadConfirming} docs programados
+              </span>
+              <span className="font-semibold text-emerald-600 hover:underline shrink-0">
+                Ver Confirming
+              </span>
+            </div>
           </div>
-          <div className="text-xl font-bold text-emerald-900 tracking-tight font-mono">
-            {formatCLP(kpis.totalConfirming)}
-          </div>
-          <div className="text-[11px] text-emerald-700/80 mt-1 flex items-center justify-between">
-            <span>{kpis.cantidadConfirming} docs programados</span>
-            <span className="font-medium underline decoration-emerald-300">Ver Confirming</span>
-          </div>
-        </div>
 
-        {/* KPI 5: Cheques */}
-        <div
-          onClick={() => setActiveTab("CHEQUES")}
-          className={cn(
-            "rounded-xl border border-amber-100 bg-amber-50/40 p-4 shadow-sm hover:shadow-md transition-all cursor-pointer",
-            activeTab === "CHEQUES" && "ring-2 ring-amber-500/80 bg-amber-50/80 shadow-md"
-          )}
-        >
-          <div className="flex items-center justify-between text-amber-700 mb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider">Con Cheque</span>
-            <Banknote className="h-4 w-4 text-amber-600" />
-          </div>
-          <div className="text-xl font-bold text-amber-900 tracking-tight font-mono">
-            {formatCLP(kpis.totalCheque)}
-          </div>
-          <div className="text-[11px] text-amber-700/80 mt-1 flex items-center justify-between">
-            <span>{kpis.cantidadCheque} cheques emitidos</span>
-            <span className="font-medium underline decoration-amber-300">Ver Cheques</span>
+          {/* Celda 4: CON CHEQUE */}
+          <div
+            onClick={() => setActiveTab("CHEQUES")}
+            className={cn(
+              "px-3.5 py-2.5 rounded-xl border border-amber-200/80 bg-white shadow-2xs flex flex-col justify-between hover:shadow-sm transition-all cursor-pointer",
+              activeTab === "CHEQUES" && "ring-2 ring-amber-500/80 bg-amber-50/40"
+            )}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                CON CHEQUE
+              </span>
+              <Banknote className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+            </div>
+            <div className="text-base sm:text-lg font-black text-amber-700 font-mono leading-tight my-0.5">
+              {formatCLP(kpis.totalCheque)}
+            </div>
+            <div className="flex items-center justify-between gap-1 text-[11px]">
+              <span className="text-slate-400 truncate">
+                {kpis.cantidadCheque} cheques emitidos
+              </span>
+              <span className="font-semibold text-amber-600 hover:underline shrink-0">
+                Ver Cheques
+              </span>
+            </div>
           </div>
         </div>
       </div>
