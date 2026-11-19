@@ -41,14 +41,15 @@ export function RegistrarPagoCompraModal({
   onSuccess,
   factura,
 }: RegistrarPagoCompraModalProps) {
-  // Saldo pendiente actual
+  // Saldo pendiente actual (prioriza saldo_pendiente sobre monto_saldo / monto_total)
   const saldoActual = factura
     ? Math.max(
         0,
         Number(
-          factura.monto_saldo !== undefined && factura.monto_saldo !== null
-            ? factura.monto_saldo
-            : factura.monto_total
+          (factura as unknown as Record<string, unknown>).saldo_pendiente !== null &&
+            (factura as unknown as Record<string, unknown>).saldo_pendiente !== undefined
+            ? (factura as unknown as Record<string, unknown>).saldo_pendiente
+            : (factura.monto_saldo ?? factura.monto_total)
         )
       )
     : 0;
@@ -120,6 +121,7 @@ export function RegistrarPagoCompraModal({
         bancoCuenta: bancoCuenta.trim() || null,
         numeroComprobante: numeroComprobante.trim() || null,
         observacion: observacion.trim() || null,
+        esPagoParcial: esParcial,
       });
 
       if (!res.success) {

@@ -147,6 +147,10 @@ export async function getFacturasComprasAction(
           fecha_acuse_recibo: r.fecha_acuse_recibo ? String(r.fecha_acuse_recibo) : null,
           condicion_pago: (r.condicion_pago as CondicionPago) || (r.deuda_proveedor === 0 ? "CONTADO" : "CREDITO"),
           monto_total: Number(r.monto_total || 0),
+          saldo_pendiente:
+            r.condicion_pago === "CONTADO" || estadoFinal === "COMPRA_TC"
+              ? 0
+              : Number(r.saldo_pendiente ?? r.monto_saldo ?? r.monto_total ?? 0),
           monto_saldo:
             r.condicion_pago === "CONTADO" || estadoFinal === "COMPRA_TC"
               ? 0
@@ -350,8 +354,17 @@ export async function getFacturasComprasAction(
           fc.estado = "PAGADA";
         }
       } else {
-        const saldoCalculado = Math.max(0, fc.monto_total - totalNeteado);
+        const fcRec = fc as unknown as Record<string, unknown>;
+        const rawSaldoDb =
+          fcRec.saldo_pendiente !== null && fcRec.saldo_pendiente !== undefined
+            ? Number(fcRec.saldo_pendiente)
+            : fc.monto_saldo !== undefined && fc.monto_saldo !== null
+            ? Number(fc.monto_saldo)
+            : fc.monto_total;
+        const saldoCalculado = Math.max(0, Math.min(rawSaldoDb, fc.monto_total - totalNeteado));
         fc.monto_saldo = saldoCalculado;
+        (fc as unknown as Record<string, unknown>).saldo_pendiente = saldoCalculado;
+        fc.deuda_proveedor = saldoCalculado;
 
         if (saldoCalculado === 0 && totalNeteado > 0) {
           fc.estado = "NETEO_NC";
@@ -1728,6 +1741,7 @@ export interface RegistrarPagoFacturaCompraParams {
   bancoCuenta?: string | null;
   numeroComprobante?: string | null;
   observacion?: string | null;
+  esPagoParcial?: boolean;
 }
 
 export async function registrarPagoFacturaCompraAction(

@@ -227,10 +227,11 @@ export function FacturasComprasTable({
   };
 
   const getSaldoPendienteFactura = (f: FacturaCompra): number => {
+    const rec = f as unknown as Record<string, unknown>;
     const raw =
-      (f as unknown as Record<string, unknown>).saldo_pendiente ??
-      f.monto_saldo ??
-      f.monto_total;
+      rec.saldo_pendiente !== null && rec.saldo_pendiente !== undefined
+        ? rec.saldo_pendiente
+        : (f.monto_saldo ?? f.monto_total);
     return Math.max(0, Number(raw || 0));
   };
 
@@ -984,7 +985,8 @@ export function FacturasComprasTable({
                         {/* 5. Modalidad (Compacta) */}
                         <td className="py-2.5 px-3 whitespace-nowrap">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            {factura.estado === "DEUDA_PROVEEDOR" && (
+                            {(factura.estado === "DEUDA_PROVEEDOR" ||
+                              (factura.estado as string) === "PENDIENTE") && (
                               <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                                 <span className="h-1.5 w-1.5 rounded-full bg-blue-500"></span>
                                 Directo
@@ -1117,11 +1119,13 @@ export function FacturasComprasTable({
                           <div className="font-bold text-xs tracking-tight text-slate-900 font-mono">
                             {formatCLP(saldo)}
                           </div>
-                          {(tieneAjusteParcial && factura.estado !== "CHEQUE" && factura.estado !== "COMPRA_TC") && (
-                            <div className="text-[10px] text-slate-400 line-through font-mono">
-                              {formatCLP(factura.monto_total)}
-                            </div>
-                          )}
+                          {saldo < Number(factura.monto_total) &&
+                            factura.estado !== "CHEQUE" &&
+                            factura.estado !== "COMPRA_TC" && (
+                              <div className="text-[10px] text-slate-400 font-mono">
+                                Total orig: {formatCLP(factura.monto_total)}
+                              </div>
+                            )}
                         </td>
 
                         {/* 7. Acciones */}
