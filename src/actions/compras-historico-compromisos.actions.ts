@@ -1,9 +1,11 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import {
   createServerSupabaseClient,
   isServerSupabaseConfigured,
 } from "@/lib/supabase/server";
+import { assertIsAdmin } from "@/lib/auth/session";
 import { readLocalDb, writeLocalDb } from "@/lib/supabase/local-fallback-db";
 import {
   CompromisoCompra,
@@ -448,6 +450,224 @@ export async function getHistoricoPagosComprasAction(params?: {
       cantidadConfirming,
     },
   };
+}
+
+export interface ReversarPagoCompraParams {
+  pagoId: string;
+  facturaId?: string | null;
+  montoPagado: number;
+  folio?: number;
+  rutProveedor?: string;
+  modalidadPago?: string;
+}
+
+/**
+ * Reversa un pago o abono registrado en Histórico de Pagos (solo perfil ADMINISTRADOR),
+ * eliminando el registro de pago y devolviendo el monto al saldo pendiente de la factura.
+ */
+export async function reversarPagoCompraAction(
+  params: ReversarPagoCompraParams
+): Promise<{
+  success: boolean;
+  nuevoSaldo?: number;
+  error?: string;
+}> {
+  const auth = await assertIsAdmin();
+  if (!auth.authorized) {
+    return { success: false, error: auth.error };
+  }
+
+  try {
+    const { pagoId, facturaId, montoPagado, folio, rutProveedor, modalidadPago } = params;
+    if (!pagoId) {
+      return { success: false, error: "ID de pago inválido." };
+    }
+    const montoReversa = Math.max(0, Math.round(Number(montoPagado || 0)));
+    if (montoReversa <= 0) {
+      return { success: false, error: "El monto a reversar debe ser mayor a $0." };
+    }
+
+    const nowIso = new Date().toISOString();
+    const resolvedFacturaId =
+      facturaId && facturaId.trim() !== ""
+        ? facturaId.trim()
+        : pagoId.startsWith("pago-derivado-")
+        ? pagoId.replace("pago-derivado-", "")
+        : null;
+
+    let nuevoSaldoFinal: number | undefined;
+
+    // 1. Actualizar Local DB
+    const db = readLocalDb();
+    if (!db.pagos_compras) db.pagos_compras = [];
+    if (!db.facturas_compras) db.facturas_compras = [];
+
+    db.pagos_compras = db.pagos_compras.filter((p) => p.id !== pagoId);
+
+    const localFacIdx = db.facturas_compras.findIndex((f) => {
+      if (resolvedFacturaId && f.id === resolvedFacturaId) return true;
+      if (folio && rutProveedor) {
+        return (
+          Number(f.folio) === Number(folio) &&
+          normalizeRut(f.rut_proveedor) === normalizeRut(rutProveedor)
+        );
+      }
+      return false;
+    });
+
+    if (localFacIdx !== -1) {
+      const fac = db.facturas_compras[localFacIdx];
+      const facRec = fac as unknown as Record<string, unknown>;
+      const estadoUpper = String(fac.estado || "").toUpperCase();
+      const saldoActual = ["PAGADA", "COMPRA_TC", "NETEO_NC"].includes(estadoUpper)
+        ? 0
+        : Number(facRec.saldo_pendiente ?? fac.monto_saldo ?? 0);
+      const nuevoSaldo = Math.min(
+        Number(fac.monto_total || 0),
+        Math.max(0, Math.round(saldoActual + montoReversa))
+      );
+      const nuevoEstado = ["FACTORING", "CONFIRMING"].includes(estadoUpper)
+        ? fac.estado
+        : "DEUDA_PROVEEDOR";
+
+      fac.monto_saldo = nuevoSaldo;
+      facRec.saldo_pendiente = nuevoSaldo;
+      fac.deuda_proveedor = nuevoSaldo;
+      fac.estado = nuevoEstado;
+      facRec.modalidad_pago = nuevoEstado;
+      facRec.modalidad = nuevoEstado;
+      fac.updated_at = nowIso;
+      nuevoSaldoFinal = nuevoSaldo;
+
+      if (modalidadPago?.toUpperCase() === "CHEQUE" && db.cheques_compras) {
+        db.cheques_compras.forEach((c) => {
+          if (c.factura_id === fac.id && c.estado === "COBRADO") {
+            c.estado = "EMITIDO";
+            c.updated_at = nowIso;
+          }
+        });
+      }
+    }
+    writeLocalDb(db);
+
+    // 2. Actualizar Supabase si está configurado
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+
+      // 2.1 Eliminar registro de pago en pagos_facturas_compras y pagos_compras (si no es derivado)
+      if (!pagoId.startsWith("pago-derivado-")) {
+        const [{ error: delFacErr }, { error: delCompErr }] = await Promise.all([
+          supabase.from("pagos_facturas_compras").delete().eq("id", pagoId),
+          supabase.from("pagos_compras").delete().eq("id", pagoId),
+        ]);
+        if (delFacErr) {
+          console.warn("[ReversaPago] pagos_facturas_compras delete:", delFacErr.message);
+        }
+        if (delCompErr) {
+          console.warn("[ReversaPago] pagos_compras delete:", delCompErr.message);
+        }
+      }
+
+      // 2.2 Localizar factura en Supabase y devolver monto al saldo pendiente
+      let supaFac: Record<string, unknown> | null = null;
+      if (resolvedFacturaId && !resolvedFacturaId.startsWith("fc-local-")) {
+        const { data } = await supabase
+          .from("facturas_compras")
+          .select("*")
+          .eq("id", resolvedFacturaId)
+          .maybeSingle();
+        if (data) supaFac = data as unknown as Record<string, unknown>;
+      }
+
+      if (!supaFac && folio) {
+        const { data: candidates } = await supabase
+          .from("facturas_compras")
+          .select("*")
+          .eq("folio", folio);
+        if (candidates && candidates.length > 0) {
+          const match = (candidates as Array<Record<string, unknown>>).find(
+            (c) =>
+              !rutProveedor ||
+              normalizeRut(String(c.rut_proveedor || "")) === normalizeRut(rutProveedor)
+          );
+          if (match) supaFac = match;
+        }
+      }
+
+      if (supaFac) {
+        const montoTotal = Number(supaFac.monto_total || 0);
+        const estadoUpper = String(supaFac.estado || "").toUpperCase();
+        const saldoActual = ["PAGADA", "COMPRA_TC", "NETEO_NC"].includes(estadoUpper)
+          ? 0
+          : Number(supaFac.saldo_pendiente ?? supaFac.monto_saldo ?? 0);
+        const nuevoSaldo = Math.min(
+          montoTotal,
+          Math.max(0, Math.round(saldoActual + montoReversa))
+        );
+        const nuevoEstado = ["FACTORING", "CONFIRMING"].includes(estadoUpper)
+          ? String(supaFac.estado)
+          : "DEUDA_PROVEEDOR";
+
+        nuevoSaldoFinal = nuevoSaldo;
+
+        const { error: updErr } = await supabase
+          .from("facturas_compras")
+          .update({
+            saldo_pendiente: nuevoSaldo,
+            monto_saldo: nuevoSaldo,
+            deuda_proveedor: nuevoSaldo,
+            estado: nuevoEstado,
+            modalidad_pago: nuevoEstado,
+            modalidad: nuevoEstado,
+            updated_at: nowIso,
+          })
+          .eq("id", String(supaFac.id));
+
+        if (updErr) {
+          const { error: fallbackErr } = await supabase
+            .from("facturas_compras")
+            .update({
+              saldo_pendiente: nuevoSaldo,
+              monto_saldo: nuevoSaldo,
+              estado: nuevoEstado,
+              updated_at: nowIso,
+            })
+            .eq("id", String(supaFac.id));
+
+          if (fallbackErr) {
+            await supabase
+              .from("facturas_compras")
+              .update({
+                monto_saldo: nuevoSaldo,
+                estado: nuevoEstado,
+                updated_at: nowIso,
+              })
+              .eq("id", String(supaFac.id));
+          }
+        }
+
+        if (modalidadPago?.toUpperCase() === "CHEQUE") {
+          await supabase
+            .from("cheques_compras")
+            .update({ estado: "EMITIDO", updated_at: nowIso })
+            .eq("factura_id", String(supaFac.id))
+            .eq("estado", "COBRADO");
+        }
+      }
+    }
+
+    revalidatePath("/compras-tensacon/historico-pagos");
+    revalidatePath("/compras-tensacon/facturas-compras");
+    revalidatePath("/compras-tensacon/deuda-proveedores");
+    revalidatePath("/compras-tensacon/compromisos");
+
+    return { success: true, nuevoSaldo: nuevoSaldoFinal };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Error inesperado al reversar el pago.",
+    };
+  }
 }
 
 // --- SUBMÓDULO 2: COMPROMISOS FINANCIEROS PENDIENTES ---

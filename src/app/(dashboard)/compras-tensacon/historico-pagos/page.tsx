@@ -1,13 +1,17 @@
 import React from "react";
 import { History } from "lucide-react";
 import { getHistoricoPagosComprasAction } from "@/actions/compras-historico-compromisos.actions";
+import { getServerUserSession } from "@/lib/auth/session";
 import { HistoricoPagosTable } from "./_components/historico-pagos-table";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function HistoricoPagosPage() {
-  const { data, kpis } = await getHistoricoPagosComprasAction();
+  const [{ data, kpis }, userSession] = await Promise.all([
+    getHistoricoPagosComprasAction(),
+    getServerUserSession(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -31,7 +35,11 @@ export default async function HistoricoPagosPage() {
       </div>
 
       {/* Componente de Tabla y KPIs */}
-      <HistoricoPagosTable initialData={data} initialKpis={kpis} />
+      <HistoricoPagosTable
+        initialData={data}
+        initialKpis={kpis}
+        sessionUser={userSession}
+      />
     </div>
   );
 }

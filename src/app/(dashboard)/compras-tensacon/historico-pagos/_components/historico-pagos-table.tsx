@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   TablePagination,
   GLOBAL_PAGE_SIZE,
@@ -20,21 +21,42 @@ import {
   Calendar,
   Banknote,
   User,
+  RotateCcw,
+  AlertTriangle,
+  Loader2,
+  X,
 } from "lucide-react";
 import { PagoCompraHistorico, ModalidadPagoCompra } from "@/types/database.types";
-import { HistoricoPagosKPIs } from "@/actions/compras-historico-compromisos.actions";
+import {
+  HistoricoPagosKPIs,
+  getHistoricoPagosComprasAction,
+  reversarPagoCompraAction,
+} from "@/actions/compras-historico-compromisos.actions";
+import { TensaconUserSession } from "@/lib/auth/session";
 import { formatCLP, formatDateCL, formatRutDisplay, toDateOnlyString } from "@/lib/utils";
 
 interface HistoricoPagosTableProps {
   initialData: PagoCompraHistorico[];
   initialKpis: HistoricoPagosKPIs;
+  sessionUser?: (TensaconUserSession & { tipo_perfil?: string; role?: string }) | null;
 }
 
 export function HistoricoPagosTable({
   initialData,
   initialKpis,
+  sessionUser,
 }: HistoricoPagosTableProps) {
-  const [data] = useState<PagoCompraHistorico[]>(initialData);
+  const router = useRouter();
+  const esAdministrador =
+    String(sessionUser?.tipo_perfil || sessionUser?.perfil || sessionUser?.role || "")
+      .trim()
+      .toUpperCase() === "ADMINISTRADOR";
+
+  const [data, setData] = useState<PagoCompraHistorico[]>(initialData);
+  const [kpis, setKpis] = useState<HistoricoPagosKPIs>(initialKpis);
+  const [pagoToReverse, setPagoToReverse] = useState<PagoCompraHistorico | null>(null);
+  const [isReversing, setIsReversing] = useState(false);
+  const [reverseError, setReverseError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
@@ -42,6 +64,37 @@ export function HistoricoPagosTable({
   const [sortField, setSortField] = useState<"fecha_real_pago" | "monto_pagado" | "folio">("fecha_real_pago");
   const [sortAsc, setSortAsc] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState(1);
+
+  const handleConfirmReverse = async () => {
+    if (!pagoToReverse || !esAdministrador) return;
+    setIsReversing(true);
+    setReverseError(null);
+    try {
+      const res = await reversarPagoCompraAction({
+        pagoId: pagoToReverse.id,
+        facturaId: pagoToReverse.factura_id,
+        montoPagado: pagoToReverse.monto_pagado,
+        folio: pagoToReverse.folio,
+        rutProveedor: pagoToReverse.rut_proveedor,
+        modalidadPago: pagoToReverse.modalidad_pago,
+      });
+      if (!res.success) {
+        setReverseError(res.error || "No se pudo reversar el pago.");
+        return;
+      }
+      const refreshed = await getHistoricoPagosComprasAction();
+      setData(refreshed.data);
+      setKpis(refreshed.kpis);
+      setPagoToReverse(null);
+      router.refresh();
+    } catch (err: unknown) {
+      setReverseError(
+        err instanceof Error ? err.message : "Error inesperado al reversar el pago."
+      );
+    } finally {
+      setIsReversing(false);
+    }
+  };
 
   useEffect(() => {
     setCurrentPage(1);
@@ -186,10 +239,10 @@ export function HistoricoPagosTable({
           </div>
           <div className="mt-2">
             <div className="text-lg font-bold font-mono text-slate-900">
-              {formatCLP(initialKpis.totalPagado)}
+              {formatCLP(kpis.totalPagado)}
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              {initialKpis.cantidadTotal} pagos registrados
+              {kpis.cantidadTotal} pagos registrados
             </p>
           </div>
         </div>
@@ -206,9 +259,9 @@ export function HistoricoPagosTable({
           </div>
           <div className="mt-2">
             <div className="text-lg font-bold font-mono text-slate-900">
-              {formatCLP(initialKpis.totalDirecto)}
+              {formatCLP(kpis.totalDirecto)}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">{initialKpis.cantidadDirecto} pagos</p>
+            <p className="text-xs text-slate-500 mt-0.5">{kpis.cantidadDirecto} pagos</p>
           </div>
         </div>
 
@@ -224,9 +277,9 @@ export function HistoricoPagosTable({
           </div>
           <div className="mt-2">
             <div className="text-lg font-bold font-mono text-slate-900">
-              {formatCLP(initialKpis.totalCheque)}
+              {formatCLP(kpis.totalCheque)}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">{initialKpis.cantidadCheque} cheques cobrados</p>
+            <p className="text-xs text-slate-500 mt-0.5">{kpis.cantidadCheque} cheques cobrados</p>
           </div>
         </div>
 
@@ -242,9 +295,9 @@ export function HistoricoPagosTable({
           </div>
           <div className="mt-2">
             <div className="text-lg font-bold font-mono text-slate-900">
-              {formatCLP(initialKpis.totalFactoring)}
+              {formatCLP(kpis.totalFactoring)}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">{initialKpis.cantidadFactoring} cesiones</p>
+            <p className="text-xs text-slate-500 mt-0.5">{kpis.cantidadFactoring} cesiones</p>
           </div>
         </div>
 
@@ -260,9 +313,9 @@ export function HistoricoPagosTable({
           </div>
           <div className="mt-2">
             <div className="text-lg font-bold font-mono text-slate-900">
-              {formatCLP(initialKpis.totalConfirming)}
+              {formatCLP(kpis.totalConfirming)}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">{initialKpis.cantidadConfirming} operaciones</p>
+            <p className="text-xs text-slate-500 mt-0.5">{kpis.cantidadConfirming} operaciones</p>
           </div>
         </div>
       </div>
@@ -420,12 +473,20 @@ export function HistoricoPagosTable({
                 <th scope="col" className="px-4 py-3">
                   OBSERVACIÓN / REF
                 </th>
+                {esAdministrador && (
+                  <th scope="col" className="px-4 py-3 text-center">
+                    ACCIÓN
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredData.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-slate-400">
+                  <td
+                    colSpan={esAdministrador ? 8 : 7}
+                    className="px-4 py-12 text-center text-slate-400"
+                  >
                     <History className="h-8 w-8 mx-auto mb-2 text-slate-300" />
                     <p className="font-medium text-slate-600">No se encontraron pagos registrados</p>
                     <p className="text-xs text-slate-400 mt-1">
@@ -511,6 +572,24 @@ export function HistoricoPagosTable({
                             </div>
                           )}
                       </td>
+
+                      {/* ACCIÓN (SOLO ADMINISTRADOR) */}
+                      {esAdministrador && (
+                        <td className="px-4 py-3 text-center whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReverseError(null);
+                              setPagoToReverse(pago);
+                            }}
+                            className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition-colors"
+                            title="Anular este pago/abono y devolver el monto al saldo pendiente de la factura"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            <span>Reversar</span>
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })
@@ -525,6 +604,98 @@ export function HistoricoPagosTable({
           onPageChange={setCurrentPage}
         />
       </div>
+
+      {/* MODAL CONFIRMACIÓN DE REVERSA (SOLO ADMINISTRADOR) */}
+      {esAdministrador && pagoToReverse && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-rose-950 px-5 py-4 text-white">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-600 text-white">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold">Confirmar Reversa de Pago</h3>
+                  <p className="text-[11px] text-rose-200">
+                    Acción exclusiva de perfil ADMINISTRADOR
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isReversing}
+                onClick={() => setPagoToReverse(null)}
+                className="rounded-lg p-1 text-rose-200 hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 text-xs">
+              <p className="text-slate-600 leading-relaxed">
+                ¿Está seguro de reversar este pago/abono? El registro se eliminará del histórico y el monto se devolverá al saldo pendiente de la factura en <strong>Facturas de Compras</strong>.
+              </p>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 space-y-1.5">
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500">Proveedor:</span>
+                  <span className="font-semibold text-slate-900 text-right">
+                    {pagoToReverse.razon_social}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500">Folio Documento:</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    #{pagoToReverse.folio}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500">Monto a Reversar:</span>
+                  <span className="font-mono font-black text-rose-700">
+                    {formatCLP(pagoToReverse.monto_pagado)}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500">Fecha Pago:</span>
+                  <span className="font-mono text-slate-700">
+                    {formatDateCL(pagoToReverse.fecha_real_pago)}
+                  </span>
+                </div>
+              </div>
+
+              {reverseError && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700 font-medium">
+                  {reverseError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isReversing}
+                  onClick={() => setPagoToReverse(null)}
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isReversing}
+                  onClick={handleConfirmReverse}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-50"
+                >
+                  {isReversing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  )}
+                  <span>{isReversing ? "Reversando..." : "Confirmar Reversa"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
