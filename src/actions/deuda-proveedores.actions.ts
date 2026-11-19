@@ -1,6 +1,7 @@
 "use server";
 
 import { getFacturasComprasAction } from "@/actions/facturas-compras.actions";
+import { esEmpresaRelacionada } from "@/lib/utils";
 import { FacturaCompra } from "@/types/database.types";
 
 export interface DeudaMensualItem {
@@ -234,6 +235,9 @@ export async function getDeudaProveedoresMensualAction(): Promise<DeudaProveedor
   for (const fc of rawCompras) {
     // Excluir notas de crédito (tipo 61)
     if (fc.tipo_doc === 61) continue;
+
+    // Excluir empresas relacionadas (deuda interna)
+    if (esEmpresaRelacionada(fc.rut_proveedor)) continue;
 
     // Excluir estados liquidados
     if (fc.estado === "NETEO_NC") continue;

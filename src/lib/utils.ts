@@ -62,6 +62,14 @@ export function normalizeRut(rut: string): string {
  * Formatea un RUT chileno para visualización de alta legibilidad en tablas financieras
  * Ejemplo: "76123456-K" -> "76.123.456-K"
  */
+export const RUTS_EMPRESAS_RELACIONADAS = ["761735799", "761669389"];
+
+export function esEmpresaRelacionada(rut?: string | null): boolean {
+  if (!rut) return false;
+  const limpio = rut.replace(/\./g, "").replace(/-/g, "").trim().toUpperCase();
+  return RUTS_EMPRESAS_RELACIONADAS.includes(limpio);
+}
+
 export function formatRutDisplay(rut: string): string {
   const normalized = normalizeRut(rut);
   if (!normalized.includes("-")) return rut;

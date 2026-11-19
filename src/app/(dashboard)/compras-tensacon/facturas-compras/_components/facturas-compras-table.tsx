@@ -57,6 +57,7 @@ import {
 import {
   calculateDueDateInfo,
   cn,
+  esEmpresaRelacionada,
   formatCLP,
   formatDateCL,
   formatRutDisplay,
@@ -84,7 +85,13 @@ const ProrrogarChequeModal = dynamic(
   { ssr: false }
 );
 
-export type TabCompras = "CARTERA" | "CHEQUES" | "FACTORING" | "CONFIRMING" | "FAC_NC";
+export type TabCompras =
+  | "CARTERA"
+  | "EMP_RELACIONADA"
+  | "CHEQUES"
+  | "FACTORING"
+  | "CONFIRMING"
+  | "FAC_NC";
 export type SubTabFacNc = "TODOS" | "SOLO_NC" | "SOLO_FAC" | "HISTORIAL_NETEOS";
 
 interface FacturasComprasTableProps {
@@ -103,6 +110,8 @@ function getTabName(tab: TabCompras): string {
   switch (tab) {
     case "CARTERA":
       return "Cartera";
+    case "EMP_RELACIONADA":
+      return "Emp. Relacionada";
     case "CHEQUES":
       return "Cheques";
     case "FACTORING":
@@ -120,6 +129,11 @@ function getEmptyMessage(tab: TabCompras) {
       return {
         title: "No hay facturas pendientes en Cartera / Deuda Directa.",
         subtitle: "Todas las facturas están al día o asignadas a otras modalidades.",
+      };
+    case "EMP_RELACIONADA":
+      return {
+        title: "No hay facturas de Empresas Relacionadas.",
+        subtitle: "Las facturas emitidas por RUT 76.173.579-9 y 76.166.938-9 aparecerán aquí.",
       };
     case "CHEQUES":
       return {
@@ -205,10 +219,11 @@ export function FacturasComprasTable({
     });
   };
 
-  // 1. Facturas Cartera / Deuda Directa con Proveedor (saldo > 0 y no modalidades especiales)
+  // 1. Facturas Cartera / Deuda Directa con Proveedor (saldo > 0 y no modalidades especiales ni empresas relacionadas)
   const facturasCartera = useMemo(() => {
     return data.filter((f) => {
       if (f.tipo_doc === 61) return false;
+      if (esEmpresaRelacionada(f.rut_proveedor)) return false;
       const saldoPendiente = Number(
         f.monto_saldo !== undefined && f.monto_saldo !== null ? f.monto_saldo : f.monto_total
       );
@@ -230,6 +245,26 @@ export function FacturasComprasTable({
         mods.includes("PAGADA");
 
       return !tieneModalidadEspecial;
+    });
+  }, [data]);
+
+  // 1.5 Facturas de Empresas Relacionadas (RUT 76.173.579-9 y 76.166.938-9)
+  const facturasEmpRelacionada = useMemo(() => {
+    return data.filter((f) => {
+      if (f.tipo_doc === 61) return false;
+      if (!esEmpresaRelacionada(f.rut_proveedor)) return false;
+      const mods = [
+        f.estado,
+        (f as unknown as Record<string, unknown>).modalidad_pago as string | undefined,
+        (f as unknown as Record<string, unknown>).modalidad as string | undefined,
+      ].map((v) => v?.toUpperCase() || "");
+      if (mods.includes("PAGADA") || mods.includes("COMPRA_TC") || mods.includes("NETEO_NC")) {
+        return false;
+      }
+      const saldoPendiente = Number(
+        f.monto_saldo !== undefined && f.monto_saldo !== null ? f.monto_saldo : f.monto_total
+      );
+      return saldoPendiente > 0;
     });
   }, [data]);
 
@@ -293,11 +328,13 @@ export function FacturasComprasTable({
     });
   }, [data]);
 
-  // Lista base según la pestaña activa (para las 4 pestañas de facturas)
+  // Lista base según la pestaña activa
   const currentTabFacturas = useMemo(() => {
     switch (activeTab) {
       case "CARTERA":
         return facturasCartera;
+      case "EMP_RELACIONADA":
+        return facturasEmpRelacionada;
       case "CHEQUES":
         return facturasCheques;
       case "FACTORING":
@@ -307,7 +344,7 @@ export function FacturasComprasTable({
       default:
         return [];
     }
-  }, [activeTab, facturasCartera, facturasCheques, facturasFactoring, facturasConfirming]);
+  }, [activeTab, facturasCartera, facturasEmpRelacionada, facturasCheques, facturasFactoring, facturasConfirming]);
 
   // Filtrado de la pestaña de facturas activa
   const filteredCurrentTab = useMemo(() => {
@@ -516,6 +553,12 @@ export function FacturasComprasTable({
             label: "Facturas Pendientes / Cartera",
             icon: Building2,
             count: facturasCartera.length,
+          },
+          {
+            id: "EMP_RELACIONADA",
+            label: "Emp. Relacionada",
+            icon: Building2,
+            count: facturasEmpRelacionada.length,
           },
           {
             id: "CHEQUES",

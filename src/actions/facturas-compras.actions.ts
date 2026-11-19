@@ -24,7 +24,7 @@ import {
   SiiComprasValidationSummary,
 } from "@/services/sii-compras-csv-parser";
 import { assertCanManage, assertIsAdmin } from "@/lib/auth/session";
-import { formatCLP, normalizeRut } from "@/lib/utils";
+import { esEmpresaRelacionada, formatCLP, normalizeRut } from "@/lib/utils";
 
 export interface ComprasKPIs {
   totalCompras: number;
@@ -402,6 +402,7 @@ export async function getFacturasComprasAction(
       totalCheque += (item.total_cheques_emitidos || (saldo > 0 ? saldo : monto));
       cantidadCheque += 1;
     } else if (
+      !esEmpresaRelacionada(item.rut_proveedor) &&
       !mods.includes("PAGADA") &&
       !mods.includes("COMPRA_TC") &&
       item.condicion_pago !== "CONTADO" &&
