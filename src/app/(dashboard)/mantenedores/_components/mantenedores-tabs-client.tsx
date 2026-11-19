@@ -234,13 +234,17 @@ export function MantenedoresTabsClient({
     setIsSubmitting(true);
     setFormError(null);
     try {
-      await upsertFactoringClienteAction({
+      const res = await upsertFactoringClienteAction({
         id: editingCliente?.id,
         rut_cliente: clienteForm.rut_cliente,
         razon_social: clienteForm.razon_social,
         contacto_nombre: clienteForm.contacto_nombre || null,
         contacto_email: clienteForm.contacto_email || null,
       });
+      if (!res.success) {
+        setFormError(res.error || "Error al guardar registro.");
+        return;
+      }
       const refreshed = await getFactoringClientesAction(searchClientes);
       setClientes(refreshed);
       setIsClienteModalOpen(false);
@@ -295,11 +299,15 @@ export function MantenedoresTabsClient({
     setIsSubmitting(true);
     setFormError(null);
     try {
-      await upsertFactoringProveedorAction({
+      const res = await upsertFactoringProveedorAction({
         id: editingProveedor?.id,
         rut_proveedor: proveedorForm.rut_proveedor,
         razon_social: proveedorForm.razon_social,
       });
+      if (!res.success) {
+        setFormError(res.error || "Error al guardar proveedor.");
+        return;
+      }
       const refreshed = await getFactoringProveedoresAction(searchProveedores);
       setProveedores(refreshed);
       setIsProveedorModalOpen(false);
@@ -358,13 +366,17 @@ export function MantenedoresTabsClient({
     setIsSubmitting(true);
     setFormError(null);
     try {
-      await upsertEmpresaConfirmingAction({
+      const res = await upsertEmpresaConfirmingAction({
         id: editingConfirming?.id,
         rut_confirming: confirmingForm.rut_confirming,
         razon_social: confirmingForm.razon_social,
         contacto_nombre: confirmingForm.contacto_nombre || null,
         contacto_email: confirmingForm.contacto_email || null,
       });
+      if (!res.success) {
+        setFormError(res.error || "Error al guardar empresa confirming.");
+        return;
+      }
       const refreshed = await getEmpresasConfirmingAction(searchConfirming);
       setConfirmingList(refreshed);
       setIsConfirmingModalOpen(false);

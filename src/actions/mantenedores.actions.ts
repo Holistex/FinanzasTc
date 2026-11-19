@@ -66,112 +66,139 @@ export async function upsertFactoringClienteAction(input: {
   razon_social: string;
   contacto_nombre?: string | null;
   contacto_email?: string | null;
-}): Promise<EmpresaFactoringCliente> {
-  const auth = await assertIsAdmin();
-  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
-
-  const cleanRut = normalizeRut(input.rut_cliente);
-  if (!cleanRut || !input.razon_social.trim()) {
-    throw new Error("El RUT Cliente y la Razón Social son obligatorios.");
-  }
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const payload = {
-      ...(input.id ? { id: input.id } : {}),
-      rut_cliente: cleanRut,
-      razon_social: input.razon_social.trim(),
-      contacto_nombre: input.contacto_nombre?.trim() || null,
-      contacto_email: input.contacto_email?.trim() || null,
-    };
-
-    const { data, error } = await supabase
-      .from("empresa_factoring_cliente")
-      .upsert(payload)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(
-        `Error guardando empresa_factoring_cliente: ${error.message}`
-      );
+}): Promise<{ success: boolean; data?: EmpresaFactoringCliente; error?: string }> {
+  try {
+    const auth = await assertIsAdmin();
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
 
-    revalidatePath("/mantenedores");
-    revalidatePath("/finanzas/facturas-ventas");
-    return data as EmpresaFactoringCliente;
-  }
+    const cleanRut = normalizeRut(input.rut_cliente);
+    if (!cleanRut || !input.razon_social.trim()) {
+      return {
+        success: false,
+        error: "El RUT Cliente y la Razón Social son obligatorios.",
+      };
+    }
 
-  const db = readLocalDb();
-  if (input.id) {
-    const idx = db.empresa_factoring_cliente.findIndex(
-      (c) => c.id === input.id
-    );
-    if (idx !== -1) {
-      db.empresa_factoring_cliente[idx] = {
-        ...db.empresa_factoring_cliente[idx],
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const payload = {
+        ...(input.id ? { id: input.id } : {}),
         rut_cliente: cleanRut,
         razon_social: input.razon_social.trim(),
         contacto_nombre: input.contacto_nombre?.trim() || null,
         contacto_email: input.contacto_email?.trim() || null,
       };
-      writeLocalDb(db);
+
+      const { data, error } = await supabase
+        .from("empresa_factoring_cliente")
+        .upsert(payload)
+        .select()
+        .single();
+
+      if (error) {
+        return {
+          success: false,
+          error: `Error guardando empresa_factoring_cliente: ${error.message}`,
+        };
+      }
+
+      revalidatePath("/configuracion/mantenedores-factoring");
       revalidatePath("/mantenedores");
       revalidatePath("/finanzas/facturas-ventas");
-      return db.empresa_factoring_cliente[idx];
+      return { success: true, data: data as EmpresaFactoringCliente };
     }
+
+    const db = readLocalDb();
+    if (input.id) {
+      const idx = db.empresa_factoring_cliente.findIndex(
+        (c) => c.id === input.id
+      );
+      if (idx !== -1) {
+        db.empresa_factoring_cliente[idx] = {
+          ...db.empresa_factoring_cliente[idx],
+          rut_cliente: cleanRut,
+          razon_social: input.razon_social.trim(),
+          contacto_nombre: input.contacto_nombre?.trim() || null,
+          contacto_email: input.contacto_email?.trim() || null,
+        };
+        writeLocalDb(db);
+        revalidatePath("/configuracion/mantenedores-factoring");
+        revalidatePath("/mantenedores");
+        revalidatePath("/finanzas/facturas-ventas");
+        return { success: true, data: db.empresa_factoring_cliente[idx] };
+      }
+    }
+
+    const created: EmpresaFactoringCliente = {
+      id: `efc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      rut_cliente: cleanRut,
+      razon_social: input.razon_social.trim(),
+      contacto_nombre: input.contacto_nombre?.trim() || null,
+      contacto_email: input.contacto_email?.trim() || null,
+      created_at: new Date().toISOString(),
+    };
+
+    db.empresa_factoring_cliente.unshift(created);
+    writeLocalDb(db);
+    revalidatePath("/configuracion/mantenedores-factoring");
+    revalidatePath("/mantenedores");
+    revalidatePath("/finanzas/facturas-ventas");
+    return { success: true, data: created };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Error inesperado al guardar factoring cliente.",
+    };
   }
-
-  const created: EmpresaFactoringCliente = {
-    id: `efc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    rut_cliente: cleanRut,
-    razon_social: input.razon_social.trim(),
-    contacto_nombre: input.contacto_nombre?.trim() || null,
-    contacto_email: input.contacto_email?.trim() || null,
-    created_at: new Date().toISOString(),
-  };
-
-  db.empresa_factoring_cliente.unshift(created);
-  writeLocalDb(db);
-  revalidatePath("/mantenedores");
-  revalidatePath("/finanzas/facturas-ventas");
-  return created;
 }
 
 export async function deleteFactoringClienteAction(
   id: string
-): Promise<{ success: boolean }> {
-  const auth = await assertIsAdmin();
-  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const { error } = await supabase
-      .from("empresa_factoring_cliente")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      throw new Error(`Error eliminando registro: ${error.message}`);
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auth = await assertIsAdmin();
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { error } = await supabase
+        .from("empresa_factoring_cliente")
+        .delete()
+        .eq("id", id);
+
+      if (error) {
+        return { success: false, error: `Error eliminando registro: ${error.message}` };
+      }
+      revalidatePath("/configuracion/mantenedores-factoring");
+      revalidatePath("/mantenedores");
+      revalidatePath("/finanzas/facturas-ventas");
+      return { success: true };
+    }
+
+    const db = readLocalDb();
+    db.empresa_factoring_cliente = db.empresa_factoring_cliente.filter(
+      (c) => c.id !== id
+    );
+    db.facturas_ventas = db.facturas_ventas.map((f) =>
+      f.factoring_cliente_id === id
+        ? { ...f, factoring_cliente_id: null, gestion_pago: "DIRECTO_CLIENTE" }
+        : f
+    );
+    writeLocalDb(db);
+    revalidatePath("/configuracion/mantenedores-factoring");
     revalidatePath("/mantenedores");
     revalidatePath("/finanzas/facturas-ventas");
     return { success: true };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Error inesperado al eliminar registro.",
+    };
   }
-
-  const db = readLocalDb();
-  db.empresa_factoring_cliente = db.empresa_factoring_cliente.filter(
-    (c) => c.id !== id
-  );
-  db.facturas_ventas = db.facturas_ventas.map((f) =>
-    f.factoring_cliente_id === id
-      ? { ...f, factoring_cliente_id: null, gestion_pago: "DIRECTO_CLIENTE" }
-      : f
-  );
-  writeLocalDb(db);
-  revalidatePath("/mantenedores");
-  revalidatePath("/finanzas/facturas-ventas");
-  return { success: true };
 }
 
 // ============================================================================
@@ -219,97 +246,129 @@ export async function upsertFactoringProveedorAction(input: {
   id?: string;
   rut_proveedor: string;
   razon_social: string;
-}): Promise<EmpresaFactoringProveedor> {
-  const auth = await assertIsAdmin();
-  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
-
-  const cleanRut = normalizeRut(input.rut_proveedor);
-  if (!cleanRut || !input.razon_social.trim()) {
-    throw new Error("El RUT Proveedor y la Razón Social son obligatorios.");
-  }
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const payload = {
-      ...(input.id ? { id: input.id } : {}),
-      rut_proveedor: cleanRut,
-      razon_social: input.razon_social.trim(),
-    };
-
-    const { data, error } = await supabase
-      .from("empresa_factoring_proveedores")
-      .upsert(payload)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(
-        `Error guardando empresa_factoring_proveedores: ${error.message}`
-      );
+}): Promise<{ success: boolean; data?: EmpresaFactoringProveedor; error?: string }> {
+  try {
+    const auth = await assertIsAdmin();
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
 
-    revalidatePath("/mantenedores");
-    return data as EmpresaFactoringProveedor;
-  }
+    const cleanRut = normalizeRut(input.rut_proveedor);
+    if (!cleanRut || !input.razon_social.trim()) {
+      return {
+        success: false,
+        error: "El RUT Proveedor y la Razón Social son obligatorios.",
+      };
+    }
 
-  const db = readLocalDb();
-  if (input.id) {
-    const idx = db.empresa_factoring_proveedores.findIndex(
-      (p) => p.id === input.id
-    );
-    if (idx !== -1) {
-      db.empresa_factoring_proveedores[idx] = {
-        ...db.empresa_factoring_proveedores[idx],
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const payload = {
+        ...(input.id ? { id: input.id } : {}),
         rut_proveedor: cleanRut,
         razon_social: input.razon_social.trim(),
       };
-      writeLocalDb(db);
+
+      const { data, error } = await supabase
+        .from("empresa_factoring_proveedores")
+        .upsert(payload)
+        .select()
+        .single();
+
+      if (error) {
+        return {
+          success: false,
+          error: `Error guardando empresa_factoring_proveedores: ${error.message}`,
+        };
+      }
+
+      revalidatePath("/configuracion/mantenedores-factoring");
       revalidatePath("/mantenedores");
-      return db.empresa_factoring_proveedores[idx];
+      revalidatePath("/compras-tensacon/facturas-compras");
+      return { success: true, data: data as EmpresaFactoringProveedor };
     }
+
+    const db = readLocalDb();
+    if (input.id) {
+      const idx = db.empresa_factoring_proveedores.findIndex(
+        (p) => p.id === input.id
+      );
+      if (idx !== -1) {
+        db.empresa_factoring_proveedores[idx] = {
+          ...db.empresa_factoring_proveedores[idx],
+          rut_proveedor: cleanRut,
+          razon_social: input.razon_social.trim(),
+        };
+        writeLocalDb(db);
+        revalidatePath("/configuracion/mantenedores-factoring");
+        revalidatePath("/mantenedores");
+        revalidatePath("/compras-tensacon/facturas-compras");
+        return { success: true, data: db.empresa_factoring_proveedores[idx] };
+      }
+    }
+
+    const created: EmpresaFactoringProveedor = {
+      id: `efp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      rut_proveedor: cleanRut,
+      razon_social: input.razon_social.trim(),
+      created_at: new Date().toISOString(),
+    };
+
+    db.empresa_factoring_proveedores.unshift(created);
+    writeLocalDb(db);
+    revalidatePath("/configuracion/mantenedores-factoring");
+    revalidatePath("/mantenedores");
+    revalidatePath("/compras-tensacon/facturas-compras");
+    return { success: true, data: created };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Error inesperado al guardar proveedor factoring.",
+    };
   }
-
-  const created: EmpresaFactoringProveedor = {
-    id: `efp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    rut_proveedor: cleanRut,
-    razon_social: input.razon_social.trim(),
-    created_at: new Date().toISOString(),
-  };
-
-  db.empresa_factoring_proveedores.unshift(created);
-  writeLocalDb(db);
-  revalidatePath("/mantenedores");
-  return created;
 }
 
 export async function deleteFactoringProveedorAction(
   id: string
-): Promise<{ success: boolean }> {
-  const auth = await assertIsAdmin();
-  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const { error } = await supabase
-      .from("empresa_factoring_proveedores")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      throw new Error(`Error eliminando proveedor factoring: ${error.message}`);
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auth = await assertIsAdmin();
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
-    revalidatePath("/mantenedores");
-    return { success: true };
-  }
 
-  const db = readLocalDb();
-  if (!db.empresa_factoring_proveedores) db.empresa_factoring_proveedores = [];
-  db.empresa_factoring_proveedores = db.empresa_factoring_proveedores.filter(
-    (p: EmpresaFactoringProveedor) => p.id !== id
-  );
-  writeLocalDb(db);
-  revalidatePath("/mantenedores");
-  return { success: true };
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { error } = await supabase
+        .from("empresa_factoring_proveedores")
+        .delete()
+        .eq("id", id);
+
+      if (error) {
+        return { success: false, error: `Error eliminando proveedor factoring: ${error.message}` };
+      }
+      revalidatePath("/configuracion/mantenedores-factoring");
+      revalidatePath("/mantenedores");
+      revalidatePath("/compras-tensacon/facturas-compras");
+      return { success: true };
+    }
+
+    const db = readLocalDb();
+    if (!db.empresa_factoring_proveedores) db.empresa_factoring_proveedores = [];
+    db.empresa_factoring_proveedores = db.empresa_factoring_proveedores.filter(
+      (p: EmpresaFactoringProveedor) => p.id !== id
+    );
+    writeLocalDb(db);
+    revalidatePath("/configuracion/mantenedores-factoring");
+    revalidatePath("/mantenedores");
+    revalidatePath("/compras-tensacon/facturas-compras");
+    return { success: true };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Error inesperado al eliminar proveedor factoring.",
+    };
+  }
 }
 
 // ============================================================================
@@ -360,110 +419,143 @@ export async function upsertEmpresaConfirmingAction(input: {
   razon_social: string;
   contacto_nombre?: string | null;
   contacto_email?: string | null;
-}): Promise<EmpresaConfirming> {
-  const auth = await assertIsAdmin();
-  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
-
-  const cleanRut = normalizeRut(input.rut_confirming);
-  if (!cleanRut || !input.razon_social.trim()) {
-    throw new Error("El RUT Confirming y la Razón Social son obligatorios.");
-  }
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const payload = {
-      ...(input.id ? { id: input.id } : {}),
-      rut_confirming: cleanRut,
-      razon_social: input.razon_social.trim(),
-      contacto_nombre: input.contacto_nombre?.trim() || null,
-      contacto_email: input.contacto_email?.trim() || null,
-      updated_at: new Date().toISOString(),
-    };
-
-    const { data, error } = await supabase
-      .from("empresa_confirming")
-      .upsert(payload)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Error guardando empresa_confirming: ${error.message}`);
+}): Promise<{ success: boolean; data?: EmpresaConfirming; error?: string }> {
+  try {
+    const auth = await assertIsAdmin();
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
 
-    if (data) {
-      revalidatePath("/mantenedores");
-      revalidatePath("/compras-tensacon/facturas-compras");
-      return data as EmpresaConfirming;
+    const cleanRut = normalizeRut(input.rut_confirming);
+    if (!cleanRut || !input.razon_social.trim()) {
+      return {
+        success: false,
+        error: "El RUT Confirming y la Razón Social son obligatorios.",
+      };
     }
-  }
 
-  const db = readLocalDb();
-  if (!db.empresa_confirming) db.empresa_confirming = [];
+    const nowIso = new Date().toISOString();
 
-  if (input.id) {
-    const idx = db.empresa_confirming.findIndex((c) => c.id === input.id);
-    if (idx !== -1) {
-      db.empresa_confirming[idx] = {
-        ...db.empresa_confirming[idx],
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const payload = {
+        ...(input.id ? { id: input.id } : {}),
         rut_confirming: cleanRut,
         razon_social: input.razon_social.trim(),
         contacto_nombre: input.contacto_nombre?.trim() || null,
         contacto_email: input.contacto_email?.trim() || null,
-        updated_at: new Date().toISOString(),
+        activo: true,
+        updated_at: nowIso,
       };
-      writeLocalDb(db);
+
+      const { data, error } = await supabase
+        .from("empresa_confirming")
+        .upsert(payload)
+        .select()
+        .single();
+
+      if (error) {
+        return {
+          success: false,
+          error: `Error guardando empresa_confirming: ${error.message}`,
+        };
+      }
+
+      revalidatePath("/configuracion/mantenedores-factoring");
       revalidatePath("/mantenedores");
       revalidatePath("/compras-tensacon/facturas-compras");
-      return db.empresa_confirming[idx];
+      return { success: true, data: data as EmpresaConfirming };
     }
+
+    const db = readLocalDb();
+    if (!db.empresa_confirming) db.empresa_confirming = [];
+
+    if (input.id) {
+      const idx = db.empresa_confirming.findIndex((c) => c.id === input.id);
+      if (idx !== -1) {
+        db.empresa_confirming[idx] = {
+          ...db.empresa_confirming[idx],
+          rut_confirming: cleanRut,
+          razon_social: input.razon_social.trim(),
+          contacto_nombre: input.contacto_nombre?.trim() || null,
+          contacto_email: input.contacto_email?.trim() || null,
+          updated_at: nowIso,
+        };
+        writeLocalDb(db);
+        revalidatePath("/configuracion/mantenedores-factoring");
+        revalidatePath("/mantenedores");
+        revalidatePath("/compras-tensacon/facturas-compras");
+        return { success: true, data: db.empresa_confirming[idx] };
+      }
+    }
+
+    const created: EmpresaConfirming = {
+      id: `ec-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      rut_confirming: cleanRut,
+      razon_social: input.razon_social.trim(),
+      contacto_nombre: input.contacto_nombre?.trim() || null,
+      contacto_email: input.contacto_email?.trim() || null,
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+
+    db.empresa_confirming.unshift(created);
+    writeLocalDb(db);
+    revalidatePath("/configuracion/mantenedores-factoring");
+    revalidatePath("/mantenedores");
+    revalidatePath("/compras-tensacon/facturas-compras");
+    return { success: true, data: created };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Error inesperado al guardar empresa confirming.",
+    };
   }
-
-  const created: EmpresaConfirming = {
-    id: `ec-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    rut_confirming: cleanRut,
-    razon_social: input.razon_social.trim(),
-    contacto_nombre: input.contacto_nombre?.trim() || null,
-    contacto_email: input.contacto_email?.trim() || null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-
-  db.empresa_confirming.unshift(created);
-  writeLocalDb(db);
-  revalidatePath("/mantenedores");
-  revalidatePath("/compras-tensacon/facturas-compras");
-  return created;
 }
 
 export async function deleteEmpresaConfirmingAction(
   id: string
-): Promise<{ success: boolean }> {
-  const auth = await assertIsAdmin();
-  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const { error } = await supabase
-      .from("empresa_confirming")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      throw new Error(`Error eliminando empresa confirming: ${error.message}`);
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auth = await assertIsAdmin();
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
 
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { error } = await supabase
+        .from("empresa_confirming")
+        .delete()
+        .eq("id", id);
+
+      if (error) {
+        return {
+          success: false,
+          error: `Error eliminando empresa confirming: ${error.message}`,
+        };
+      }
+
+      revalidatePath("/configuracion/mantenedores-factoring");
+      revalidatePath("/mantenedores");
+      revalidatePath("/compras-tensacon/facturas-compras");
+      return { success: true };
+    }
+
+    const db = readLocalDb();
+    if (!db.empresa_confirming) db.empresa_confirming = [];
+    db.empresa_confirming = db.empresa_confirming.filter((c) => c.id !== id);
+    writeLocalDb(db);
+    revalidatePath("/configuracion/mantenedores-factoring");
     revalidatePath("/mantenedores");
     revalidatePath("/compras-tensacon/facturas-compras");
     return { success: true };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Error inesperado al eliminar empresa confirming.",
+    };
   }
-
-  const db = readLocalDb();
-  if (!db.empresa_confirming) db.empresa_confirming = [];
-  db.empresa_confirming = db.empresa_confirming.filter((c) => c.id !== id);
-  writeLocalDb(db);
-  revalidatePath("/mantenedores");
-  revalidatePath("/compras-tensacon/facturas-compras");
-  return { success: true };
 }
 
 // ============================================================================
@@ -645,65 +737,86 @@ export async function upsertBancoAction(input: {
 export async function toggleBancoStatusAction(
   id: string,
   activo: boolean
-): Promise<{ success: boolean }> {
-  const auth = await assertIsAdmin();
-  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auth = await assertIsAdmin();
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
+    }
 
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const { error } = await supabase
-      .from("mantenedor_bancos")
-      .update({ activo })
-      .eq("id", id);
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { error } = await supabase
+        .from("mantenedor_bancos")
+        .update({ activo })
+        .eq("id", id);
 
-    if (error) {
-      throw new Error(`Error actualizando estado del banco: ${error.message}`);
+      if (error) {
+        return {
+          success: false,
+          error: `Error actualizando estado del banco: ${error.message}`,
+        };
+      }
+      revalidatePath("/configuracion/mantenedores-factoring");
+      revalidatePath("/mantenedores");
+      return { success: true };
+    }
+
+    const db = readLocalDb();
+    if (!db.mantenedor_bancos) db.mantenedor_bancos = [];
+    const idx = db.mantenedor_bancos.findIndex((b) => b.id === id);
+    if (idx !== -1) {
+      db.mantenedor_bancos[idx].activo = activo;
+      writeLocalDb(db);
     }
     revalidatePath("/configuracion/mantenedores-factoring");
     revalidatePath("/mantenedores");
     return { success: true };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Error inesperado al actualizar banco.",
+    };
   }
-
-  const db = readLocalDb();
-  if (!db.mantenedor_bancos) db.mantenedor_bancos = [];
-  const idx = db.mantenedor_bancos.findIndex((b) => b.id === id);
-  if (idx !== -1) {
-    db.mantenedor_bancos[idx].activo = activo;
-    writeLocalDb(db);
-  }
-  revalidatePath("/configuracion/mantenedores-factoring");
-  revalidatePath("/mantenedores");
-  return { success: true };
 }
 
 export async function deleteBancoAction(
   id: string
-): Promise<{ success: boolean }> {
-  const auth = await assertIsAdmin();
-  if (!auth.authorized) throw new Error(auth.error || "Acceso denegado.");
-
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    const { error } = await supabase
-      .from("mantenedor_bancos")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      throw new Error(`Error eliminando banco: ${error.message}`);
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auth = await assertIsAdmin();
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
     }
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { error } = await supabase
+        .from("mantenedor_bancos")
+        .delete()
+        .eq("id", id);
+
+      if (error) {
+        return { success: false, error: `Error eliminando banco: ${error.message}` };
+      }
+      revalidatePath("/configuracion/mantenedores-factoring");
+      revalidatePath("/mantenedores");
+      return { success: true };
+    }
+
+    const db = readLocalDb();
+    if (!db.mantenedor_bancos) db.mantenedor_bancos = [];
+    db.mantenedor_bancos = db.mantenedor_bancos.filter((b) => b.id !== id);
+    writeLocalDb(db);
     revalidatePath("/configuracion/mantenedores-factoring");
     revalidatePath("/mantenedores");
     return { success: true };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Error inesperado al eliminar banco.",
+    };
   }
-
-  const db = readLocalDb();
-  if (!db.mantenedor_bancos) db.mantenedor_bancos = [];
-  db.mantenedor_bancos = db.mantenedor_bancos.filter((b) => b.id !== id);
-  writeLocalDb(db);
-  revalidatePath("/configuracion/mantenedores-factoring");
-  revalidatePath("/mantenedores");
-  return { success: true };
 }
 
 
