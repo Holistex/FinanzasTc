@@ -182,6 +182,8 @@ export async function getCarteraCobranzaAction(): Promise<CarteraCobranzaData> {
     const { data: facturasData, error: facturasErr } = facturasRes;
     if (facturasErr) {
       console.warn("Error consultando facturas en Supabase:", facturasErr.message);
+      const localDb = readLocalDb();
+      allFacturas = localDb.facturas_ventas.filter((f) => Number(f.tipo_doc) !== 61 && Number(f.tipo_doc) !== 46);
     } else {
       allFacturas = (facturasData as FacturaVenta[]) || [];
     }
@@ -231,19 +233,7 @@ export async function getCarteraCobranzaAction(): Promise<CarteraCobranzaData> {
       }
     }
 
-    // Fallback local merge si existen gestiones en local no replicadas
-    const localDb = readLocalDb();
-    if (allFacturas.length === 0) {
-      allFacturas = localDb.facturas_ventas.filter((f) => Number(f.tipo_doc) !== 61);
-    }
-    for (const lg of localDb.gestiones_cobranza || []) {
-      if (!allGestionesList.some((x) => x.id === lg.id)) {
-        allGestionesList.push(lg);
-        const list = gestionesMap.get(lg.factura_id) || [];
-        list.push(lg);
-        gestionesMap.set(lg.factura_id, list);
-      }
-    }
+    // Si Supabase respondió correctamente pero no tiene facturas, retornar estrictamente [] sin inyectar datos mock
   } else {
     // Modo Fallback Local
     const localDb = readLocalDb();
