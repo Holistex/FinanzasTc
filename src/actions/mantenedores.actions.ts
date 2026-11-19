@@ -389,13 +389,18 @@ export async function getEmpresasConfirmingAction(
 
     if (q) {
       query = query.or(
-        `rut_confirming.ilike.%${q}%,razon_social.ilike.%${q}%,contacto_nombre.ilike.%${q}%`
+        `rut_entidad.ilike.%${q}%,rut_confirming.ilike.%${q}%,razon_social.ilike.%${q}%,contacto_nombre.ilike.%${q}%`
       );
     }
 
     const { data, error } = await query;
     if (!error && data) {
-      return data as EmpresaConfirming[];
+      return (data as Array<Record<string, unknown>>).map((row) => ({
+        ...(row as unknown as EmpresaConfirming),
+        rut_confirming: String(
+          row.rut_entidad || row.rut_confirming || row.rut || ""
+        ),
+      }));
     }
   }
 
@@ -440,6 +445,7 @@ export async function upsertEmpresaConfirmingAction(input: {
       const supabase = await createServerSupabaseClient();
       const payload = {
         ...(input.id ? { id: input.id } : {}),
+        rut_entidad: cleanRut,
         rut_confirming: cleanRut,
         razon_social: input.razon_social.trim(),
         contacto_nombre: input.contacto_nombre?.trim() || null,
@@ -464,7 +470,16 @@ export async function upsertEmpresaConfirmingAction(input: {
       revalidatePath("/configuracion/mantenedores-factoring");
       revalidatePath("/mantenedores");
       revalidatePath("/compras-tensacon/facturas-compras");
-      return { success: true, data: data as EmpresaConfirming };
+      const savedRow = data as Record<string, unknown>;
+      return {
+        success: true,
+        data: {
+          ...(savedRow as unknown as EmpresaConfirming),
+          rut_confirming: String(
+            savedRow.rut_entidad || savedRow.rut_confirming || cleanRut
+          ),
+        },
+      };
     }
 
     const db = readLocalDb();
