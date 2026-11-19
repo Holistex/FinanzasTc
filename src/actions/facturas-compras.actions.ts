@@ -163,6 +163,7 @@ export async function getFacturasComprasAction(
           colaborador_id: r.colaborador_id ? String(r.colaborador_id) : null,
           on_proyecto: r.on_proyecto ? String(r.on_proyecto) : null,
           observacion_tc: r.observacion_tc ? String(r.observacion_tc) : null,
+          periodo_libro: r.periodo_libro ? String(r.periodo_libro) : null,
           created_at: String(r.created_at || ""),
           updated_at: r.updated_at ? String(r.updated_at) : undefined,
         };
@@ -254,6 +255,7 @@ export async function getFacturasComprasAction(
         colaborador: colaboradorId ? colabMap.get(colaboradorId) || null : null,
         on_proyecto: onProyecto,
         observacion_tc: observacionTc,
+        periodo_libro: fc.periodo_libro || localFc?.periodo_libro || null,
       };
     });
   }
@@ -609,20 +611,22 @@ export async function importarComprasCsvAction(
     writeLocalDb(db);
   }
 
-  // Si se confirmó un Período de Libro y hubo documentos ya existentes en BD,
-  // actualizamos su `periodo_libro` para que queden asignados al Libro SII correcto.
-  if (normalizedPeriodoLibro && summary.omitidasPorDuplicidad.length > 0) {
-    const existingDuplicateKeys = new Set(
-      summary.omitidasPorDuplicidad
+  // Si se confirmó un Período de Libro, forzamos la actualización de `periodo_libro`
+  // tanto en documentos ya existentes en BD como en cualquier conflicto de rut+folio,
+  // sin sobrescribir estados de pago ni saldos.
+  if (normalizedPeriodoLibro) {
+    const csvCompositeKeys = new Set<string>([
+      ...summary.nuevasAInyectar.map((item) => `${normalizeRut(item.rut_proveedor)}_${item.folio}`),
+      ...summary.omitidasPorDuplicidad
         .filter((item) => item.motivo === "EXISTE_EN_BD")
-        .map((item) => `${normalizeRut(item.rut_proveedor)}_${item.folio}`)
-    );
+        .map((item) => `${normalizeRut(item.rut_proveedor)}_${item.folio}`),
+    ]);
 
-    if (existingDuplicateKeys.size > 0) {
+    if (csvCompositeKeys.size > 0) {
       if (isServerSupabaseConfigured()) {
         const supabase = await createServerSupabaseClient();
         const idsToUpdate: string[] = [];
-        for (const key of existingDuplicateKeys) {
+        for (const key of csvCompositeKeys) {
           const id = existingIdByKey.get(key);
           if (id) idsToUpdate.push(id);
         }
@@ -645,7 +649,7 @@ export async function importarComprasCsvAction(
         let changed = false;
         db.facturas_compras = db.facturas_compras.map((f) => {
           const k = `${normalizeRut(f.rut_proveedor)}_${f.folio}`;
-          if (existingDuplicateKeys.has(k) && f.periodo_libro !== normalizedPeriodoLibro) {
+          if (csvCompositeKeys.has(k) && f.periodo_libro !== normalizedPeriodoLibro) {
             changed = true;
             return { ...f, periodo_libro: normalizedPeriodoLibro };
           }

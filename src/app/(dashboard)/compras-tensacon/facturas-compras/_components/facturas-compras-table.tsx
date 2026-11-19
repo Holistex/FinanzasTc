@@ -193,10 +193,17 @@ export function FacturasComprasTable({
     setCurrentPage(1);
   }, [activeTab, subTabFacNc, search, tipoDocFilter, periodoLibroFilter]);
 
+  const getFacturaPeriodoLibro = (f: FacturaCompra): string => {
+    if (f.periodo_libro) {
+      return normalizePeriodoLibro(f.periodo_libro);
+    }
+    return f.fecha_docto ? f.fecha_docto.slice(0, 7) : "";
+  };
+
   const periodosLibroDisponibles = useMemo(() => {
     const set = new Set<string>();
     for (const f of data) {
-      const p = normalizePeriodoLibro(f.periodo_libro, f.fecha_docto);
+      const p = getFacturaPeriodoLibro(f);
       if (p) set.add(p);
     }
     return Array.from(set).sort((a, b) => b.localeCompare(a));
@@ -377,7 +384,7 @@ export function FacturasComprasTable({
       if (tipoDocFilter !== "TODOS" && f.tipo_doc.toString() !== tipoDocFilter) return false;
       if (
         periodoLibroFilter !== "TODOS" &&
-        normalizePeriodoLibro(f.periodo_libro, f.fecha_docto) !== periodoLibroFilter
+        getFacturaPeriodoLibro(f) !== periodoLibroFilter
       ) {
         return false;
       }
@@ -399,7 +406,7 @@ export function FacturasComprasTable({
       if (subTabFacNc === "SOLO_FAC" && f.tipo_doc === 61) return false;
       if (
         periodoLibroFilter !== "TODOS" &&
-        normalizePeriodoLibro(f.periodo_libro, f.fecha_docto) !== periodoLibroFilter
+        getFacturaPeriodoLibro(f) !== periodoLibroFilter
       ) {
         return false;
       }
