@@ -155,6 +155,18 @@ export function MatchFlexlineClient({
       .trim()
       .toLowerCase();
 
+  const pendientesPorPeriodo = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of data.periodosDisponibles) {
+      const count =
+        data.porPeriodo?.[p]?.kpis?.faltanPorIngresarCount ??
+        data.porPeriodo?.[p]?.faltantes?.length ??
+        0;
+      map.set(p, count);
+    }
+    return map;
+  }, [data.periodosDisponibles, data.porPeriodo]);
+
   const activeDataset = useMemo(() => {
     if (periodoFilter === "TODOS") {
       return {
@@ -912,10 +924,12 @@ export function MatchFlexlineClient({
               onChange={(e) => handlePeriodoChange(e.target.value)}
               className="rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:bg-white focus:border-[#E05A10] focus:outline-none"
             >
-              <option value="TODOS">Todos los Períodos</option>
+              <option value="TODOS">
+                Todos los Períodos ({data.kpis.faltanPorIngresarCount})
+              </option>
               {data.periodosDisponibles.map((p) => (
                 <option key={p} value={p}>
-                  {formatPeriodoLibroLabel(p)}
+                  {formatPeriodoLibroLabel(p)} ({pendientesPorPeriodo.get(p) ?? 0})
                 </option>
               ))}
             </select>
