@@ -1601,9 +1601,12 @@ export function FacturasVentasTable({
                           —
                         </span>
                       ) : !isFactoring &&
-                        ["DIRECTO", "DIRECTO_CLIENTE", "DIRECTO CLIENTE"].includes(
-                          String(row.gestion_pago || "").trim().toUpperCase()
-                        ) ? (
+                        (row.es_deuda_directa === true ||
+                          ["DIRECTO", "DIRECTO CLIENTE"].includes(
+                            String(row.tipo_cesion || row.modalidad_cobro || "")
+                              .trim()
+                              .toUpperCase()
+                          )) ? (
                         canManage ? (
                           <button
                             type="button"
@@ -1663,32 +1666,29 @@ export function FacturasVentasTable({
                               onClick={() => {
                                 if (puedeGestionar) setFacturaToAssignFactoring(row);
                               }}
-                              title={
-                                !puedeGestionar
-                                  ? getBloqueoTooltip("ceder")
-                                  : isFactoring
-                                  ? `Factoring activo (${
-                                      row.empresa_factoring_cliente
-                                        ?.razon_social || "Asignado"
-                                    }) · Clic para modificar cesión`
-                                  : "Cobro Directo Cliente · Clic para ceder factura a Factoring"
-                              }
-                              className={cn(
-                                "inline-flex items-center justify-center h-7 w-7 rounded-md border transition-all",
-                                !puedeGestionar
-                                  ? "border-slate-200 bg-slate-100 text-slate-300 cursor-not-allowed opacity-50"
-                                  : isFactoring
-                                  ? "border-orange-300 bg-orange-50 text-[#E05A10] hover:bg-[#E05A10] hover:text-white"
-                                  : "border-slate-200 bg-[#F8FAFC] text-slate-600 hover:bg-[#E05A10] hover:text-white hover:border-[#E05A10]"
-                              )}
-                            >
-                              <ArrowRightLeft className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                          {!canManage && !isFactoring && (
-                            <span className="text-[10px] text-slate-400">
-                              Directo
-                            </span>
+                                title={
+                                  !puedeGestionar
+                                    ? getBloqueoTooltip("ceder")
+                                    : isFactoring
+                                    ? `Factoring activo (${
+                                        row.empresa_factoring_cliente
+                                          ?.razon_social || "Asignado"
+                                      }) · Clic para modificar cesión`
+                                    : "Gestionar Cesión a Factoring o Pago Directo"
+                                }
+                                className={cn(
+                                  "inline-flex items-center justify-center transition-colors",
+                                  !puedeGestionar
+                                    ? isFactoring
+                                      ? "h-7 w-7 rounded-md border border-slate-200 bg-slate-100 text-slate-300 cursor-not-allowed opacity-50"
+                                      : "p-1.5 rounded-lg text-slate-300 cursor-not-allowed opacity-50"
+                                    : isFactoring
+                                    ? "h-7 w-7 rounded-md border border-orange-300 bg-orange-50 text-[#E05A10] hover:bg-[#E05A10] hover:text-white cursor-pointer"
+                                    : "p-1.5 rounded-lg text-slate-400 hover:text-[#E05A10] hover:bg-orange-50 cursor-pointer"
+                                )}
+                              >
+                                <ArrowRightLeft className="h-3.5 w-3.5" />
+                              </button>
                           )}
                         </div>
                       )}

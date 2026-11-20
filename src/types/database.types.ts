@@ -156,6 +156,10 @@ export interface FacturaVenta {
   folio_docto_ref: number | null;
   gestion_pago: GestionPagoTipo;
   factoring_cliente_id: string | null;
+  tipo_cesion?: string | null;
+  modalidad_cobro?: string | null;
+  es_deuda_directa?: boolean | null;
+  entidad_factoring?: string | null;
   empresa_factoring_cliente?: EmpresaFactoringCliente | null;
   monto_neto_saldo: number;
   deuda_cliente?: number | null;

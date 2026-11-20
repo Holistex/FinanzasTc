@@ -459,6 +459,10 @@ export async function injectSiiCsvBatchAction(csvText: string): Promise<{
       folio_docto_ref: row.folio_docto_ref,
       gestion_pago: "DIRECTO_CLIENTE" as GestionPagoTipo,
       factoring_cliente_id: null,
+      tipo_cesion: null,
+      modalidad_cobro: null,
+      es_deuda_directa: null,
+      entidad_factoring: null,
       monto_neto_saldo: row.monto_neto_saldo,
     }));
 
@@ -546,6 +550,10 @@ export async function injectSiiCsvBatchAction(csvText: string): Promise<{
       folio_docto_ref: row.folio_docto_ref,
       gestion_pago: "DIRECTO_CLIENTE",
       factoring_cliente_id: null,
+      tipo_cesion: null,
+      modalidad_cobro: null,
+      es_deuda_directa: null,
+      entidad_factoring: null,
       monto_neto_saldo: row.monto_neto_saldo,
       deuda_cliente: row.monto_neto_saldo,
       created_at: nowIso,
@@ -593,37 +601,39 @@ export async function updateGestionPagoAction(params: {
       };
     }
 
-    const targetGestionPago: GestionPagoTipo =
-      params.gestionPago === "FACTORING" ? "FACTORING" : "DIRECTO";
+    const isFactoring = params.gestionPago === "FACTORING";
+    const dbGestionPago: GestionPagoTipo = isFactoring
+      ? "FACTORING"
+      : "DIRECTO_CLIENTE";
     const nowIso = new Date().toISOString();
+
+    const updatePayload = isFactoring
+      ? {
+          gestion_pago: dbGestionPago,
+          factoring_cliente_id: effectiveFactoringId,
+          tipo_cesion: "FACTORING",
+          modalidad_cobro: "FACTORING",
+          es_deuda_directa: false,
+          updated_at: nowIso,
+        }
+      : {
+          gestion_pago: dbGestionPago,
+          factoring_cliente_id: null,
+          tipo_cesion: "DIRECTO",
+          modalidad_cobro: "DIRECTO",
+          es_deuda_directa: true,
+          entidad_factoring: null,
+          updated_at: nowIso,
+        };
 
     if (isServerSupabaseConfigured()) {
       const supabase = await createServerSupabaseClient();
-      let { data, error } = await supabase
+      const { data, error } = await supabase
         .from("facturas_ventas")
-        .update({
-          gestion_pago: targetGestionPago,
-          factoring_cliente_id: effectiveFactoringId,
-          updated_at: nowIso,
-        })
+        .update(updatePayload)
         .eq("id", params.facturaId)
         .select("*, empresa_factoring_cliente(*)")
         .single();
-
-      if (error && targetGestionPago === "DIRECTO") {
-        const retry = await supabase
-          .from("facturas_ventas")
-          .update({
-            gestion_pago: "DIRECTO_CLIENTE",
-            factoring_cliente_id: null,
-            updated_at: nowIso,
-          })
-          .eq("id", params.facturaId)
-          .select("*, empresa_factoring_cliente(*)")
-          .single();
-        data = retry.data;
-        error = retry.error;
-      }
 
       if (error || !data) {
         return {
@@ -646,8 +656,14 @@ export async function updateGestionPagoAction(params: {
       return { success: false, error: "Factura no encontrada." };
     }
 
-    db.facturas_ventas[idx].gestion_pago = targetGestionPago;
+    db.facturas_ventas[idx].gestion_pago = dbGestionPago;
     db.facturas_ventas[idx].factoring_cliente_id = effectiveFactoringId;
+    db.facturas_ventas[idx].tipo_cesion = updatePayload.tipo_cesion;
+    db.facturas_ventas[idx].modalidad_cobro = updatePayload.modalidad_cobro;
+    db.facturas_ventas[idx].es_deuda_directa = updatePayload.es_deuda_directa;
+    if (!isFactoring) {
+      db.facturas_ventas[idx].entidad_factoring = null;
+    }
     writeLocalDb(db);
 
     revalidatePath("/ventas-tensacon/facturas-ventas");
