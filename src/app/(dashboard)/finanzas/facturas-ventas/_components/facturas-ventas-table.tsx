@@ -2,6 +2,7 @@
 
 import React, { useState, useTransition, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import {
   Search,
@@ -109,6 +110,7 @@ export function FacturasVentasTable({
     cachedResponse ?? initialResponse
   );
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   // Pestaña activa: 1. PENDIENTES | 2. PAGADAS | 3. FAC_NC | 4. RESUMEN
   const [estadoDeudaTab, setEstadoDeudaTab] =
@@ -225,6 +227,34 @@ export function FacturasVentasTable({
         : prev
     );
     queryClient.invalidateQueries({ queryKey: ["facturas_ventas"] });
+  };
+
+  const handleCesionSuccess = (
+    facturaId?: string,
+    gestionPago?: "DIRECTO_CLIENTE" | "DIRECTO" | "FACTORING",
+    factoringClienteId?: string | null
+  ) => {
+    if (facturaId && gestionPago) {
+      const entidadObj = factoringClienteId
+        ? factoringClientes.find((c) => c.id === factoringClienteId) || null
+        : null;
+      setResponse((prev) => ({
+        ...prev,
+        data: prev.data.map((f) =>
+          f.id === facturaId
+            ? {
+                ...f,
+                gestion_pago: gestionPago,
+                factoring_cliente_id: factoringClienteId ?? null,
+                empresa_factoring_cliente: entidadObj,
+              }
+            : f
+        ),
+      }));
+    }
+    queryClient.invalidateQueries({ queryKey: ["facturas_ventas"] });
+    fetchServerPage();
+    router.refresh();
   };
 
   const fetchServerPage = (
@@ -1786,7 +1816,7 @@ export function FacturasVentasTable({
         factura={facturaToAssignFactoring}
         factoringClientes={factoringClientes}
         onClose={() => setFacturaToAssignFactoring(null)}
-        onSuccess={() => fetchServerPage()}
+        onSuccess={handleCesionSuccess}
       />
 
       {/* Modal de Registro de Pago / Abono */}

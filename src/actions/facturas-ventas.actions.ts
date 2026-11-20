@@ -571,73 +571,91 @@ export async function updateGestionPagoAction(params: {
   facturaId: string;
   gestionPago: GestionPagoTipo;
   factoringClienteId: string | null;
-}): Promise<{ success: boolean }> {
-  const auth = await assertCanManage([
-    "facturas_ventas",
-    "factoring_clientes",
-    "ventas_global",
-  ]);
-  if (!auth.authorized) {
-    throw new Error(auth.error || "Acceso denegado.");
-  }
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auth = await assertCanManage([
+      "facturas_ventas",
+      "factoring_clientes",
+      "ventas_global",
+    ]);
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
+    }
 
-  const effectiveFactoringId =
-    params.gestionPago === "FACTORING" ? params.factoringClienteId : null;
+    const effectiveFactoringId =
+      params.gestionPago === "FACTORING" ? params.factoringClienteId : null;
 
-  if (params.gestionPago === "FACTORING" && !effectiveFactoringId) {
-    throw new Error(
-      "Debe seleccionar una Empresa de Factoring Cliente para asignar la modalidad Factoring."
-    );
-  }
+    if (params.gestionPago === "FACTORING" && !effectiveFactoringId) {
+      return {
+        success: false,
+        error:
+          "Debe seleccionar una Empresa de Factoring Cliente para asignar la modalidad Factoring.",
+      };
+    }
 
-  const targetGestionPago: GestionPagoTipo =
-    params.gestionPago === "FACTORING" ? "FACTORING" : "DIRECTO";
+    const targetGestionPago: GestionPagoTipo =
+      params.gestionPago === "FACTORING" ? "FACTORING" : "DIRECTO";
+    const nowIso = new Date().toISOString();
 
-  if (isServerSupabaseConfigured()) {
-    const supabase = await createServerSupabaseClient();
-    let { error } = await supabase
-      .from("facturas_ventas")
-      .update({
-        gestion_pago: targetGestionPago,
-        factoring_cliente_id: effectiveFactoringId,
-      })
-      .eq("id", params.facturaId);
-
-    if (error && targetGestionPago === "DIRECTO") {
-      const retry = await supabase
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      let { error } = await supabase
         .from("facturas_ventas")
         .update({
-          gestion_pago: "DIRECTO_CLIENTE",
-          factoring_cliente_id: null,
+          gestion_pago: targetGestionPago,
+          factoring_cliente_id: effectiveFactoringId,
+          updated_at: nowIso,
         })
         .eq("id", params.facturaId);
-      error = retry.error;
+
+      if (error && targetGestionPago === "DIRECTO") {
+        const retry = await supabase
+          .from("facturas_ventas")
+          .update({
+            gestion_pago: "DIRECTO_CLIENTE",
+            factoring_cliente_id: null,
+            updated_at: nowIso,
+          })
+          .eq("id", params.facturaId);
+        error = retry.error;
+      }
+
+      if (error) {
+        return {
+          success: false,
+          error: `Error al guardar gestión de pago: ${error.message}`,
+        };
+      }
+
+      revalidatePath("/ventas-tensacon/facturas-ventas");
+      revalidatePath("/finanzas/facturas-ventas");
+      revalidatePath("/finanzas/facturas-ventas/factoring-clientes");
+      return { success: true };
     }
 
-    if (error) {
-      throw new Error(`Error actualizando gestión de pago: ${error.message}`);
+    const db = readLocalDb();
+    const idx = db.facturas_ventas.findIndex((f) => f.id === params.facturaId);
+    if (idx === -1) {
+      return { success: false, error: "Factura no encontrada." };
     }
+
+    db.facturas_ventas[idx].gestion_pago = targetGestionPago;
+    db.facturas_ventas[idx].factoring_cliente_id = effectiveFactoringId;
+    writeLocalDb(db);
 
     revalidatePath("/ventas-tensacon/facturas-ventas");
     revalidatePath("/finanzas/facturas-ventas");
     revalidatePath("/finanzas/facturas-ventas/factoring-clientes");
     return { success: true };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : "Error inesperado al actualizar gestión de pago.",
+    };
   }
-
-  const db = readLocalDb();
-  const idx = db.facturas_ventas.findIndex((f) => f.id === params.facturaId);
-  if (idx === -1) {
-    throw new Error("Factura no encontrada.");
-  }
-
-  db.facturas_ventas[idx].gestion_pago = targetGestionPago;
-  db.facturas_ventas[idx].factoring_cliente_id = effectiveFactoringId;
-  writeLocalDb(db);
-
-  revalidatePath("/ventas-tensacon/facturas-ventas");
-  revalidatePath("/finanzas/facturas-ventas");
-  revalidatePath("/finanzas/facturas-ventas/factoring-clientes");
-  return { success: true };
 }
 
 function calcularFechaVencimientoUtc(fechaEmision: string, dias: number): string {
