@@ -341,6 +341,12 @@ export const MODULOS_SISTEMA_FINANZAS: ModuloSistema[] = [
     categoria: "VENTAS TENSACON",
     descripcion: "Seguimiento a clientes, compromisos de pago y bitácora.",
   },
+  {
+    id: "reportes_ventas",
+    nombre: "Reportes de Ventas",
+    categoria: "VENTAS TENSACON",
+    descripcion: "Análisis comparativo de emisión SII, recaudación y deuda pendiente.",
+  },
 
   // B. COMPRAS TENSACON
   {

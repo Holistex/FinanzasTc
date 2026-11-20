@@ -171,11 +171,13 @@ export function DashboardSidebar({
   const canFacturasVentas = hasPermission(userSession, "facturas_ventas");
   const canFactoringClientes = hasPermission(userSession, "factoring_clientes");
   const canGestionCobranza = hasPermission(userSession, "gestion_cobranza");
+  const canReportesVentas = hasPermission(userSession, "reportes_ventas");
   const canVentasGroup =
     hasPermission(userSession, "ventas_global") ||
     canFacturasVentas ||
     canFactoringClientes ||
-    canGestionCobranza;
+    canGestionCobranza ||
+    canReportesVentas;
 
   const canFacturasCompras = hasPermission(userSession, "facturas_compras");
   const canHistoricoPagos = hasPermission(userSession, "historico_pagos_compras");
@@ -263,6 +265,7 @@ export function DashboardSidebar({
   const isGestionCobranzaActive =
     pathname.startsWith("/ventas-tensacon/gestion-cobranza") ||
     pathname.startsWith("/finanzas/facturas-ventas/gestion-cobranza");
+  const isReportesVentasActive = pathname.startsWith("/ventas-tensacon/reportes");
 
   const isComprasSectionActive = pathname.startsWith("/compras-tensacon");
   const [isComprasMenuOpen, setIsComprasMenuOpen] = useState(true);
@@ -434,6 +437,17 @@ export function DashboardSidebar({
                       isActive={isGestionCobranzaActive}
                       icon={PhoneCall}
                       label="Gestión de Cobranza"
+                      queryClient={queryClient}
+                      router={router}
+                    />
+                  )}
+
+                  {canReportesVentas && (
+                    <SidebarSubLink
+                      href="/ventas-tensacon/reportes"
+                      isActive={isReportesVentasActive}
+                      icon={BarChart3}
+                      label="Reportes"
                       queryClient={queryClient}
                       router={router}
                     />

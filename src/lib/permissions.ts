@@ -21,6 +21,7 @@ export interface UserAccessSubject {
 const KEY_ALIASES: Record<string, string[]> = {
   ventas_global: ["ventas_tensacon"],
   ventas_tensacon: ["ventas_global"],
+  reportes_ventas: ["ventas_global", "ventas_tensacon", "facturas_ventas", "gestion_cobranza"],
   compras_global: ["compras_tensacon"],
   compras_tensacon: ["compras_global"],
   historico_pagos_compras: ["historico_pagos"],

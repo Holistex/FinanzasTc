@@ -124,6 +124,18 @@ export function hasPermission(
       permisosMap["adm_perfiles"];
   }
 
+  // Si consulta por reportes_ventas y no tiene permiso explícito, hereda de perfiles con acceso a Ventas
+  if (
+    (rawPermiso === undefined || rawPermiso === null || rawPermiso === "") &&
+    moduleKey === "reportes_ventas"
+  ) {
+    rawPermiso =
+      permisosMap["ventas_global"] ||
+      permisosMap["ventas_tensacon"] ||
+      permisosMap["facturas_ventas"] ||
+      permisosMap["gestion_cobranza"];
+  }
+
   // Si consulta por mantenedor_colaboradores y no tiene permiso explícito en perfil legado
   if (
     (rawPermiso === undefined || rawPermiso === null || rawPermiso === "") &&
@@ -153,6 +165,7 @@ export const ROUTE_MODULE_MAP: Array<{
   { prefix: "/finanzas/facturas-ventas/factoring-clientes", moduleKey: "factoring_clientes" },
   { prefix: "/finanzas/facturas-ventas/gestion-cobranza", moduleKey: "gestion_cobranza" },
   { prefix: "/ventas-tensacon/gestion-cobranza", moduleKey: "gestion_cobranza" },
+  { prefix: "/ventas-tensacon/reportes", moduleKey: "reportes_ventas" },
   { prefix: "/finanzas/facturas-ventas", moduleKey: "facturas_ventas" },
   { prefix: "/ventas-tensacon/facturas-ventas", moduleKey: "facturas_ventas" },
   { prefix: "/ventas-tensacon", moduleKey: "ventas_global" },
