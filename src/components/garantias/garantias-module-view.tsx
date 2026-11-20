@@ -31,6 +31,7 @@ import {
   MessageSquarePlus,
   ClipboardList,
   User,
+  FileDown,
 } from "lucide-react";
 import {
   GarantiaItemWithRelations,
@@ -655,6 +656,40 @@ export function GarantiasModuleView({
     [items]
   );
 
+  const handleExportarPolizasPDF = async () => {
+    const polizasEnCurso = items.filter(
+      (item) => item.estado === "VIGENTE" || item.estado === "PROXIMA_A_VENCER"
+    );
+
+    const mandanteLabel =
+      mandanteFilter === "TODOS"
+        ? "Todos"
+        : mandantes.find((m) => m.id === mandanteFilter)?.razon_social || mandanteFilter;
+    const companiaLabel =
+      companiaFilter === "TODOS"
+        ? "Todas"
+        : companias.find((c) => c.id === companiaFilter)?.razon_social || companiaFilter;
+    const estadoLabel =
+      estadoFilter === "TODOS" ? "Vigentes y Por Vencer" : estadoFilter;
+
+    const filtrosTexto = [
+      `Estado: ${estadoLabel}`,
+      `Mandante: ${mandanteLabel}`,
+      `Compañía: ${companiaLabel}`,
+      searchQuery.trim() ? `Búsqueda: "${searchQuery.trim()}"` : null,
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+    const { exportPolizasEnCursoToPdf } = await import(
+      "@/lib/pdf/polizas-pdf-generator"
+    );
+    exportPolizasEnCursoToPdf({
+      polizas: polizasEnCurso,
+      filtrosTexto,
+    });
+  };
+
   // Computed status preview in form
   const statusPreview = useMemo(() => {
     const targetDate = formData.nueva_fecha_vencimiento || formData.fecha_vencimiento;
@@ -685,17 +720,27 @@ export function GarantiasModuleView({
           </div>
         </div>
 
-        {canManage && (
-          <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5">
+          {!isBoleta && (
+            <button
+              type="button"
+              onClick={handleExportarPolizasPDF}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-sm shadow-2xs transition-colors cursor-pointer"
+            >
+              <FileDown className="w-4 h-4 text-[#E05A10]" />
+              Exportar PDF
+            </button>
+          )}
+          {canManage && (
             <button
               onClick={openCreateModal}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#E05A10] text-white text-xs font-semibold hover:bg-[#c94e0d] transition-colors shadow-sm"
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#E05A10] text-white text-xs font-semibold hover:bg-[#c94e0d] transition-colors shadow-sm cursor-pointer"
             >
               <Plus className="h-4 w-4" />
               Nueva {isBoleta ? "Boleta" : "Póliza"}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* 2. KPI Summary Cards */}
