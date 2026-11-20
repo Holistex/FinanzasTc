@@ -765,7 +765,7 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
         ),
         faltanPorIngresarCount: faltantesP.length,
         faltanPorIngresarMonto: faltantesP.reduce(
-          (acc, r) => acc + Number(r.monto || 0),
+          (acc, r) => acc + Number(r.monto_total || 0),
           0
         ),
         ingresadasCorrectamenteCount: correctasP.length,
