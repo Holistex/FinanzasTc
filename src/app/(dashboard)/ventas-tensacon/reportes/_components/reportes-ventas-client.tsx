@@ -18,6 +18,7 @@ import {
   Bar,
   CartesianGrid,
   ComposedChart,
+  LabelList,
   Line,
   ReferenceLine,
   ResponsiveContainer,
@@ -101,6 +102,74 @@ function formatAxisMillions(val: number): string {
     return `$ ${Math.round(val / 1_000)}k`;
   }
   return `$ ${Math.round(val)}`;
+}
+
+const formatMillonesLabel = (valor: number): string => {
+  const num = Number(valor || 0);
+  if (num <= 0) return "";
+  const millones = Math.round(num / 1_000_000);
+  if (millones <= 0) return "";
+  return `$ ${millones.toLocaleString("es-CL")}M`;
+};
+
+function renderInnerBarLabel(props: {
+  x?: number | string;
+  y?: number | string;
+  width?: number | string;
+  height?: number | string;
+  value?: string | number | boolean | null;
+}) {
+  const x = Number(props.x ?? 0);
+  const y = Number(props.y ?? 0);
+  const width = Number(props.width ?? 0);
+  const height = Number(props.height ?? 0);
+  const val = Number(props.value ?? 0);
+
+  if (height < 16 || width < 28) return null;
+  const label = formatMillonesLabel(val);
+  if (!label) return null;
+
+  return (
+    <text
+      x={x + width / 2}
+      y={y + height / 2}
+      fill="#FFFFFF"
+      textAnchor="middle"
+      dominantBaseline="central"
+      fontSize={10}
+      fontWeight={700}
+    >
+      {label}
+    </text>
+  );
+}
+
+function renderTopTotalLabel(props: {
+  x?: number | string;
+  y?: number | string;
+  width?: number | string;
+  value?: string | number | boolean | null;
+}) {
+  const x = Number(props.x ?? 0);
+  const y = Number(props.y ?? 0);
+  const width = Number(props.width ?? 0);
+  const val = Number(props.value ?? 0);
+
+  const label = formatMillonesLabel(val);
+  if (!label) return null;
+
+  return (
+    <text
+      x={x + width / 2}
+      y={y - 7}
+      fill="#0F172A"
+      textAnchor="middle"
+      fontSize={10}
+      fontWeight={700}
+    >
+      {label}
+    </text>
+  );
 }
 
 interface CustomTooltipPayloadItem {
@@ -1099,7 +1168,7 @@ export function ReportesVentasClient({
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
                   data={monthlyChartData}
-                  margin={{ top: 14, right: 16, left: 4, bottom: 4 }}
+                  margin={{ top: 26, right: 16, left: 4, bottom: 4 }}
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -1130,8 +1199,19 @@ export function ReportesVentasClient({
                       stackId="cobranza"
                       fill="#10B981"
                       radius={showDeuda ? [0, 0, 4, 4] : [4, 4, 4, 4]}
-                      maxBarSize={44}
-                    />
+                      maxBarSize={48}
+                    >
+                      <LabelList
+                        dataKey="recaudado"
+                        content={renderInnerBarLabel}
+                      />
+                      {!showDeuda && (
+                        <LabelList
+                          dataKey="emitido"
+                          content={renderTopTotalLabel}
+                        />
+                      )}
+                    </Bar>
                   )}
                   {showDeuda && (
                     <Bar
@@ -1140,8 +1220,17 @@ export function ReportesVentasClient({
                       stackId="cobranza"
                       fill="#E05A10"
                       radius={[4, 4, 0, 0]}
-                      maxBarSize={44}
-                    />
+                      maxBarSize={48}
+                    >
+                      <LabelList
+                        dataKey="deuda"
+                        content={renderInnerBarLabel}
+                      />
+                      <LabelList
+                        dataKey="emitido"
+                        content={renderTopTotalLabel}
+                      />
+                    </Bar>
                   )}
                   {showPromedio && kpis.promedioMensual > 0 && (
                     <>
