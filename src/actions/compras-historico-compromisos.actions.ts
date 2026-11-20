@@ -21,11 +21,13 @@ export interface HistoricoPagosKPIs {
   totalPagado: number;
   cantidadTotal: number;
   totalDirecto: number;
+  totalCompraTC: number;
   totalCheque: number;
   totalFactoring: number;
   totalConfirming: number;
   totalNeteo: number;
   cantidadDirecto: number;
+  cantidadCompraTC: number;
   cantidadCheque: number;
   cantidadFactoring: number;
   cantidadConfirming: number;
@@ -366,12 +368,14 @@ export async function getHistoricoPagosComprasAction(params?: {
   // Cálculo de KPIs globales
   let totalPagado = 0;
   let totalDirecto = 0;
+  let totalCompraTC = 0;
   let totalCheque = 0;
   let totalFactoring = 0;
   let totalConfirming = 0;
   let totalNeteo = 0;
 
   let cantidadDirecto = 0;
+  let cantidadCompraTC = 0;
   let cantidadCheque = 0;
   let cantidadFactoring = 0;
   let cantidadConfirming = 0;
@@ -380,7 +384,12 @@ export async function getHistoricoPagosComprasAction(params?: {
     const m = Number(p.monto_pagado || 0);
     totalPagado += m;
 
-    const mod = String(p.modalidad_pago || "").toUpperCase();
+    const mod = String(
+      p.modalidad_pago || (p as unknown as Record<string, unknown>).modalidad || ""
+    )
+      .trim()
+      .toUpperCase()
+      .replace(/_/g, " ");
 
     if (mod === "CHEQUE") {
       totalCheque += m;
@@ -391,10 +400,18 @@ export async function getHistoricoPagosComprasAction(params?: {
     } else if (mod === "CONFIRMING") {
       totalConfirming += m;
       cantidadConfirming++;
-    } else if (mod === "NETEO_NC") {
+    } else if (mod === "NETEO NC") {
       totalNeteo += m;
-    } else {
-      // DIRECTO, TRANSFERENCIA, EFECTIVO, PAGADA, COMPRA_TC
+    } else if (mod === "COMPRA TC") {
+      totalCompraTC += m;
+      cantidadCompraTC++;
+    } else if (
+      mod === "DIRECTO" ||
+      mod === "DEUDA PROVEEDOR" ||
+      mod === "TRANSFERENCIA" ||
+      mod === "EFECTIVO" ||
+      mod === "PAGADA"
+    ) {
       totalDirecto += m;
       cantidadDirecto++;
     }
@@ -440,11 +457,13 @@ export async function getHistoricoPagosComprasAction(params?: {
       totalPagado,
       cantidadTotal: rawPagos.length,
       totalDirecto,
+      totalCompraTC,
       totalCheque,
       totalFactoring,
       totalConfirming,
       totalNeteo,
       cantidadDirecto,
+      cantidadCompraTC,
       cantidadCheque,
       cantidadFactoring,
       cantidadConfirming,

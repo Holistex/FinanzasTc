@@ -100,20 +100,90 @@ export function HistoricoPagosTable({
     setCurrentPage(1);
   }, [searchTerm, fechaDesde, fechaHasta, selectedModalidad, sortField, sortAsc]);
 
+  // Recálculo dinámico de los 6 KPIs por modalidad excluyendo COMPRA TC de PAGOS DIRECTOS
+  const computedKpis = useMemo(() => {
+    let totalPagado = 0;
+    let totalDirecto = 0;
+    let totalCompraTC = 0;
+    let totalCheque = 0;
+    let totalFactoring = 0;
+    let totalConfirming = 0;
+    let cantidadDirecto = 0;
+    let cantidadCompraTC = 0;
+    let cantidadCheque = 0;
+    let cantidadFactoring = 0;
+    let cantidadConfirming = 0;
+
+    for (const p of data) {
+      const m = Number(p.monto_pagado || 0);
+      totalPagado += m;
+      const mod = String(
+        p.modalidad_pago || (p as unknown as Record<string, unknown>).modalidad || ""
+      )
+        .trim()
+        .toUpperCase()
+        .replace(/_/g, " ");
+
+      if (mod === "COMPRA TC") {
+        totalCompraTC += m;
+        cantidadCompraTC++;
+      } else if (mod === "CHEQUE") {
+        totalCheque += m;
+        cantidadCheque++;
+      } else if (mod === "FACTORING") {
+        totalFactoring += m;
+        cantidadFactoring++;
+      } else if (mod === "CONFIRMING") {
+        totalConfirming += m;
+        cantidadConfirming++;
+      } else if (
+        mod === "DIRECTO" ||
+        mod === "DEUDA PROVEEDOR" ||
+        mod === "TRANSFERENCIA" ||
+        mod === "EFECTIVO" ||
+        mod === "PAGADA"
+      ) {
+        totalDirecto += m;
+        cantidadDirecto++;
+      }
+    }
+
+    return {
+      totalPagado,
+      cantidadTotal: data.length,
+      totalDirecto,
+      totalCompraTC,
+      totalCheque,
+      totalFactoring,
+      totalConfirming,
+      cantidadDirecto,
+      cantidadCompraTC,
+      cantidadCheque,
+      cantidadFactoring,
+      cantidadConfirming,
+    };
+  }, [data]);
+
   // Filtrado
   const filteredData = useMemo(() => {
     return data.filter((item) => {
-      const modItem = (item.modalidad_pago || "").toUpperCase();
+      const modItem = String(
+        item.modalidad_pago || (item as unknown as Record<string, unknown>).modalidad || ""
+      )
+        .trim()
+        .toUpperCase()
+        .replace(/_/g, " ");
       let matchModalidad = selectedModalidad === "TODAS";
       if (!matchModalidad) {
-        if (selectedModalidad === "DIRECTO") {
+        const targetMod = selectedModalidad.trim().toUpperCase().replace(/_/g, " ");
+        if (targetMod === "DIRECTO") {
           matchModalidad =
             modItem === "DIRECTO" ||
             modItem === "TRANSFERENCIA" ||
             modItem === "PAGADA" ||
-            modItem === "DEUDA_PROVEEDOR";
+            modItem === "DEUDA PROVEEDOR";
         } else {
-          matchModalidad = modItem === selectedModalidad;
+          matchModalidad = modItem === targetMod;
         }
       }
 
@@ -225,97 +295,125 @@ export function HistoricoPagosTable({
 
   return (
     <div className="space-y-6">
-      {/* TARJETAS DE KPIS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-        {/* Total Pagado */}
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+      {/* TARJETAS DE KPIS (6 CUADROS COMPACTOS EN UNA SOLA FRANJA DESKTOP) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-4">
+        {/* 1. Total Histórico Pagado */}
+        <div className="px-3.5 py-3 rounded-xl border border-slate-200 border-l-4 border-l-[#E05A10] bg-white shadow-2xs flex flex-col justify-between min-w-0">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 truncate">
               Total Histórico Pagado
             </span>
-            <div className="h-7 w-7 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
-              <CheckCircle2 className="h-4 w-4" />
+            <div className="h-6 w-6 rounded-md bg-orange-50 flex items-center justify-center text-[#E05A10] shrink-0">
+              <CheckCircle2 className="h-3.5 w-3.5" />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-lg font-bold font-mono text-slate-900">
-              {formatCLP(kpis.totalPagado)}
+          <div className="mt-1.5">
+            <div className="text-lg xl:text-xl font-black text-slate-900 font-mono tabular-nums whitespace-nowrap">
+              {formatCLP(computedKpis.totalPagado)}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {kpis.cantidadTotal} pagos registrados
+            <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+              {computedKpis.cantidadTotal} pagos registrados
             </p>
           </div>
         </div>
 
-        {/* Total Directo */}
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        {/* 2. Pagos Directos (excluye COMPRA TC) */}
+        <div className="px-3.5 py-3 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between min-w-0">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 truncate">
               Pagos Directos
             </span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded">
+            <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md shrink-0">
               DIRECTO
             </span>
           </div>
-          <div className="mt-2">
-            <div className="text-lg font-bold font-mono text-slate-900">
-              {formatCLP(kpis.totalDirecto)}
+          <div className="mt-1.5">
+            <div className="text-lg xl:text-xl font-black text-slate-900 font-mono tabular-nums whitespace-nowrap">
+              {formatCLP(computedKpis.totalDirecto)}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">{kpis.cantidadDirecto} pagos</p>
+            <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+              {computedKpis.cantidadDirecto} pagos
+            </p>
           </div>
         </div>
 
-        {/* Total Cheque */}
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        {/* 3. Compra TC (Nuevo KPI) */}
+        <div className="px-3.5 py-3 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between min-w-0">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 truncate">
+              Compra TC
+            </span>
+            <span className="bg-orange-50 text-[#E05A10] border border-orange-200 text-[10px] font-bold px-2 py-0.5 rounded-md shrink-0">
+              COMPRA TC
+            </span>
+          </div>
+          <div className="mt-1.5">
+            <div className="text-lg xl:text-xl font-black text-slate-900 font-mono tabular-nums whitespace-nowrap">
+              {formatCLP(computedKpis.totalCompraTC)}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+              {computedKpis.cantidadCompraTC} rendiciones TC
+            </p>
+          </div>
+        </div>
+
+        {/* 4. Pagos con Cheques */}
+        <div className="px-3.5 py-3 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between min-w-0">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 truncate">
               Pagos con Cheques
             </span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 bg-purple-100 text-purple-800 rounded">
+            <span className="text-[10px] font-bold px-2 py-0.5 bg-purple-100 text-purple-800 rounded-md shrink-0">
               CHEQUE
             </span>
           </div>
-          <div className="mt-2">
-            <div className="text-lg font-bold font-mono text-slate-900">
-              {formatCLP(kpis.totalCheque)}
+          <div className="mt-1.5">
+            <div className="text-lg xl:text-xl font-black text-slate-900 font-mono tabular-nums whitespace-nowrap">
+              {formatCLP(computedKpis.totalCheque)}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">{kpis.cantidadCheque} cheques cobrados</p>
+            <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+              {computedKpis.cantidadCheque} cheques cobrados
+            </p>
           </div>
         </div>
 
-        {/* Total Factoring */}
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        {/* 5. Factoring Cancelado */}
+        <div className="px-3.5 py-3 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between min-w-0">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 truncate">
               Factoring Cancelado
             </span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">
+            <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-100 text-blue-800 rounded-md shrink-0">
               FACTORING
             </span>
           </div>
-          <div className="mt-2">
-            <div className="text-lg font-bold font-mono text-slate-900">
-              {formatCLP(kpis.totalFactoring)}
+          <div className="mt-1.5">
+            <div className="text-lg xl:text-xl font-black text-slate-900 font-mono tabular-nums whitespace-nowrap">
+              {formatCLP(computedKpis.totalFactoring)}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">{kpis.cantidadFactoring} cesiones</p>
+            <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+              {computedKpis.cantidadFactoring} cesiones
+            </p>
           </div>
         </div>
 
-        {/* Total Confirming */}
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        {/* 6. Confirming Saldado */}
+        <div className="px-3.5 py-3 rounded-xl border border-slate-200 bg-white shadow-2xs flex flex-col justify-between min-w-0">
+          <div className="flex items-center justify-between gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 truncate">
               Confirming Saldado
             </span>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded">
+            <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded-md shrink-0">
               CONFIRMING
             </span>
           </div>
-          <div className="mt-2">
-            <div className="text-lg font-bold font-mono text-slate-900">
-              {formatCLP(kpis.totalConfirming)}
+          <div className="mt-1.5">
+            <div className="text-lg xl:text-xl font-black text-slate-900 font-mono tabular-nums whitespace-nowrap">
+              {formatCLP(computedKpis.totalConfirming)}
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">{kpis.cantidadConfirming} operaciones</p>
+            <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+              {computedKpis.cantidadConfirming} operaciones
+            </p>
           </div>
         </div>
       </div>
@@ -378,7 +476,7 @@ export function HistoricoPagosTable({
             >
               <option value="TODAS">Todas las Modalidades</option>
               <option value="DIRECTO">Directo (Transferencia)</option>
-              <option value="COMPRA_TC">Compra TC (Colaborador)</option>
+              <option value="COMPRA_TC">Compra TC</option>
               <option value="CHEQUE">Cheque</option>
               <option value="FACTORING">Factoring Proveedores</option>
               <option value="CONFIRMING">Confirming</option>
