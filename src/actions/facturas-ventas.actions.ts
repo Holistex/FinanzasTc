@@ -571,7 +571,7 @@ export async function updateGestionPagoAction(params: {
   facturaId: string;
   gestionPago: GestionPagoTipo;
   factoringClienteId: string | null;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<{ success: boolean; factura?: FacturaVenta; error?: string }> {
   try {
     const auth = await assertCanManage([
       "facturas_ventas",
@@ -599,14 +599,16 @@ export async function updateGestionPagoAction(params: {
 
     if (isServerSupabaseConfigured()) {
       const supabase = await createServerSupabaseClient();
-      let { error } = await supabase
+      let { data, error } = await supabase
         .from("facturas_ventas")
         .update({
           gestion_pago: targetGestionPago,
           factoring_cliente_id: effectiveFactoringId,
           updated_at: nowIso,
         })
-        .eq("id", params.facturaId);
+        .eq("id", params.facturaId)
+        .select("*, empresa_factoring_cliente(*)")
+        .single();
 
       if (error && targetGestionPago === "DIRECTO") {
         const retry = await supabase
@@ -616,21 +618,26 @@ export async function updateGestionPagoAction(params: {
             factoring_cliente_id: null,
             updated_at: nowIso,
           })
-          .eq("id", params.facturaId);
+          .eq("id", params.facturaId)
+          .select("*, empresa_factoring_cliente(*)")
+          .single();
+        data = retry.data;
         error = retry.error;
       }
 
-      if (error) {
+      if (error || !data) {
         return {
           success: false,
-          error: `Error al guardar gestión de pago: ${error.message}`,
+          error:
+            error?.message ||
+            "No se pudo actualizar la modalidad en base de datos.",
         };
       }
 
       revalidatePath("/ventas-tensacon/facturas-ventas");
       revalidatePath("/finanzas/facturas-ventas");
       revalidatePath("/finanzas/facturas-ventas/factoring-clientes");
-      return { success: true };
+      return { success: true, factura: data as FacturaVenta };
     }
 
     const db = readLocalDb();
@@ -646,7 +653,7 @@ export async function updateGestionPagoAction(params: {
     revalidatePath("/ventas-tensacon/facturas-ventas");
     revalidatePath("/finanzas/facturas-ventas");
     revalidatePath("/finanzas/facturas-ventas/factoring-clientes");
-    return { success: true };
+    return { success: true, factura: db.facturas_ventas[idx] };
   } catch (err: unknown) {
     return {
       success: false,

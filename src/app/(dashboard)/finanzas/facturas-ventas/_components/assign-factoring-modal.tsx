@@ -25,11 +25,7 @@ interface AssignFactoringModalProps {
   factura: FacturaVenta | null;
   factoringClientes: EmpresaFactoringCliente[];
   onClose: () => void;
-  onSuccess: (
-    facturaId?: string,
-    gestionPago?: GestionPagoTipo,
-    factoringClienteId?: string | null
-  ) => void;
+  onSuccess: (updatedFactura?: FacturaVenta) => void;
 }
 
 export function AssignFactoringModal({
@@ -125,12 +121,12 @@ export function AssignFactoringModal({
         factoringClienteId: targetFactoringId,
       });
 
-      if (res && !res.success) {
-        setError(res.error || "No se pudo actualizar la cesión de la factura.");
+      if (!res || !res.success) {
+        setError(res?.error || "No se pudo actualizar la cesión de la factura.");
         return;
       }
 
-      onSuccess(factura.id, targetGestion, targetFactoringId);
+      onSuccess(res.factura);
       onClose();
     } catch (err: unknown) {
       setError(
