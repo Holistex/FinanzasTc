@@ -14,9 +14,26 @@ import {
   TrendingUp,
   X,
 } from "lucide-react";
+import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { FacturaVenta, MantenedorON } from "@/types/database.types";
 import { LOGO_TENSACON_BASE64 } from "@/lib/pdf/logo-tensacon";
-import { cn, formatCLP, formatRutDisplay, normalizeRut } from "@/lib/utils";
+import {
+  calculateDueDateInfo,
+  cn,
+  formatCLP,
+  formatRutDisplay,
+  normalizeRut,
+} from "@/lib/utils";
 
 interface ReportesVentasClientProps {
   facturas: FacturaVenta[];
@@ -86,24 +103,63 @@ function formatAxisMillions(val: number): string {
   return `$ ${Math.round(val)}`;
 }
 
-function buildSmoothPath(points: Array<{ x: number; y: number }>): string {
-  if (points.length === 0) return "";
-  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
-  let d = `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[Math.max(0, i - 1)];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[Math.min(points.length - 1, i + 2)];
+interface CustomTooltipPayloadItem {
+  payload?: MonthlyPoint & { promedioMensual: number };
+}
 
-    const cp1x = p1.x + (p2.x - p0.x) / 6;
-    const cp1y = p1.y + (p2.y - p0.y) / 6;
-    const cp2x = p2.x - (p3.x - p1.x) / 6;
-    const cp2y = p2.y - (p3.y - p1.y) / 6;
-
-    d += ` C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+function ComposedChartTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: CustomTooltipPayloadItem[];
+}) {
+  if (!active || !payload || payload.length === 0 || !payload[0].payload) {
+    return null;
   }
-  return d;
+  const pt = payload[0].payload;
+  return (
+    <div className="rounded-lg bg-[#0F172A] text-white px-3.5 py-2.5 shadow-xl border border-slate-700 text-xs min-w-[225px]">
+      <div className="font-bold text-slate-200 border-b border-slate-700 pb-1 mb-1.5 flex items-center justify-between">
+        <span>{pt.label}</span>
+        <span className="text-[10px] text-slate-400 font-normal">
+          {pt.docsCount} docs
+        </span>
+      </div>
+      <div className="space-y-1 font-mono">
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-slate-300 font-sans">Emitido (SII):</span>
+          <span className="font-semibold text-white">
+            {formatCLP(pt.emitido)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-emerald-300 font-sans">Recaudado:</span>
+          <span className="font-semibold text-emerald-400">
+            {formatCLP(pt.recaudado)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-orange-300 font-sans">Deuda Pendiente:</span>
+          <span className="font-semibold text-orange-400">
+            {formatCLP(pt.deuda)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-4 border-t border-slate-700 pt-1 mt-1">
+          <span className="text-slate-300 font-sans">% Recaudación:</span>
+          <span className="font-bold text-[#E05A10]">
+            {pt.pctRecaudacion.toFixed(1)}%
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-slate-400 font-sans">Prom. Mensual:</span>
+          <span className="text-slate-300">
+            {formatCLP(Math.round(pt.promedioMensual))}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 const PAGE_SIZE = 30;
@@ -119,10 +175,9 @@ export function ReportesVentasClient({
   const [isClienteOpen, setIsClienteOpen] = useState<boolean>(false);
   const clienteDropdownRef = useRef<HTMLDivElement>(null);
 
-  const [showEmitido, setShowEmitido] = useState<boolean>(true);
   const [showRecaudado, setShowRecaudado] = useState<boolean>(true);
   const [showDeuda, setShowDeuda] = useState<boolean>(true);
-  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [showPromedio, setShowPromedio] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
 
   useEffect(() => {
@@ -371,79 +426,83 @@ export function ReportesVentasClient({
     return clientRows.slice(start, start + PAGE_SIZE);
   }, [clientRows, safePage]);
 
-  // SVG Chart Geometry
-  const chartGeom = useMemo(() => {
-    const width = 960;
-    const height = 310;
-    const padL = 68;
-    const padR = 24;
-    const padT = 22;
-    const padB = 36;
-    const plotW = width - padL - padR;
-    const plotH = height - padT - padB;
+  const monthlyChartData = useMemo(
+    () =>
+      monthlyData.map((m) => ({
+        ...m,
+        promedioMensual: Math.round(kpis.promedioMensual),
+      })),
+    [monthlyData, kpis.promedioMensual]
+  );
 
-    let maxVal = 0;
-    for (const pt of monthlyData) {
-      if (showEmitido) maxVal = Math.max(maxVal, pt.emitido);
-      if (showRecaudado) maxVal = Math.max(maxVal, pt.recaudado);
-      if (showDeuda) maxVal = Math.max(maxVal, pt.deuda);
+  // Desglose de Estado de Deuda Pendiente por tramos de vencimiento + Top Deudores
+  const agingSummary = useMemo(() => {
+    const buckets = [
+      {
+        id: "por_vencer",
+        label: "Por Vencer (Al día)",
+        colorBar: "bg-emerald-500",
+        colorDot: "bg-emerald-500",
+        colorText: "text-emerald-700",
+        monto: 0,
+        docs: 0,
+      },
+      {
+        id: "vencida_1_30",
+        label: "Vencida 1–30 días",
+        colorBar: "bg-amber-500",
+        colorDot: "bg-amber-500",
+        colorText: "text-amber-700",
+        monto: 0,
+        docs: 0,
+      },
+      {
+        id: "vencida_31_60",
+        label: "Vencida 31–60 días",
+        colorBar: "bg-[#E05A10]",
+        colorDot: "bg-[#E05A10]",
+        colorText: "text-[#E05A10]",
+        monto: 0,
+        docs: 0,
+      },
+      {
+        id: "critica_60",
+        label: "Crítica (+60 días)",
+        colorBar: "bg-rose-600",
+        colorDot: "bg-rose-600",
+        colorText: "text-rose-700",
+        monto: 0,
+        docs: 0,
+      },
+    ];
+
+    for (const f of filteredFacturas) {
+      if (Number(f.tipo_doc) === 61) continue;
+      const deuda = resolveDeudaClientSide(f);
+      if (deuda <= 0) continue;
+
+      const { diasRestantes } = calculateDueDateInfo(
+        f.fecha_docto,
+        f.fecha_vencimiento
+      );
+      if (diasRestantes >= 0) {
+        buckets[0].monto += deuda;
+        buckets[0].docs += 1;
+      } else if (diasRestantes >= -30) {
+        buckets[1].monto += deuda;
+        buckets[1].docs += 1;
+      } else if (diasRestantes >= -60) {
+        buckets[2].monto += deuda;
+        buckets[2].docs += 1;
+      } else {
+        buckets[3].monto += deuda;
+        buckets[3].docs += 1;
+      }
     }
-    if (maxVal <= 0) maxVal = 1_000_000;
 
-    // Nice ceiling step
-    const mag = Math.pow(10, Math.floor(Math.log10(maxVal)));
-    const niceMax = Math.ceil((maxVal * 1.12) / (mag / 2)) * (mag / 2);
-
-    const n = monthlyData.length;
-    const xFor = (i: number) =>
-      n <= 1 ? padL + plotW / 2 : padL + (i / (n - 1)) * plotW;
-    const yFor = (v: number) =>
-      padT + plotH - (Math.max(0, v) / niceMax) * plotH;
-
-    const emitidoPts = monthlyData.map((m, i) => ({
-      x: xFor(i),
-      y: yFor(m.emitido),
-    }));
-    const recaudadoPts = monthlyData.map((m, i) => ({
-      x: xFor(i),
-      y: yFor(m.recaudado),
-    }));
-    const deudaPts = monthlyData.map((m, i) => ({
-      x: xFor(i),
-      y: yFor(m.deuda),
-    }));
-
-    const deudaLine = buildSmoothPath(deudaPts);
-    const deudaArea =
-      deudaPts.length > 0
-        ? `${deudaLine} L ${deudaPts[deudaPts.length - 1].x.toFixed(2)} ${(padT + plotH).toFixed(2)} L ${deudaPts[0].x.toFixed(2)} ${(padT + plotH).toFixed(2)} Z`
-        : "";
-
-    const yTicks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => ({
-      value: niceMax * ratio,
-      y: padT + plotH - ratio * plotH,
-    }));
-
-    return {
-      width,
-      height,
-      padL,
-      padR,
-      padT,
-      padB,
-      plotW,
-      plotH,
-      emitidoPts,
-      recaudadoPts,
-      deudaPts,
-      emitidoPath: buildSmoothPath(emitidoPts),
-      recaudadoPath: buildSmoothPath(recaudadoPts),
-      deudaPath: deudaLine,
-      deudaAreaPath: deudaArea,
-      yTicks,
-      xFor,
-    };
-  }, [monthlyData, showEmitido, showRecaudado, showDeuda]);
+    const topDeudores = clientRows.filter((c) => c.deuda > 0).slice(0, 3);
+    return { buckets, topDeudores };
+  }, [filteredFacturas, clientRows]);
 
   const handleExportPDF = () => {
     const doc = new jsPDF({
@@ -970,285 +1029,236 @@ export function ReportesVentasClient({
         </div>
       </div>
 
-      {/* C. Gráfico Principal de Líneas Suavizadas */}
-      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <div>
-            <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wide text-[#0F172A]">
-              COMPORTAMIENTO DE DEUDA VS RECAUDACIÓN (POR MES)
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Evolución mensual cronológica en pesos chilenos ($ CLP)
-            </p>
-          </div>
+      {/* C. Grid Analítico 12 Columnas (8 / 4) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
+        {/* COLUMNA IZQUIERDA (67%): EVOLUCIÓN DE FACTURACIÓN Y COBRANZA */}
+        <div className="lg:col-span-8 bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <div>
+              <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wide text-[#0F172A]">
+                EVOLUCIÓN DE FACTURACIÓN Y COBRANZA
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Barras apiladas (Recaudado + Deuda Pendiente) vs Promedio
+                Mensual Emitido
+              </p>
+            </div>
 
-          {/* Leyenda interactiva superior derecha */}
-          <div className="flex flex-wrap items-center gap-3 text-xs">
-            <button
-              type="button"
-              onClick={() => setShowEmitido((v) => !v)}
-              className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-opacity cursor-pointer",
-                showEmitido
-                  ? "border-slate-200 bg-slate-50 text-[#0F172A] font-semibold"
-                  : "border-slate-100 bg-white text-slate-400 opacity-50"
-              )}
-            >
-              <span className="h-2.5 w-2.5 rounded-full bg-[#0F172A]" />
-              Emitido (SII)
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowRecaudado((v) => !v)}
-              className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-opacity cursor-pointer",
-                showRecaudado
-                  ? "border-emerald-200 bg-emerald-50/70 text-emerald-800 font-semibold"
-                  : "border-slate-100 bg-white text-slate-400 opacity-50"
-              )}
-            >
-              <span className="h-2.5 w-2.5 rounded-full bg-[#10B981]" />
-              Recaudado (Pagos)
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowDeuda((v) => !v)}
-              className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-opacity cursor-pointer",
-                showDeuda
-                  ? "border-rose-200 bg-rose-50/70 text-rose-800 font-semibold"
-                  : "border-slate-100 bg-white text-slate-400 opacity-50"
-              )}
-            >
-              <span className="h-2.5 w-2.5 rounded-full bg-[#EF4444]" />
-              Deuda Pendiente
-            </button>
-          </div>
-        </div>
-
-        {monthlyData.length === 0 ? (
-          <div className="h-64 flex items-center justify-center text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg">
-            No existen documentos registrados para los filtros seleccionados.
-          </div>
-        ) : (
-          <div className="relative w-full overflow-x-auto">
-            <div className="min-w-[640px] relative">
-              <svg
-                viewBox={`0 0 ${chartGeom.width} ${chartGeom.height}`}
-                className="w-full h-auto select-none"
-                onMouseLeave={() => setHoveredIdx(null)}
+            {/* Leyenda interactiva superior derecha */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => setShowRecaudado((v) => !v)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-opacity cursor-pointer",
+                  showRecaudado
+                    ? "border-emerald-200 bg-emerald-50/70 text-emerald-800 font-semibold"
+                    : "border-slate-100 bg-white text-slate-400 opacity-50"
+                )}
               >
-                <defs>
-                  <linearGradient id="deudaAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#EF4444" stopOpacity="0.16" />
-                    <stop offset="100%" stopColor="#EF4444" stopOpacity="0.01" />
-                  </linearGradient>
-                </defs>
+                <span className="h-2.5 w-2.5 rounded-sm bg-[#10B981]" />
+                Recaudado
+              </button>
 
-                {/* Gridlines horizontales & Eje Y */}
-                {chartGeom.yTicks.map((t, idx) => (
-                  <g key={idx}>
-                    <line
-                      x1={chartGeom.padL}
-                      y1={t.y}
-                      x2={chartGeom.width - chartGeom.padR}
-                      y2={t.y}
-                      stroke="#E2E8F0"
-                      strokeDasharray={idx === 0 ? undefined : "3 3"}
-                    />
-                    <text
-                      x={chartGeom.padL - 10}
-                      y={t.y + 4}
-                      textAnchor="end"
-                      className="fill-slate-400 text-[11px] font-mono"
-                    >
-                      {formatAxisMillions(t.value)}
-                    </text>
-                  </g>
-                ))}
-
-                {/* Área degradada Deuda Pendiente */}
-                {showDeuda && chartGeom.deudaAreaPath && (
-                  <path
-                    d={chartGeom.deudaAreaPath}
-                    fill="url(#deudaAreaGrad)"
-                  />
+              <button
+                type="button"
+                onClick={() => setShowDeuda((v) => !v)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-opacity cursor-pointer",
+                  showDeuda
+                    ? "border-orange-200 bg-orange-50/70 text-[#E05A10] font-semibold"
+                    : "border-slate-100 bg-white text-slate-400 opacity-50"
                 )}
+              >
+                <span className="h-2.5 w-2.5 rounded-sm bg-[#E05A10]" />
+                Deuda Pendiente
+              </button>
 
-                {/* Línea Emitido (SII) */}
-                {showEmitido && chartGeom.emitidoPath && (
-                  <path
-                    d={chartGeom.emitidoPath}
-                    fill="none"
-                    stroke="#0F172A"
-                    strokeWidth={2.5}
-                    strokeLinecap="round"
-                  />
+              <button
+                type="button"
+                onClick={() => setShowPromedio((v) => !v)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-opacity cursor-pointer",
+                  showPromedio
+                    ? "border-slate-200 bg-slate-50 text-[#0F172A] font-semibold"
+                    : "border-slate-100 bg-white text-slate-400 opacity-50"
                 )}
-
-                {/* Línea Recaudado (Pagos) */}
-                {showRecaudado && chartGeom.recaudadoPath && (
-                  <path
-                    d={chartGeom.recaudadoPath}
-                    fill="none"
-                    stroke="#10B981"
-                    strokeWidth={2.5}
-                    strokeLinecap="round"
-                  />
-                )}
-
-                {/* Línea Deuda Pendiente */}
-                {showDeuda && chartGeom.deudaPath && (
-                  <path
-                    d={chartGeom.deudaPath}
-                    fill="none"
-                    stroke="#EF4444"
-                    strokeWidth={3}
-                    strokeLinecap="round"
-                  />
-                )}
-
-                {/* Crosshair vertical en hover */}
-                {hoveredIdx !== null && monthlyData[hoveredIdx] && (
-                  <line
-                    x1={chartGeom.xFor(hoveredIdx)}
-                    y1={chartGeom.padT}
-                    x2={chartGeom.xFor(hoveredIdx)}
-                    y2={chartGeom.padT + chartGeom.plotH}
-                    stroke="#94A3B8"
-                    strokeWidth={1}
-                    strokeDasharray="4 4"
-                  />
-                )}
-
-                {/* Puntos & Labels Eje X */}
-                {monthlyData.map((m, i) => {
-                  const x = chartGeom.xFor(i);
-                  const isHov = hoveredIdx === i;
-                  const colW =
-                    monthlyData.length > 1
-                      ? chartGeom.plotW / (monthlyData.length - 1)
-                      : chartGeom.plotW;
-
-                  return (
-                    <g key={m.mesKey}>
-                      {showEmitido && (
-                        <circle
-                          cx={x}
-                          cy={chartGeom.emitidoPts[i].y}
-                          r={isHov ? 5 : 3}
-                          fill="#0F172A"
-                          stroke="#FFFFFF"
-                          strokeWidth={1.5}
-                        />
-                      )}
-                      {showRecaudado && (
-                        <circle
-                          cx={x}
-                          cy={chartGeom.recaudadoPts[i].y}
-                          r={isHov ? 5 : 3}
-                          fill="#10B981"
-                          stroke="#FFFFFF"
-                          strokeWidth={1.5}
-                        />
-                      )}
-                      {showDeuda && (
-                        <circle
-                          cx={x}
-                          cy={chartGeom.deudaPts[i].y}
-                          r={isHov ? 5.5 : 3.5}
-                          fill="#EF4444"
-                          stroke="#FFFFFF"
-                          strokeWidth={1.5}
-                        />
-                      )}
-
-                      <text
-                        x={x}
-                        y={chartGeom.height - 10}
-                        textAnchor="middle"
-                        className={cn(
-                          "text-[11px] font-medium",
-                          isHov ? "fill-[#0F172A] font-bold" : "fill-slate-500"
-                        )}
-                      >
-                        {m.label}
-                      </text>
-
-                      {/* Zona invisible interactiva */}
-                      <rect
-                        x={x - colW / 2}
-                        y={chartGeom.padT}
-                        width={colW}
-                        height={chartGeom.plotH + 24}
-                        fill="transparent"
-                        className="cursor-crosshair"
-                        onMouseEnter={() => setHoveredIdx(i)}
-                      />
-                    </g>
-                  );
-                })}
-              </svg>
-
-              {/* Tooltip Oscuro Ejecutivo */}
-              {hoveredIdx !== null && monthlyData[hoveredIdx] && (
-                <div
-                  className="pointer-events-none absolute top-3 z-20 rounded-lg bg-[#0F172A] text-white px-3.5 py-2.5 shadow-xl border border-slate-700 text-xs min-w-[215px]"
-                  style={{
-                    left: `${Math.min(
-                      72,
-                      Math.max(
-                        6,
-                        (chartGeom.xFor(hoveredIdx) / chartGeom.width) * 100 - 10
-                      )
-                    )}%`,
-                  }}
-                >
-                  <div className="font-bold text-slate-200 border-b border-slate-700 pb-1 mb-1.5 flex items-center justify-between">
-                    <span>{monthlyData[hoveredIdx].label}</span>
-                    <span className="text-[10px] text-slate-400 font-normal">
-                      {monthlyData[hoveredIdx].docsCount} docs
-                    </span>
-                  </div>
-                  <div className="space-y-1 font-mono">
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-slate-300 font-sans">Emitido:</span>
-                      <span className="font-semibold text-white">
-                        {formatCLP(monthlyData[hoveredIdx].emitido)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-emerald-300 font-sans">
-                        Recaudado:
-                      </span>
-                      <span className="font-semibold text-emerald-400">
-                        {formatCLP(monthlyData[hoveredIdx].recaudado)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-rose-300 font-sans">
-                        Deuda Pendiente:
-                      </span>
-                      <span className="font-semibold text-rose-400">
-                        {formatCLP(monthlyData[hoveredIdx].deuda)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 border-t border-slate-700 pt-1 mt-1">
-                      <span className="text-slate-300 font-sans">
-                        % Recaudación:
-                      </span>
-                      <span className="font-bold text-[#E05A10]">
-                        {monthlyData[hoveredIdx].pctRecaudacion.toFixed(1)}%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
+              >
+                <span className="w-3 border-t-2 border-dashed border-[#0F172A]" />
+                Prom. Emitido
+              </button>
             </div>
           </div>
-        )}
+
+          {monthlyChartData.length === 0 ? (
+            <div className="h-72 flex items-center justify-center text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg">
+              No existen documentos registrados para los filtros seleccionados.
+            </div>
+          ) : (
+            <div className="w-full h-[320px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart
+                  data={monthlyChartData}
+                  margin={{ top: 14, right: 16, left: 4, bottom: 4 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    vertical={false}
+                    stroke="#E2E8F0"
+                  />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 11, fill: "#64748B" }}
+                    axisLine={{ stroke: "#E2E8F0" }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tickFormatter={formatAxisMillions}
+                    tick={{ fontSize: 11, fill: "#64748B" }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={60}
+                  />
+                  <RechartsTooltip
+                    content={<ComposedChartTooltip />}
+                    cursor={{ fill: "#F1F5F9", opacity: 0.6 }}
+                  />
+                  {showRecaudado && (
+                    <Bar
+                      dataKey="recaudado"
+                      name="Recaudado"
+                      stackId="cobranza"
+                      fill="#10B981"
+                      radius={showDeuda ? [0, 0, 4, 4] : [4, 4, 4, 4]}
+                      maxBarSize={44}
+                    />
+                  )}
+                  {showDeuda && (
+                    <Bar
+                      dataKey="deuda"
+                      name="Deuda Pendiente"
+                      stackId="cobranza"
+                      fill="#E05A10"
+                      radius={[4, 4, 0, 0]}
+                      maxBarSize={44}
+                    />
+                  )}
+                  {showPromedio && kpis.promedioMensual > 0 && (
+                    <>
+                      <ReferenceLine
+                        y={kpis.promedioMensual}
+                        stroke="#0F172A"
+                        strokeDasharray="5 5"
+                        strokeWidth={2}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="promedioMensual"
+                        name="Prom. Mensual Emitido"
+                        stroke="#0F172A"
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        dot={false}
+                        activeDot={false}
+                      />
+                    </>
+                  )}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        {/* COLUMNA DERECHA (33%): ESTADO DE DEUDA PENDIENTE */}
+        <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between gap-5">
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wide text-[#0F172A]">
+                ESTADO DE DEUDA PENDIENTE
+              </h2>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-50 text-[#E05A10] border border-orange-200">
+                {kpis.docsPendientes} docs
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Antigüedad de saldos por tramo de vencimiento
+            </p>
+
+            {/* Desglose por tramos */}
+            <div className="mt-5 space-y-3.5">
+              {agingSummary.buckets.map((b) => {
+                const pct =
+                  kpis.totalDeuda > 0 ? (b.monto / kpis.totalDeuda) * 100 : 0;
+                return (
+                  <div key={b.id} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="inline-flex items-center gap-1.5 font-semibold text-slate-700">
+                        <span
+                          className={cn("h-2 w-2 rounded-full", b.colorDot)}
+                        />
+                        {b.label}
+                      </span>
+                      <span className="text-[11px] text-slate-400 font-mono">
+                        {b.docs} {b.docs === 1 ? "doc" : "docs"}
+                      </span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all duration-300",
+                          b.colorBar
+                        )}
+                        style={{ width: `${Math.min(100, pct)}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] font-mono">
+                      <span className={cn("font-bold", b.colorText)}>
+                        {formatCLP(b.monto)}
+                      </span>
+                      <span className="text-slate-500">{pct.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Top 3 Clientes Deudores + Total Por Cobrar */}
+          <div className="pt-4 border-t border-slate-100 space-y-2.5">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Principales Saldos por Cobrar
+            </div>
+            {agingSummary.topDeudores.length === 0 ? (
+              <p className="text-xs text-emerald-600 font-medium">
+                Cartera al día — sin saldos pendientes.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {agingSummary.topDeudores.map((c) => (
+                  <div
+                    key={c.rutKey}
+                    className="flex items-center justify-between gap-2 text-xs"
+                  >
+                    <span className="truncate text-slate-700 font-medium">
+                      {c.razonSocial}
+                    </span>
+                    <span className="font-mono font-bold text-[#E05A10] shrink-0">
+                      {formatCLP(c.deuda)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-600">
+                Total Por Cobrar
+              </span>
+              <span className="font-mono font-bold text-sm text-[#0F172A]">
+                {formatCLP(kpis.totalDeuda)}
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* D. Tabla Inferior: CONSOLIDADO DE EMISIÓN, RECAUDACIÓN Y DEUDA POR CLIENTE */}
