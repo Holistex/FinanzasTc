@@ -738,19 +738,48 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
     .map(([periodo]) => periodo)
     .sort((a, b) => b.localeCompare(a));
 
-  // Conciliación global ("TODOS")
+  // Conciliación global ("TODOS"): 100% SII contra 100% Flexline
   const globalResult = reconcileMatchFlexline(siiDocs, flexDocs);
 
-  // Conciliación específica por cada período de libro SII
+  // Conciliación específica por período: filtrar DESPUÉS de clasificar contra todo Flexline
   const porPeriodo: Record<string, MatchFlexlinePeriodDataset> = {};
   for (const p of periodosDisponibles) {
     const siiFiltradas = siiDocs.filter(
       (d) => normalizePeriodoLibro(d.periodo_libro) === p
     );
-    const flexFiltradas = flexDocs.filter(
-      (r) => normalizePeriodoLibro(r.periodo_libro, r.fecha_emision) === p
+    const faltantesP = globalResult.faltantes.filter((r) => r.periodo === p);
+    const correctasP = globalResult.correctas.filter((r) => r.periodo === p);
+    const malIngresadasP = globalResult.malIngresadas.filter(
+      (r) => r.periodo === p
     );
-    porPeriodo[p] = reconcileMatchFlexline(siiFiltradas, flexFiltradas);
+
+    porPeriodo[p] = {
+      faltantes: faltantesP,
+      correctas: correctasP,
+      malIngresadas: malIngresadasP,
+      kpis: {
+        totalDocumentosSii: siiFiltradas.length,
+        totalMontoSii: siiFiltradas.reduce(
+          (acc, d) => acc + Number(d.monto_total || 0),
+          0
+        ),
+        faltanPorIngresarCount: faltantesP.length,
+        faltanPorIngresarMonto: faltantesP.reduce(
+          (acc, r) => acc + Number(r.monto || 0),
+          0
+        ),
+        ingresadasCorrectamenteCount: correctasP.length,
+        ingresadasCorrectamenteMonto: correctasP.reduce(
+          (acc, r) => acc + Number(r.monto_sii || 0),
+          0
+        ),
+        malIngresadasCount: malIngresadasP.length,
+        malIngresadasDiferenciaMonto: malIngresadasP.reduce(
+          (acc, r) => acc + Math.abs(Number(r.diferencia || 0)),
+          0
+        ),
+      },
+    };
   }
 
   return {
