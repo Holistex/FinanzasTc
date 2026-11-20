@@ -201,13 +201,25 @@ export function FacturasComprasTable({
   };
 
   const periodosLibroDisponibles = useMemo(() => {
-    const set = new Set<string>();
+    const conteo = new Map<string, number>();
     for (const f of data) {
       const p = getFacturaPeriodoLibro(f);
-      if (p) set.add(p);
+      if (p) conteo.set(p, (conteo.get(p) || 0) + 1);
     }
-    return Array.from(set).sort((a, b) => b.localeCompare(a));
+    return Array.from(conteo.entries())
+      .filter(([, total]) => total > 0)
+      .map(([p]) => p)
+      .sort((a, b) => b.localeCompare(a));
   }, [data]);
+
+  useEffect(() => {
+    if (
+      periodoLibroFilter !== "TODOS" &&
+      !periodosLibroDisponibles.includes(periodoLibroFilter)
+    ) {
+      setPeriodoLibroFilter("TODOS");
+    }
+  }, [periodosLibroDisponibles, periodoLibroFilter]);
 
   // Modales
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);

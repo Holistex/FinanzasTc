@@ -132,6 +132,15 @@ export function MatchFlexlineClient({
   const [search, setSearch] = useState("");
   const [periodoFilter, setPeriodoFilter] = useState("TODOS");
   const [tipoDteFilter, setTipoDteFilter] = useState("ALL");
+
+  useEffect(() => {
+    if (
+      periodoFilter !== "TODOS" &&
+      !data.periodosDisponibles.includes(periodoFilter)
+    ) {
+      setPeriodoFilter("TODOS");
+    }
+  }, [data.periodosDisponibles, periodoFilter]);
   const [currentPage, setCurrentPage] = useState(1);
   const [feedback, setFeedback] = useState<{
     type: "success" | "error";

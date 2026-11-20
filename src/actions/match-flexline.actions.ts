@@ -725,15 +725,20 @@ export async function getMatchFlexlineDataAction(): Promise<MatchFlexlineRespons
     }
   }
 
-  // Períodos disponibles estrictamente desde `facturas_compras.periodo_libro` (no nulo)
-  const periodosSet = new Set<string>();
+  // Períodos disponibles estrictamente con 1 o más registros (SII + Flexline)
+  const conteoPorPeriodo = new Map<string, number>();
   for (const doc of siiDocs) {
     const p = normalizePeriodoLibro(doc.periodo_libro);
-    if (p) periodosSet.add(p);
+    if (p) conteoPorPeriodo.set(p, (conteoPorPeriodo.get(p) || 0) + 1);
   }
-  const periodosDisponibles = Array.from(periodosSet).sort((a, b) =>
-    b.localeCompare(a)
-  );
+  for (const row of flexDocs) {
+    const p = normalizePeriodoLibro(row.periodo_libro, row.fecha_emision);
+    if (p) conteoPorPeriodo.set(p, (conteoPorPeriodo.get(p) || 0) + 1);
+  }
+  const periodosDisponibles = Array.from(conteoPorPeriodo.entries())
+    .filter(([, total]) => total > 0)
+    .map(([periodo]) => periodo)
+    .sort((a, b) => b.localeCompare(a));
 
   // Conciliación global ("TODOS")
   const globalResult = reconcileMatchFlexline(siiDocs, flexDocs);
