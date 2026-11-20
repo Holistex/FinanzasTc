@@ -1786,10 +1786,7 @@ export function FacturasVentasTable({
         factura={facturaToAssignFactoring}
         factoringClientes={factoringClientes}
         onClose={() => setFacturaToAssignFactoring(null)}
-        onSuccess={() => {
-          fetchServerPage();
-          router.refresh();
-        }}
+        onSuccess={() => fetchServerPage()}
       />
 
       {/* Modal de Registro de Pago / Abono */}
