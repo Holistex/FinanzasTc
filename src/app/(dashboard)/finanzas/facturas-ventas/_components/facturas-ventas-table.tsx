@@ -2,6 +2,7 @@
 
 import React, { useState, useTransition, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { SegmentedTabs } from "@/components/ui/SegmentedTabs";
 import {
   Search,
@@ -105,6 +106,7 @@ export function FacturasVentasTable({
     staleTime: 5 * 60 * 1000,
   });
 
+  const router = useRouter();
   const [response, setResponse] = useState<PaginatedFacturasResponse>(
     cachedResponse ?? initialResponse
   );
@@ -235,8 +237,7 @@ export function FacturasVentasTable({
           f.id === updatedFactura.id
             ? {
                 ...f,
-                gestion_pago: updatedFactura.gestion_pago,
-                factoring_cliente_id: updatedFactura.factoring_cliente_id,
+                ...updatedFactura,
                 empresa_factoring_cliente:
                   updatedFactura.empresa_factoring_cliente ?? null,
               }
@@ -245,6 +246,7 @@ export function FacturasVentasTable({
       }));
     }
     queryClient.invalidateQueries({ queryKey: ["facturas_ventas"] });
+    router.refresh();
   };
 
   const fetchServerPage = (
@@ -1310,7 +1312,18 @@ export function FacturasVentasTable({
                   return "Documento bloqueado: Debe cargar el respaldo PDF/Imagen antes de operar o ceder esta factura.";
                 };
 
-                const isFactoring = row.gestion_pago === "FACTORING";
+                const factoringStr = String(
+                  row.empresa_factoring_cliente?.razon_social ||
+                    row.entidad_factoring ||
+                    ""
+                ).trim();
+                const isFactoring =
+                  row.gestion_pago === "FACTORING" ||
+                  Boolean(row.factoring_cliente_id) ||
+                  (factoringStr.length > 0 &&
+                    !["DIRECTO", "DIRECTO CLIENTE"].includes(
+                      factoringStr.toUpperCase()
+                    ));
                 const dueInfo = calculateDueDateInfo(
                   row.fecha_docto,
                   row.fecha_vencimiento
