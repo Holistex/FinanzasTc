@@ -1580,6 +1580,35 @@ export function FacturasVentasTable({
                         <span className="text-[10px] text-slate-300 font-mono">
                           —
                         </span>
+                      ) : String(row.gestion_pago || "").toUpperCase() === "DIRECTO" && !isFactoring ? (
+                        canManage ? (
+                          <button
+                            type="button"
+                            disabled={!puedeGestionar}
+                            onClick={() => {
+                              if (puedeGestionar) setFacturaToAssignFactoring(row);
+                            }}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold text-xs shadow-2xs transition-colors whitespace-nowrap",
+                              !puedeGestionar
+                                ? "bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+                                : "bg-blue-50 hover:bg-blue-100 border border-blue-300 text-blue-700 cursor-pointer"
+                            )}
+                            title={
+                              !puedeGestionar
+                                ? getBloqueoTooltip("ceder")
+                                : "Gestionada como Deuda Directa (clic para modificar)"
+                            }
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                            Deuda Directa
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 border border-blue-200 text-blue-700 font-semibold text-xs whitespace-nowrap">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                            Deuda Directa
+                          </span>
+                        )
                       ) : (
                         <div className="inline-flex items-center justify-end gap-1.5">
                           {isFactoring && (
@@ -1757,7 +1786,10 @@ export function FacturasVentasTable({
         factura={facturaToAssignFactoring}
         factoringClientes={factoringClientes}
         onClose={() => setFacturaToAssignFactoring(null)}
-        onSuccess={() => fetchServerPage()}
+        onSuccess={() => {
+          fetchServerPage();
+          router.refresh();
+        }}
       />
 
       {/* Modal de Registro de Pago / Abono */}

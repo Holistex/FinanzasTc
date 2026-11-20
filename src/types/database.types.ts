@@ -1,4 +1,4 @@
-export type GestionPagoTipo = "DIRECTO_CLIENTE" | "FACTORING";
+export type GestionPagoTipo = "DIRECTO_CLIENTE" | "DIRECTO" | "FACTORING";
 
 export interface EmpresaFactoringCliente {
   id: string;

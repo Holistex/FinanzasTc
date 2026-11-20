@@ -590,20 +590,35 @@ export async function updateGestionPagoAction(params: {
     );
   }
 
+  const targetGestionPago: GestionPagoTipo =
+    params.gestionPago === "FACTORING" ? "FACTORING" : "DIRECTO";
+
   if (isServerSupabaseConfigured()) {
     const supabase = await createServerSupabaseClient();
-    const { error } = await supabase
+    let { error } = await supabase
       .from("facturas_ventas")
       .update({
-        gestion_pago: params.gestionPago,
+        gestion_pago: targetGestionPago,
         factoring_cliente_id: effectiveFactoringId,
       })
       .eq("id", params.facturaId);
+
+    if (error && targetGestionPago === "DIRECTO") {
+      const retry = await supabase
+        .from("facturas_ventas")
+        .update({
+          gestion_pago: "DIRECTO_CLIENTE",
+          factoring_cliente_id: null,
+        })
+        .eq("id", params.facturaId);
+      error = retry.error;
+    }
 
     if (error) {
       throw new Error(`Error actualizando gestión de pago: ${error.message}`);
     }
 
+    revalidatePath("/ventas-tensacon/facturas-ventas");
     revalidatePath("/finanzas/facturas-ventas");
     revalidatePath("/finanzas/facturas-ventas/factoring-clientes");
     return { success: true };
@@ -615,10 +630,11 @@ export async function updateGestionPagoAction(params: {
     throw new Error("Factura no encontrada.");
   }
 
-  db.facturas_ventas[idx].gestion_pago = params.gestionPago;
+  db.facturas_ventas[idx].gestion_pago = targetGestionPago;
   db.facturas_ventas[idx].factoring_cliente_id = effectiveFactoringId;
   writeLocalDb(db);
 
+  revalidatePath("/ventas-tensacon/facturas-ventas");
   revalidatePath("/finanzas/facturas-ventas");
   revalidatePath("/finanzas/facturas-ventas/factoring-clientes");
   return { success: true };
