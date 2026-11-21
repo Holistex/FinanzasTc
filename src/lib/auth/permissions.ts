@@ -162,7 +162,6 @@ export const ROUTE_MODULE_MAP: Array<{
   exact?: boolean;
 }> = [
   // Ventas Tensacon
-  { prefix: "/finanzas/facturas-ventas/factoring-clientes", moduleKey: "factoring_clientes" },
   { prefix: "/finanzas/facturas-ventas/gestion-cobranza", moduleKey: "gestion_cobranza" },
   { prefix: "/ventas-tensacon/gestion-cobranza", moduleKey: "gestion_cobranza" },
   { prefix: "/ventas-tensacon/reportes", moduleKey: "reportes_ventas" },

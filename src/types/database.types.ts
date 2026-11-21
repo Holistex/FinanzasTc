@@ -330,12 +330,6 @@ export const MODULOS_SISTEMA_FINANZAS: ModuloSistema[] = [
     descripcion: "Libro de ventas SII, control de saldos y vencimientos.",
   },
   {
-    id: "factoring_clientes",
-    nombre: "Factoring Clientes",
-    categoria: "VENTAS TENSACON",
-    descripcion: "Cartera cedida, tasas y ranking de entidades.",
-  },
-  {
     id: "gestion_cobranza",
     nombre: "Gestión de Cobranza",
     categoria: "VENTAS TENSACON",

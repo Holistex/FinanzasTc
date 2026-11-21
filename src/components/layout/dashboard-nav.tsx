@@ -169,13 +169,11 @@ export function DashboardSidebar({
 
   // Permisos dinámicos por módulo y grupo
   const canFacturasVentas = hasPermission(userSession, "facturas_ventas");
-  const canFactoringClientes = hasPermission(userSession, "factoring_clientes");
   const canGestionCobranza = hasPermission(userSession, "gestion_cobranza");
   const canReportesVentas = hasPermission(userSession, "reportes_ventas");
   const canVentasGroup =
     hasPermission(userSession, "ventas_global") ||
     canFacturasVentas ||
-    canFactoringClientes ||
     canGestionCobranza ||
     canReportesVentas;
 
@@ -259,9 +257,6 @@ export function DashboardSidebar({
   const isFacturasVentasActive =
     pathname === "/finanzas/facturas-ventas" ||
     pathname === "/finanzas/facturas-ventas/";
-  const isFactoringClientesActive = pathname.startsWith(
-    "/finanzas/facturas-ventas/factoring-clientes"
-  );
   const isGestionCobranzaActive =
     pathname.startsWith("/ventas-tensacon/gestion-cobranza") ||
     pathname.startsWith("/finanzas/facturas-ventas/gestion-cobranza");
@@ -406,7 +401,7 @@ export function DashboardSidebar({
                 )}
               </button>
 
-              {/* Submenú Anidado: 1. Facturas de Ventas | 2. Factoring Clientes | 3. Gestión de Cobranza */}
+              {/* Submenú Anidado: 1. Facturas de Ventas | 2. Gestión de Cobranza | 3. Reportes de Ventas */}
               {isFacturasMenuOpen && (
                 <div className="ml-3.5 pl-2.5 border-l border-slate-800 space-y-0.5 pt-0.5">
                   {canFacturasVentas && (
@@ -415,17 +410,6 @@ export function DashboardSidebar({
                       isActive={isFacturasVentasActive}
                       icon={Receipt}
                       label="Facturas de Ventas"
-                      queryClient={queryClient}
-                      router={router}
-                    />
-                  )}
-
-                  {canFactoringClientes && (
-                    <SidebarSubLink
-                      href="/finanzas/facturas-ventas/factoring-clientes"
-                      isActive={isFactoringClientesActive}
-                      icon={Layers}
-                      label="Factoring Clientes"
                       queryClient={queryClient}
                       router={router}
                     />
