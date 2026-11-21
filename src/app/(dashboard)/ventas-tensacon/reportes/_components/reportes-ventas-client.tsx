@@ -5,6 +5,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
   BarChart3,
+  Building2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import {
   Bar,
+  BarChart,
   CartesianGrid,
   ComposedChart,
   LabelList,
@@ -32,6 +34,7 @@ import {
   calculateDueDateInfo,
   cn,
   formatCLP,
+  formatDateCL,
   formatRutDisplay,
   normalizeRut,
 } from "@/lib/utils";
@@ -231,6 +234,119 @@ function ComposedChartTooltip({
   );
 }
 
+interface DeudaEntidadDoc {
+  id: string;
+  folio: number;
+  razonSocial: string;
+  onProyecto: string;
+  fechaEmision: string;
+  fechaVencimiento: string;
+  deudaPendiente: number;
+}
+
+interface DeudaEntidadRow {
+  entityKey: string;
+  entityName: string;
+  shortName: string;
+  totalDeuda: number;
+  pctDeuda: number;
+  docsCount: number;
+  docs: DeudaEntidadDoc[];
+}
+
+type ReporteTab = "reporte_ventas" | "deuda_clientes";
+type AlcanceCartera = "FACTORING" | "DIRECTA" | "CONSOLIDADO";
+
+function HorizontalBarTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: DeudaEntidadRow }>;
+}) {
+  if (!active || !payload || payload.length === 0 || !payload[0].payload) {
+    return null;
+  }
+  const item = payload[0].payload;
+  return (
+    <div className="rounded-lg bg-[#0F172A] text-white px-3.5 py-2.5 shadow-xl border border-slate-700 text-xs min-w-[210px]">
+      <div className="font-bold text-slate-100 border-b border-slate-700 pb-1 mb-1.5">
+        {item.entityName}
+      </div>
+      <div className="space-y-1 font-mono">
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-slate-300 font-sans">Deuda Total:</span>
+          <span className="font-bold text-white">
+            {formatCLP(item.totalDeuda)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-slate-300 font-sans">Participación:</span>
+          <span className="font-semibold text-[#E05A10]">
+            {item.pctDeuda.toFixed(2).replace(".", ",")} %
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-slate-300 font-sans">Documentos:</span>
+          <span className="font-semibold text-blue-300">
+            {item.docsCount} {item.docsCount === 1 ? "doc" : "docs"}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function renderHorizontalMillionsLabel(props: {
+  x?: number | string;
+  y?: number | string;
+  width?: number | string;
+  height?: number | string;
+  value?: string | number | boolean | null;
+}) {
+  const x = Number(props.x ?? 0);
+  const y = Number(props.y ?? 0);
+  const width = Number(props.width ?? 0);
+  const height = Number(props.height ?? 0);
+  const val = Number(props.value ?? 0);
+
+  if (val <= 0) return null;
+  const millones = val / 1_000_000;
+  const label = `${millones.toLocaleString("es-CL", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })} M`;
+
+  const pillW = Math.max(46, label.length * 6.5 + 10);
+  const pillH = 18;
+  const pillX = x + width + 6;
+  const pillY = y + height / 2 - pillH / 2;
+
+  return (
+    <g>
+      <rect
+        x={pillX}
+        y={pillY}
+        width={pillW}
+        height={pillH}
+        rx={4}
+        fill="#E05A10"
+      />
+      <text
+        x={pillX + pillW / 2}
+        y={pillY + pillH / 2}
+        fill="#FFFFFF"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize={10}
+        fontWeight={700}
+      >
+        {label}
+      </text>
+    </g>
+  );
+}
+
 const PAGE_SIZE = 30;
 
 export function ReportesVentasClient({
@@ -243,6 +359,13 @@ export function ReportesVentasClient({
   const [clienteSearch, setClienteSearch] = useState<string>("");
   const [isClienteOpen, setIsClienteOpen] = useState<boolean>(false);
   const clienteDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [activeTab, setActiveTab] = useState<ReporteTab>("reporte_ventas");
+  const [alcanceCartera, setAlcanceCartera] =
+    useState<AlcanceCartera>("FACTORING");
+  const [expandedEntidades, setExpandedEntidades] = useState<
+    Record<string, boolean>
+  >({});
 
   const [showRecaudado, setShowRecaudado] = useState<boolean>(true);
   const [showDeuda, setShowDeuda] = useState<boolean>(true);
@@ -573,7 +696,328 @@ export function ReportesVentasClient({
     return { buckets, topDeudores };
   }, [filteredFacturas, clientRows]);
 
+  // Datos Pestaña 2: Deuda Clientes (Factoring / Directa / Consolidado)
+  const deudaClientesData = useMemo(() => {
+    let factoringDocsCount = 0;
+    const entityMap = new Map<
+      string,
+      {
+        entityKey: string;
+        entityName: string;
+        totalDeuda: number;
+        docsCount: number;
+        docs: DeudaEntidadDoc[];
+      }
+    >();
+
+    for (const f of filteredFacturas) {
+      if (Number(f.tipo_doc) === 61) continue;
+      const deuda = resolveDeudaClientSide(f);
+      if (deuda <= 0) continue;
+
+      const factoringName = String(
+        f.empresa_factoring_cliente?.razon_social ||
+          f.entidad_factoring ||
+          ""
+      ).trim();
+      const isFactoring =
+        f.gestion_pago === "FACTORING" ||
+        Boolean(f.factoring_cliente_id) ||
+        (factoringName.length > 0 &&
+          !["DIRECTO", "DIRECTO CLIENTE"].includes(
+            factoringName.toUpperCase()
+          ));
+
+      if (isFactoring) {
+        factoringDocsCount += 1;
+      }
+
+      if (alcanceCartera === "FACTORING" && !isFactoring) continue;
+      if (alcanceCartera === "DIRECTA" && isFactoring) continue;
+
+      let entityName = "DEUDA DIRECTA (SIN CESIÓN)";
+      if (isFactoring) {
+        entityName = factoringName || "FACTORING SIN ASIGNAR";
+      } else if (alcanceCartera === "DIRECTA") {
+        entityName = String(f.razon_social || "").trim() || formatRutDisplay(f.rut_cliente);
+      }
+
+      const entityKey = entityName.toUpperCase();
+      const due = calculateDueDateInfo(f.fecha_docto, f.fecha_vencimiento);
+      const docItem: DeudaEntidadDoc = {
+        id: f.id,
+        folio: Number(f.folio),
+        razonSocial: String(f.razon_social || "").trim() || formatRutDisplay(f.rut_cliente),
+        onProyecto: String(f.on_proyecto || "").trim() || "—",
+        fechaEmision: formatDateCL(f.fecha_docto),
+        fechaVencimiento: due.fechaVencimientoCL,
+        deudaPendiente: deuda,
+      };
+
+      const prev = entityMap.get(entityKey) || {
+        entityKey,
+        entityName,
+        totalDeuda: 0,
+        docsCount: 0,
+        docs: [],
+      };
+      prev.totalDeuda += deuda;
+      prev.docsCount += 1;
+      prev.docs.push(docItem);
+      entityMap.set(entityKey, prev);
+    }
+
+    const totalDeuda = Array.from(entityMap.values()).reduce(
+      (acc, e) => acc + e.totalDeuda,
+      0
+    );
+    const totalDocs = Array.from(entityMap.values()).reduce(
+      (acc, e) => acc + e.docsCount,
+      0
+    );
+
+    const ranking: DeudaEntidadRow[] = Array.from(entityMap.values())
+      .sort((a, b) => b.totalDeuda - a.totalDeuda)
+      .map((e) => ({
+        ...e,
+        shortName:
+          e.entityName.length > 22
+            ? `${e.entityName.slice(0, 20)}…`
+            : e.entityName,
+        pctDeuda: totalDeuda > 0 ? (e.totalDeuda / totalDeuda) * 100 : 0,
+        docs: e.docs.sort((a, b) => b.deudaPendiente - a.deudaPendiente),
+      }));
+
+    const top3Sum = ranking
+      .slice(0, 3)
+      .reduce((acc, r) => acc + r.totalDeuda, 0);
+    const top3Pct = totalDeuda > 0 ? (top3Sum / totalDeuda) * 100 : 0;
+    const liderNombre = ranking[0]?.entityName || "—";
+
+    return {
+      factoringDocsCount,
+      ranking,
+      totalDeuda,
+      totalDocs,
+      top3Pct,
+      liderNombre,
+    };
+  }, [filteredFacturas, alcanceCartera]);
+
+  const handleExportDeudaClientesPDF = () => {
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4",
+    });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const now = new Date();
+    const fechaEmision = now.toLocaleDateString("es-CL");
+    const correlativo = `${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+    const controlCode = `REP-FAC-2026-${correlativo}`;
+
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, pageW, 28, "F");
+    try {
+      doc.addImage(LOGO_TENSACON_BASE64, "PNG", 14, 7, 40, 10);
+    } catch {
+      // Fallback sin logo
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(
+      "REPORTE EJECUTIVO DE DEUDA PENDIENTE POR FACTORING (CLIENTES)",
+      60,
+      12
+    );
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(71, 85, 105);
+    const scopeLabel =
+      alcanceCartera === "FACTORING"
+        ? "Factoring"
+        : alcanceCartera === "DIRECTA"
+        ? "Deuda Directa"
+        : "Consolidado Total";
+    const clienteLabel = selectedClienteObj
+      ? `${selectedClienteObj.razonSocial} (${selectedClienteObj.rutDisplay})`
+      : "Todos los Clientes";
+    doc.text(
+      `Alcance: ${scopeLabel}  |  Período: ${yearFilter === "TODOS" ? "Todos" : yearFilter}  |  ON: ${onFilter === "TODAS" ? "Todas" : onFilter}  |  Cliente: ${clienteLabel}  |  Emisión: ${fechaEmision}`,
+      60,
+      18
+    );
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(224, 90, 16);
+    doc.text(controlCode, pageW - 14, 12, { align: "right" });
+
+    doc.setDrawColor(226, 232, 240);
+    doc.line(14, 24, pageW - 14, 24);
+
+    // 3 KPI Cards summary row
+    const cardW = (pageW - 28 - 8) / 3;
+    const summaryCards = [
+      {
+        title:
+          alcanceCartera === "FACTORING"
+            ? "TOTAL DEUDA CLIENTE (FACTORIZADA)"
+            : alcanceCartera === "DIRECTA"
+            ? "TOTAL DEUDA DIRECTA"
+            : "TOTAL DEUDA CONSOLIDADA",
+        val: formatCLP(deudaClientesData.totalDeuda),
+        sub: `${deudaClientesData.ranking.length} entidades`,
+        color: [15, 23, 42] as [number, number, number],
+      },
+      {
+        title: "N° TOTAL DE FACTURAS",
+        val: `${deudaClientesData.totalDocs} documentos`,
+        sub: "Pendientes de cobro",
+        color: [224, 90, 16] as [number, number, number],
+      },
+      {
+        title: "CONCENTRACIÓN TOP 3 ENTIDADES",
+        val: `${deudaClientesData.top3Pct.toFixed(1).replace(".", ",")}%`,
+        sub: `Líder: ${deudaClientesData.liderNombre}`,
+        color: [37, 99, 235] as [number, number, number],
+      },
+    ];
+
+    summaryCards.forEach((c, idx) => {
+      const x = 14 + idx * (cardW + 4);
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(x, 28, cardW, 18, 2, 2, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7);
+      doc.setTextColor(100, 116, 139);
+      doc.text(c.title, x + 3, 33);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(c.color[0], c.color[1], c.color[2]);
+      doc.text(c.val, x + 3, 39.5);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text(c.sub, x + 3, 44);
+    });
+
+    const bodyRows = deudaClientesData.ranking.map((r, idx) => [
+      `${idx + 1}.`,
+      r.entityName,
+      formatCLP(r.totalDeuda),
+      `${r.pctDeuda.toFixed(2).replace(".", ",")} %`,
+      String(r.docsCount),
+    ]);
+
+    bodyRows.push([
+      {
+        content: "TOTAL GENERAL",
+        colSpan: 2,
+        styles: {
+          fontStyle: "bold",
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+        },
+      } as unknown as string,
+      {
+        content: formatCLP(deudaClientesData.totalDeuda),
+        styles: {
+          fontStyle: "bold",
+          halign: "right",
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+        },
+      } as unknown as string,
+      {
+        content: "100,00 %",
+        styles: {
+          fontStyle: "bold",
+          halign: "right",
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+        },
+      } as unknown as string,
+      {
+        content: String(deudaClientesData.totalDocs),
+        styles: {
+          fontStyle: "bold",
+          halign: "center",
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+        },
+      } as unknown as string,
+    ]);
+
+    autoTable(doc, {
+      startY: 53,
+      head: [
+        [
+          "#",
+          alcanceCartera === "DIRECTA" ? "CLIENTE DEUDOR" : "EMPRESA FACTORING",
+          "$ TOTAL DEUDA CLIENTE",
+          "% DEUDA CLIENTE",
+          "CANTIDAD DOCTOS",
+        ],
+      ],
+      body: bodyRows,
+      theme: "grid",
+      headStyles: {
+        fillColor: [15, 23, 42],
+        textColor: 255,
+        fontSize: 8.5,
+        fontStyle: "bold",
+      },
+      styles: { fontSize: 8.5, cellPadding: 2.5 },
+      columnStyles: {
+        0: { halign: "center", cellWidth: 14 },
+        2: { halign: "right", fontStyle: "bold" },
+        3: { halign: "right", cellWidth: 36 },
+        4: { halign: "center", cellWidth: 36 },
+      },
+      margin: { left: 14, right: 14, bottom: 18 },
+    });
+
+    const totalPagesPdf = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPagesPdf; i++) {
+      doc.setPage(i);
+      doc.setDrawColor(226, 232, 240);
+      doc.line(14, pageH - 12, pageW - 14, pageH - 12);
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(
+        "Gerencia de Administración y Finanzas — TENSACON S.A.",
+        14,
+        pageH - 7
+      );
+      doc.setFont("helvetica", "normal");
+      doc.text(
+        `Página ${i} de ${totalPagesPdf} · ${controlCode}`,
+        pageW - 14,
+        pageH - 7,
+        { align: "right" }
+      );
+    }
+
+    doc.save(
+      `Reporte_Deuda_Factoring_Clientes_${now.toISOString().slice(0, 10)}.pdf`
+    );
+  };
+
   const handleExportPDF = () => {
+    if (activeTab === "deuda_clientes") {
+      handleExportDeudaClientesPDF();
+      return;
+    }
     const doc = new jsPDF({
       orientation: "landscape",
       unit: "mm",
@@ -1021,7 +1465,103 @@ export function ReportesVentasClient({
         </div>
       </div>
 
-      {/* B. 4 Tarjetas KPI Superiores */}
+      {/* Barra de Pestañas (Segmented Control Ejecutivo) */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div
+          role="tablist"
+          aria-label="Secciones de Reportes de Ventas"
+          className="inline-flex items-center gap-1 rounded-xl bg-slate-200/70 p-1 border border-slate-200"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "reporte_ventas"}
+            onClick={() => setActiveTab("reporte_ventas")}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer",
+              activeTab === "reporte_ventas"
+                ? "bg-white text-[#0F172A] shadow-xs ring-1 ring-slate-200"
+                : "text-slate-600 hover:text-[#0F172A]"
+            )}
+          >
+            <BarChart3
+              className={cn(
+                "h-3.5 w-3.5",
+                activeTab === "reporte_ventas"
+                  ? "text-[#E05A10]"
+                  : "text-slate-400"
+              )}
+            />
+            Reporte Ventas
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "deuda_clientes"}
+            onClick={() => setActiveTab("deuda_clientes")}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all cursor-pointer",
+              activeTab === "deuda_clientes"
+                ? "bg-white text-[#0F172A] shadow-xs ring-1 ring-slate-200"
+                : "text-slate-600 hover:text-[#0F172A]"
+            )}
+          >
+            <Building2
+              className={cn(
+                "h-3.5 w-3.5",
+                activeTab === "deuda_clientes"
+                  ? "text-[#E05A10]"
+                  : "text-slate-400"
+              )}
+            />
+            Deuda Clientes
+            <span
+              className={cn(
+                "inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold font-mono",
+                activeTab === "deuda_clientes"
+                  ? "bg-orange-50 text-[#E05A10] border border-orange-200"
+                  : "bg-slate-300/60 text-slate-700"
+              )}
+            >
+              {deudaClientesData.factoringDocsCount}
+            </span>
+          </button>
+        </div>
+
+        {activeTab === "deuda_clientes" && (
+          <div className="inline-flex items-center gap-1 rounded-full bg-white p-1 border border-slate-200 shadow-2xs">
+            {(
+              [
+                { id: "FACTORING", label: "Factoring" },
+                { id: "DIRECTA", label: "Deuda Directa" },
+                { id: "CONSOLIDADO", label: "Consolidado Total" },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => {
+                  setAlcanceCartera(opt.id);
+                  setExpandedEntidades({});
+                }}
+                className={cn(
+                  "rounded-full px-3 py-1 text-[11px] font-semibold transition-colors cursor-pointer",
+                  alcanceCartera === opt.id
+                    ? "bg-[#0F172A] text-white"
+                    : "text-slate-600 hover:bg-slate-100"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {activeTab === "reporte_ventas" ? (
+        <>
+          {/* B. 4 Tarjetas KPI Superiores */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {/* KPI 1 */}
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex flex-col justify-between">
@@ -1505,6 +2045,318 @@ export function ReportesVentasClient({
           </div>
         )}
       </div>
+        </>
+      ) : (
+        <div className="space-y-5">
+          {/* B. Fila Superior de 3 Tarjetas KPI */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                {alcanceCartera === "FACTORING"
+                  ? "TOTAL DEUDA CLIENTE (FACTORIZADA)"
+                  : alcanceCartera === "DIRECTA"
+                  ? "TOTAL DEUDA DIRECTA"
+                  : "TOTAL DEUDA CONSOLIDADA"}
+              </span>
+              <div className="mt-2.5 text-2xl font-black font-mono text-slate-900 tracking-tight">
+                {formatCLP(deudaClientesData.totalDeuda)}
+              </div>
+              <p className="mt-1 text-[11px] text-slate-400">
+                {deudaClientesData.ranking.length}{" "}
+                {deudaClientesData.ranking.length === 1
+                  ? "entidad con saldo pendiente"
+                  : "entidades con saldo pendiente"}
+              </p>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                N° TOTAL DE FACTURAS
+              </span>
+              <div className="mt-2.5 text-2xl font-black font-mono text-[#E05A10] tracking-tight">
+                {deudaClientesData.totalDocs}{" "}
+                {deudaClientesData.totalDocs === 1 ? "documento" : "documentos"}
+              </div>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Documentos vigentes pendientes de cobro
+              </p>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                CONCENTRACIÓN TOP 3 ENTIDADES
+              </span>
+              <div className="mt-2.5 text-2xl font-black font-mono text-[#0F172A] tracking-tight">
+                {deudaClientesData.top3Pct.toFixed(1).replace(".", ",")}%
+              </div>
+              <p className="mt-1 text-[11px] text-slate-500 truncate">
+                Líder:{" "}
+                <strong className="text-[#0F172A]">
+                  {deudaClientesData.liderNombre}
+                </strong>
+              </p>
+            </div>
+          </div>
+
+          {/* C. Bloque Central en Grid de 12 Columnas (7 Tabla Ranking + 5 Gráfico Horizontal) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Columna Izquierda (7): Tabla Ranking con Acordeón Drill-Down */}
+            <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden flex flex-col justify-between">
+              <div>
+                <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wide text-[#0F172A]">
+                      DEUDA PENDIENTE POR FACTORING (CLIENTES)
+                    </h2>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Clic en una fila para desplegar el detalle de facturas
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono font-semibold text-slate-500">
+                    {deudaClientesData.totalDocs} docs
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        <th className="py-2.5 px-3 w-10 text-center">#</th>
+                        <th className="py-2.5 px-3">
+                          {alcanceCartera === "DIRECTA"
+                            ? "CLIENTE DEUDOR"
+                            : "EMPRESA FACTORING"}
+                        </th>
+                        <th className="py-2.5 px-3 text-right">
+                          $ TOTAL DEUDA CLIENTE
+                        </th>
+                        <th className="py-2.5 px-3 text-right">
+                          % DEUDA CLIENTE
+                        </th>
+                        <th className="py-2.5 px-3 text-center">
+                          CANTIDAD DOCTOS
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {deudaClientesData.ranking.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="py-10 text-center text-slate-400 text-sm"
+                          >
+                            No existen facturas pendientes para los filtros y
+                            alcance seleccionados.
+                          </td>
+                        </tr>
+                      ) : (
+                        deudaClientesData.ranking.map((ent, idx) => {
+                          const isExpanded = Boolean(
+                            expandedEntidades[ent.entityKey]
+                          );
+                          return (
+                            <React.Fragment key={ent.entityKey}>
+                              <tr
+                                onClick={() =>
+                                  setExpandedEntidades((prev) => ({
+                                    ...prev,
+                                    [ent.entityKey]: !prev[ent.entityKey],
+                                  }))
+                                }
+                                className={cn(
+                                  "hover:bg-slate-50 transition-colors cursor-pointer",
+                                  isExpanded && "bg-orange-50/40"
+                                )}
+                              >
+                                <td className="py-2.5 px-3 text-center font-mono text-slate-500 font-semibold">
+                                  {idx + 1}.
+                                </td>
+                                <td className="py-2.5 px-3 font-bold text-[#0F172A]">
+                                  <div className="flex items-center gap-1.5">
+                                    {isExpanded ? (
+                                      <ChevronDown className="h-3.5 w-3.5 text-[#E05A10] shrink-0" />
+                                    ) : (
+                                      <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                    )}
+                                    <span>{ent.entityName}</span>
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-3 font-mono font-bold text-right text-[#0F172A] whitespace-nowrap">
+                                  {formatCLP(ent.totalDeuda)}
+                                </td>
+                                <td className="py-2.5 px-3 font-mono text-right text-slate-600 whitespace-nowrap">
+                                  {ent.pctDeuda.toFixed(2).replace(".", ",")} %
+                                </td>
+                                <td className="py-2.5 px-3 text-center font-semibold text-slate-700">
+                                  {ent.docsCount}
+                                </td>
+                              </tr>
+                              {isExpanded && (
+                                <tr className="bg-slate-50/90">
+                                  <td colSpan={5} className="px-4 py-3">
+                                    <div className="rounded-lg border border-slate-200 bg-white overflow-x-auto">
+                                      <table className="w-full text-left border-collapse text-[11px]">
+                                        <thead>
+                                          <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-500 uppercase font-bold">
+                                            <th className="py-1.5 px-2.5">
+                                              Folio
+                                            </th>
+                                            <th className="py-1.5 px-2.5">
+                                              Cliente Deudor
+                                            </th>
+                                            <th className="py-1.5 px-2.5">
+                                              ON
+                                            </th>
+                                            <th className="py-1.5 px-2.5">
+                                              Emisión
+                                            </th>
+                                            <th className="py-1.5 px-2.5">
+                                              Vencimiento
+                                            </th>
+                                            <th className="py-1.5 px-2.5 text-right">
+                                              Deuda Pendiente
+                                            </th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                          {ent.docs.map((d) => (
+                                            <tr
+                                              key={d.id}
+                                              className="hover:bg-slate-50"
+                                            >
+                                              <td className="py-1.5 px-2.5 font-mono font-semibold text-[#0F172A]">
+                                                #{d.folio}
+                                              </td>
+                                              <td className="py-1.5 px-2.5 text-slate-700">
+                                                {d.razonSocial}
+                                              </td>
+                                              <td className="py-1.5 px-2.5 font-mono text-slate-500">
+                                                {d.onProyecto}
+                                              </td>
+                                              <td className="py-1.5 px-2.5 font-mono text-slate-500 whitespace-nowrap">
+                                                {d.fechaEmision}
+                                              </td>
+                                              <td className="py-1.5 px-2.5 font-mono text-slate-500 whitespace-nowrap">
+                                                {d.fechaVencimiento}
+                                              </td>
+                                              <td className="py-1.5 px-2.5 font-mono font-bold text-right text-[#E05A10] whitespace-nowrap">
+                                                {formatCLP(d.deudaPendiente)}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })
+                      )}
+                    </tbody>
+                    {deudaClientesData.ranking.length > 0 && (
+                      <tfoot>
+                        <tr className="bg-[#0F172A] text-white text-xs font-bold">
+                          <td colSpan={2} className="py-3 px-4 uppercase">
+                            TOTAL GENERAL
+                          </td>
+                          <td className="py-3 px-3 font-mono text-right whitespace-nowrap">
+                            {formatCLP(deudaClientesData.totalDeuda)}
+                          </td>
+                          <td className="py-3 px-3 font-mono text-right whitespace-nowrap">
+                            100,00 %
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono">
+                            {deudaClientesData.totalDocs}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Columna Derecha (5): Gráfico Horizontal de Participación por Entidad */}
+            <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex flex-col justify-between">
+              <div>
+                <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wide text-[#0F172A]">
+                  PARTICIPACIÓN POR ENTIDAD (MILLONES)
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Distribución de deuda pendiente ordenada de mayor a menor
+                </p>
+              </div>
+
+              {deudaClientesData.ranking.length === 0 ? (
+                <div className="h-72 flex items-center justify-center text-sm text-slate-400 border border-dashed border-slate-200 rounded-lg mt-4">
+                  Sin datos para graficar.
+                </div>
+              ) : (
+                <div
+                  className="w-full mt-4"
+                  style={{
+                    height: Math.max(
+                      280,
+                      deudaClientesData.ranking.length * 42 + 30
+                    ),
+                  }}
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      layout="vertical"
+                      data={deudaClientesData.ranking}
+                      margin={{ top: 8, right: 64, left: 6, bottom: 8 }}
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        horizontal={false}
+                        stroke="#E2E8F0"
+                      />
+                      <XAxis
+                        type="number"
+                        tickFormatter={formatAxisMillions}
+                        tick={{ fontSize: 10, fill: "#64748B" }}
+                        axisLine={{ stroke: "#E2E8F0" }}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="shortName"
+                        width={125}
+                        tick={{
+                          fontSize: 10.5,
+                          fill: "#0F172A",
+                          fontWeight: 600,
+                        }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <RechartsTooltip
+                        content={<HorizontalBarTooltip />}
+                        cursor={{ fill: "#F1F5F9", opacity: 0.6 }}
+                      />
+                      <Bar
+                        dataKey="totalDeuda"
+                        fill="#2563EB"
+                        radius={[0, 6, 6, 0]}
+                        barSize={22}
+                      >
+                        <LabelList
+                          dataKey="totalDeuda"
+                          position="right"
+                          content={renderHorizontalMillionsLabel}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

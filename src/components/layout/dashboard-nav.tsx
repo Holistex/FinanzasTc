@@ -447,7 +447,7 @@ export function DashboardSidebar({
                       href="/ventas-tensacon/reportes"
                       isActive={isReportesVentasActive}
                       icon={BarChart3}
-                      label="Reportes"
+                      label="Reportes de Ventas"
                       queryClient={queryClient}
                       router={router}
                     />
