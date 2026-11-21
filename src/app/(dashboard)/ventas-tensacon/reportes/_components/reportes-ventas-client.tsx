@@ -806,36 +806,38 @@ export function ReportesVentasClient({
 
   const handleExportDeudaClientesPDF = () => {
     const doc = new jsPDF({
-      orientation: "landscape",
+      orientation: "portrait",
       unit: "mm",
       format: "a4",
     });
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
+    const marginX = 12;
+    const contentW = pageW - marginX * 2;
     const now = new Date();
     const fechaEmision = now.toLocaleDateString("es-CL");
     const correlativo = `${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
     const controlCode = `REP-FAC-2026-${correlativo}`;
 
     doc.setFillColor(255, 255, 255);
-    doc.rect(0, 0, pageW, 28, "F");
+    doc.rect(0, 0, pageW, 24, "F");
     try {
-      doc.addImage(LOGO_TENSACON_BASE64, "PNG", 14, 7, 40, 10);
+      doc.addImage(LOGO_TENSACON_BASE64, "PNG", marginX, 6, 36, 9);
     } catch {
       // Fallback sin logo
     }
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(12.5);
+    doc.setFontSize(10.5);
     doc.setTextColor(15, 23, 42);
     doc.text(
       "REPORTE EJECUTIVO DE DEUDA PENDIENTE POR FACTORING (CLIENTES)",
-      60,
-      12
+      marginX + 39,
+      10
     );
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
+    doc.setFontSize(7.5);
     doc.setTextColor(71, 85, 105);
     const scopeLabel =
       alcanceCartera === "FACTORING"
@@ -847,26 +849,27 @@ export function ReportesVentasClient({
       ? `${selectedClienteObj.razonSocial} (${selectedClienteObj.rutDisplay})`
       : "Todos los Clientes";
     doc.text(
-      `Alcance: ${scopeLabel}  |  Período: ${yearFilter === "TODOS" ? "Todos" : yearFilter}  |  ON: ${onFilter === "TODAS" ? "Todas" : onFilter}  |  Cliente: ${clienteLabel}  |  Emisión: ${fechaEmision}`,
-      60,
-      18
+      `Alcance: ${scopeLabel} | Período: ${yearFilter === "TODOS" ? "Todos" : yearFilter} | ON: ${onFilter === "TODAS" ? "Todas" : onFilter} | Emisión: ${fechaEmision}`,
+      marginX + 39,
+      15
     );
+    doc.text(`Cliente: ${clienteLabel}`, marginX + 39, 19);
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
+    doc.setFontSize(8);
     doc.setTextColor(224, 90, 16);
-    doc.text(controlCode, pageW - 14, 12, { align: "right" });
+    doc.text(controlCode, pageW - marginX, 19, { align: "right" });
 
     doc.setDrawColor(226, 232, 240);
-    doc.line(14, 24, pageW - 14, 24);
+    doc.line(marginX, 22, pageW - marginX, 22);
 
     // 3 KPI Cards summary row
-    const cardW = (pageW - 28 - 8) / 3;
+    const cardW = (contentW - 6) / 3;
     const summaryCards = [
       {
         title:
           alcanceCartera === "FACTORING"
-            ? "TOTAL DEUDA CLIENTE (FACTORIZADA)"
+            ? "TOTAL DEUDA (FACTORIZADA)"
             : alcanceCartera === "DIRECTA"
             ? "TOTAL DEUDA DIRECTA"
             : "TOTAL DEUDA CONSOLIDADA",
@@ -881,33 +884,33 @@ export function ReportesVentasClient({
         color: [224, 90, 16] as [number, number, number],
       },
       {
-        title: "CONCENTRACIÓN TOP 3 ENTIDADES",
+        title: "CONCENTRACIÓN TOP 3",
         val: `${deudaClientesData.top3Pct.toFixed(1).replace(".", ",")}%`,
-        sub: `Líder: ${deudaClientesData.liderNombre}`,
+        sub: `Líder: ${deudaClientesData.liderNombre.slice(0, 26)}`,
         color: [37, 99, 235] as [number, number, number],
       },
     ];
 
     summaryCards.forEach((c, idx) => {
-      const x = 14 + idx * (cardW + 4);
+      const x = marginX + idx * (cardW + 3);
       doc.setFillColor(248, 250, 252);
       doc.setDrawColor(226, 232, 240);
-      doc.roundedRect(x, 28, cardW, 18, 2, 2, "FD");
+      doc.roundedRect(x, 25, cardW, 16, 2, 2, "FD");
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
+      doc.setFontSize(6.5);
       doc.setTextColor(100, 116, 139);
-      doc.text(c.title, x + 3, 33);
+      doc.text(c.title, x + 2.5, 29.5);
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
+      doc.setFontSize(10);
       doc.setTextColor(c.color[0], c.color[1], c.color[2]);
-      doc.text(c.val, x + 3, 39.5);
+      doc.text(c.val, x + 2.5, 35);
 
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(7.5);
+      doc.setFontSize(7);
       doc.setTextColor(71, 85, 105);
-      doc.text(c.sub, x + 3, 44);
+      doc.text(c.sub, x + 2.5, 39);
     });
 
     const bodyRows = deudaClientesData.ranking.map((r, idx) => [
@@ -958,14 +961,14 @@ export function ReportesVentasClient({
     ]);
 
     autoTable(doc, {
-      startY: 53,
+      startY: 45,
       head: [
         [
           "#",
           alcanceCartera === "DIRECTA" ? "CLIENTE DEUDOR" : "EMPRESA FACTORING",
           "$ TOTAL DEUDA CLIENTE",
-          "% DEUDA CLIENTE",
-          "CANTIDAD DOCTOS",
+          "% DEUDA",
+          "DOCTOS",
         ],
       ],
       body: bodyRows,
@@ -973,36 +976,126 @@ export function ReportesVentasClient({
       headStyles: {
         fillColor: [15, 23, 42],
         textColor: 255,
-        fontSize: 8.5,
+        fontSize: 7.5,
         fontStyle: "bold",
+        cellPadding: 1.8,
       },
-      styles: { fontSize: 8.5, cellPadding: 2.5 },
+      styles: { fontSize: 7.5, cellPadding: 1.6 },
       columnStyles: {
-        0: { halign: "center", cellWidth: 14 },
-        2: { halign: "right", fontStyle: "bold" },
-        3: { halign: "right", cellWidth: 36 },
-        4: { halign: "center", cellWidth: 36 },
+        0: { halign: "center", cellWidth: 10 },
+        2: { halign: "right", fontStyle: "bold", cellWidth: 34 },
+        3: { halign: "right", cellWidth: 22 },
+        4: { halign: "center", cellWidth: 18 },
       },
-      margin: { left: 14, right: 14, bottom: 18 },
+      margin: { left: marginX, right: marginX, bottom: 16 },
     });
+
+    // Bloque Gráfico Vectorial: PARTICIPACIÓN POR ENTIDAD (MILLONES)
+    if (deudaClientesData.ranking.length > 0) {
+      const afterTableY =
+        (doc as unknown as { lastAutoTable?: { finalY?: number } })
+          .lastAutoTable?.finalY || 120;
+
+      const rowH = 6.8;
+      const headerH = 14;
+      const padBottom = 4;
+      const boxH =
+        headerH + deudaClientesData.ranking.length * rowH + padBottom;
+
+      let chartY = afterTableY + 6;
+      if (chartY + boxH > pageH - 16) {
+        doc.addPage();
+        chartY = 16;
+      }
+
+      // Contenedor blanco con borde suave
+      doc.setFillColor(255, 255, 255);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(marginX, chartY, contentW, boxH, 2.5, 2.5, "FD");
+
+      // Título y Subtítulo
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text("PARTICIPACIÓN POR ENTIDAD (MILLONES)", marginX + 5, chartY + 6.5);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(
+        "Distribución de deuda pendiente ordenada de mayor a menor",
+        marginX + 5,
+        chartY + 10.5
+      );
+
+      const maxMonto = Math.max(
+        ...deudaClientesData.ranking.map((r) => r.totalDeuda),
+        1
+      );
+      const labelColW = 54;
+      const barStartX = marginX + 5 + labelColW + 4;
+      const pillReserveW = 22;
+      const maxBarW = contentW - 10 - labelColW - 4 - pillReserveW;
+
+      deudaClientesData.ranking.forEach((ent, idx) => {
+        const yRow = chartY + headerH + idx * rowH;
+
+        // Etiqueta entidad alineada a la derecha
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.setTextColor(51, 65, 85);
+        const labelText =
+          ent.entityName.length > 32
+            ? `${ent.entityName.slice(0, 30)}...`
+            : ent.entityName;
+        doc.text(labelText, marginX + 5 + labelColW, yRow + 3.6, {
+          align: "right",
+        });
+
+        // Barra azul corporativa
+        const barW = Math.max(3, (ent.totalDeuda / maxMonto) * maxBarW);
+        doc.setFillColor(37, 99, 235);
+        doc.roundedRect(barStartX, yRow + 0.7, barW, 4.2, 0.8, 0.8, "F");
+
+        // Badge naranja en millones con 1 decimal
+        const millonesStr = `${(ent.totalDeuda / 1_000_000).toLocaleString(
+          "es-CL",
+          {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1,
+          }
+        )} M`;
+        const pillW = Math.max(15, millonesStr.length * 1.9 + 4);
+        const pillX = barStartX + barW + 2.5;
+        doc.setFillColor(224, 90, 16);
+        doc.roundedRect(pillX, yRow + 0.5, pillW, 4.6, 1, 1, "F");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(6.8);
+        doc.setTextColor(255, 255, 255);
+        doc.text(millonesStr, pillX + pillW / 2, yRow + 3.7, {
+          align: "center",
+        });
+      });
+    }
 
     const totalPagesPdf = doc.getNumberOfPages();
     for (let i = 1; i <= totalPagesPdf; i++) {
       doc.setPage(i);
       doc.setDrawColor(226, 232, 240);
-      doc.line(14, pageH - 12, pageW - 14, pageH - 12);
+      doc.line(marginX, pageH - 12, pageW - marginX, pageH - 12);
       doc.setFont("helvetica", "italic");
       doc.setFontSize(8);
       doc.setTextColor(100, 116, 139);
       doc.text(
         "Gerencia de Administración y Finanzas — TENSACON S.A.",
-        14,
+        marginX,
         pageH - 7
       );
       doc.setFont("helvetica", "normal");
       doc.text(
         `Página ${i} de ${totalPagesPdf} · ${controlCode}`,
-        pageW - 14,
+        pageW - marginX,
         pageH - 7,
         { align: "right" }
       );
