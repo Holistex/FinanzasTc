@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   TrendingDown,
   Calendar,
@@ -15,7 +17,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   Layers,
+  FileDown,
+  LineChart as LineChartIcon,
 } from "lucide-react";
+import { LOGO_TENSACON_BASE64 } from "@/lib/pdf/logo-tensacon";
 import { useQuery } from "@tanstack/react-query";
 import {
   DeudaMensualItem,
@@ -161,8 +166,357 @@ export function DeudaProveedoresClient({ initialData }: DeudaProveedoresClientPr
     setModalSearch("");
   };
 
+  const handleExportarDeudaProveedoresPDF = () => {
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4",
+    });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const marginX = 12;
+    const contentW = pageW - marginX * 2;
+    const now = new Date();
+    const fechaEmision = now.toLocaleDateString("es-CL");
+    const correlativo = `${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+    const controlCode = `REP-PRV-2026-${correlativo}`;
+
+    // Membrete blanco ejecutivo
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, pageW, 24, "F");
+    try {
+      doc.addImage(LOGO_TENSACON_BASE64, "PNG", marginX, 6, 38, 9.5);
+    } catch {
+      // Fallback sin logo
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(15, 23, 42);
+    doc.text(
+      "TENSACON S.A. — Reporte Ejecutivo: Deuda Proveedores (Vencimientos Mensuales)",
+      marginX + 42,
+      10.5
+    );
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text(
+      `COMPRAS TENSACON — Evolución consolidada y estratificación por tramo de vencimiento  |  Emisión: ${fechaEmision}`,
+      marginX + 42,
+      16
+    );
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(224, 90, 16);
+    doc.text(controlCode, pageW - marginX, 10.5, { align: "right" });
+
+    doc.setDrawColor(226, 232, 240);
+    doc.line(marginX, 21, pageW - marginX, 21);
+
+    // 4 Tarjetas KPI Superiores
+    const cardW = (contentW - 9) / 4;
+    const kpiCards = [
+      {
+        title: "TOTAL DEUDA PROVEEDORES",
+        val: formatCLP(kpis.totalDeudaProveedores),
+        sub: "Cartera total pendiente exigible",
+        color: [220, 38, 38] as [number, number, number],
+      },
+      {
+        title: "MES MAYOR VENCIMIENTO",
+        val: kpis.mesMayorDeuda
+          ? formatCLP(kpis.mesMayorDeuda.monto)
+          : "$ 0",
+        sub: kpis.mesMayorDeuda?.mesNombre || "N/A",
+        color: [217, 119, 6] as [number, number, number],
+      },
+      {
+        title: "ESTADO DE VENCIMIENTOS",
+        val: `Venc: ${formatCLP(kpis.deudaVencida)}`,
+        sub: `Por Vencer: ${formatCLP(kpis.deudaPorVencer)}`,
+        color: [190, 18, 60] as [number, number, number],
+      },
+      {
+        title: "DOCUMENTOS & PROVEEDORES",
+        val: `${kpis.totalFacturas} facs | ${kpis.totalProveedores} provs`,
+        sub: `Prom: ${formatCLP(kpis.promedioPorFactura)} / doc`,
+        color: [15, 23, 42] as [number, number, number],
+      },
+    ];
+
+    kpiCards.forEach((c, idx) => {
+      const x = marginX + idx * (cardW + 3);
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(x, 24, cardW, 17, 2, 2, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(6.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(c.title, x + 2.5, 28.5);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(c.color[0], c.color[1], c.color[2]);
+      doc.text(c.val, x + 2.5, 34.5);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(71, 85, 105);
+      doc.text(c.sub, x + 2.5, 39);
+    });
+
+    // Gráfico Vectorial de Vencimientos Mensuales
+    const chartY = 44;
+    const chartBoxH = 54;
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(marginX, chartY, contentW, chartBoxH, 2, 2, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(
+      "EVOLUCIÓN MENSUAL DE VENCIMIENTOS DE PROVEEDORES",
+      marginX + 4,
+      chartY + 5.5
+    );
+
+    if (datosMensuales.length > 0) {
+      const plotL = marginX + 20;
+      const plotR = pageW - marginX - 6;
+      const plotT = chartY + 11;
+      const plotB = chartY + chartBoxH - 8;
+      const plotW = plotR - plotL;
+      const plotH = plotB - plotT;
+
+      const maxDeuda = Math.max(
+        ...datosMensuales.map((d) => d.totalDeuda),
+        1
+      );
+      const niceMax = maxDeuda * 1.15;
+
+      // Gridlines y Eje Y
+      [0, 0.5, 1].forEach((ratio) => {
+        const yLine = plotB - ratio * plotH;
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.2);
+        doc.line(plotL, yLine, plotR, yLine);
+        const valM = Math.round((niceMax * ratio) / 1_000_000);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text(
+          ratio === 0 ? "$ 0" : `$ ${valM.toLocaleString("es-CL")}M`,
+          plotL - 2,
+          yLine + 1.5,
+          { align: "right" }
+        );
+      });
+
+      const n = datosMensuales.length;
+      const pts = datosMensuales.map((d, i) => ({
+        x: n <= 1 ? plotL + plotW / 2 : plotL + (i / (n - 1)) * plotW,
+        y: plotB - (d.totalDeuda / niceMax) * plotH,
+        label: d.mesNombre.slice(0, 3) + " " + d.mesClave.slice(2, 4),
+        valM: Math.round(d.totalDeuda / 1_000_000),
+      }));
+
+      // Línea roja vectorial
+      doc.setDrawColor(220, 38, 38);
+      doc.setLineWidth(0.8);
+      for (let i = 0; i < pts.length - 1; i++) {
+        doc.line(pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y);
+      }
+
+      // Puntos y etiquetas X
+      pts.forEach((pt, idx) => {
+        doc.setFillColor(220, 38, 38);
+        doc.circle(pt.x, pt.y, 1.1, "F");
+
+        if (n <= 14 || idx % 2 === 0 || idx === n - 1) {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(6);
+          doc.setTextColor(15, 23, 42);
+          if (pt.valM > 0) {
+            doc.text(`$${pt.valM}M`, pt.x, pt.y - 2, { align: "center" });
+          }
+
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(6);
+          doc.setTextColor(100, 116, 139);
+          doc.text(pt.label, pt.x, plotB + 4.5, { align: "center" });
+        }
+      });
+    }
+
+    // Tabla de Estratificación de Deuda (5 Tramos)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.text(
+      "ESTRATIFICACIÓN DE DEUDA POR TRAMO DE VENCIMIENTO (5 TRAMOS)",
+      marginX,
+      chartY + chartBoxH + 6.5
+    );
+
+    const agingBody = estratificacion.map((e) => {
+      const pct =
+        kpis.totalDeudaProveedores > 0
+          ? (e.total / kpis.totalDeudaProveedores) * 100
+          : 0;
+      return [
+        e.tramo,
+        e.rangoMora,
+        e.badgeText,
+        String(e.docs),
+        String(e.proveedoresCount),
+        formatCLP(e.total),
+        `${pct.toFixed(1).replace(".", ",")} %`,
+      ];
+    });
+
+    agingBody.push([
+      {
+        content: "TOTAL CARTERA PROVEEDORES",
+        colSpan: 3,
+        styles: {
+          fontStyle: "bold",
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+        },
+      } as unknown as string,
+      {
+        content: String(kpis.totalFacturas),
+        styles: {
+          fontStyle: "bold",
+          halign: "center",
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+        },
+      } as unknown as string,
+      {
+        content: String(kpis.totalProveedores),
+        styles: {
+          fontStyle: "bold",
+          halign: "center",
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+        },
+      } as unknown as string,
+      {
+        content: formatCLP(kpis.totalDeudaProveedores),
+        styles: {
+          fontStyle: "bold",
+          halign: "right",
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+        },
+      } as unknown as string,
+      {
+        content: "100,0 %",
+        styles: {
+          fontStyle: "bold",
+          halign: "right",
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+        },
+      } as unknown as string,
+    ]);
+
+    autoTable(doc, {
+      startY: chartY + chartBoxH + 9,
+      head: [
+        [
+          "TRAMO DE ANTIGÜEDAD",
+          "RANGO MORA",
+          "ESTADO",
+          "CANT. DOCS",
+          "PROVEEDORES",
+          "MONTO TOTAL ($)",
+          "% PART.",
+        ],
+      ],
+      body: agingBody,
+      theme: "grid",
+      headStyles: {
+        fillColor: [15, 23, 42],
+        textColor: 255,
+        fontSize: 7.5,
+        fontStyle: "bold",
+        cellPadding: 2,
+      },
+      styles: { fontSize: 7.5, cellPadding: 2 },
+      columnStyles: {
+        3: { halign: "center", cellWidth: 24 },
+        4: { halign: "center", cellWidth: 26 },
+        5: { halign: "right", fontStyle: "bold", cellWidth: 38 },
+        6: { halign: "right", cellWidth: 24 },
+      },
+      margin: { left: marginX, right: marginX, bottom: 16 },
+    });
+
+    const totalPagesPdf = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPagesPdf; i++) {
+      doc.setPage(i);
+      doc.setDrawColor(226, 232, 240);
+      doc.line(marginX, pageH - 12, pageW - marginX, pageH - 12);
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(
+        "Gerencia de Administración y Finanzas — TENSACON S.A.",
+        marginX,
+        pageH - 7
+      );
+      doc.setFont("helvetica", "normal");
+      doc.text(
+        `Página ${i} de ${totalPagesPdf} · ${controlCode}`,
+        pageW - marginX,
+        pageH - 7,
+        { align: "right" }
+      );
+    }
+
+    doc.save(`Reporte_Deuda_Proveedores_${now.toISOString().slice(0, 10)}.pdf`);
+  };
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
+      {/* Encabezado Corporativo Oficial Tensacon + Botón Exportar PDF */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="h-9 w-9 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-sm shrink-0">
+            <LineChartIcon className="h-5 w-5 text-[#E05A10]" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold tracking-tight text-slate-900">
+                Deuda Prov.
+              </h1>
+              <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-red-100 text-red-700 uppercase tracking-wider">
+                Vencimientos Mensuales
+              </span>
+            </div>
+            <p className="text-xs text-slate-500">
+              COMPRAS TENSACON — Evolución consolidada y proyección mensual de la deuda total con proveedores según fecha de vencimiento
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleExportarDeudaProveedoresPDF}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#E05A10] hover:bg-[#c84e0c] text-white font-semibold text-xs shadow-sm transition-colors cursor-pointer self-start sm:self-auto"
+        >
+          <FileDown className="w-4 h-4" />
+          Exportar PDF
+        </button>
+      </div>
+
       {/* 1. KPI CARDS SUPERIORES */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3.5">
         {/* KPI 1: Total Deuda Proveedores */}
