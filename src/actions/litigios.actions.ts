@@ -17,6 +17,8 @@ function safeRevalidatePath(path: string) {
 }
 import {
   LitigioMulta,
+  LitigioMultaEnunciado,
+  MonedaMultaEnunciado,
   LitigioJuicio,
   LitigioAudienciaJuicio,
   EstadoLitigioMulta,
@@ -61,18 +63,27 @@ export async function getLitigiosMultasAction(
   filters?: MultasFilterParams
 ): Promise<{ items: LitigioMulta[]; kpis: LitigiosMultasKpis }> {
   let rawItems: LitigioMulta[] = [];
+  let rawEnunciados: LitigioMultaEnunciado[] = [];
   let supabaseLoaded = false;
 
   if (isServerSupabaseConfigured()) {
     try {
       const supabase = await createServerSupabaseClient();
-      const { data, error } = await supabase
-        .from("litigios_multas")
-        .select("*")
-        .order("fecha_publicacion", { ascending: false });
+      const [multasRes, enunRes] = await Promise.all([
+        supabase
+          .from("litigios_multas")
+          .select("*")
+          .order("fecha_publicacion", { ascending: false }),
+        supabase
+          .from("litigios_multas_enunciados")
+          .select("*"),
+      ]);
 
-      if (!error && data) {
-        rawItems = data as LitigioMulta[];
+      if (!multasRes.error && multasRes.data) {
+        rawItems = multasRes.data as LitigioMulta[];
+        rawEnunciados = (!enunRes.error && enunRes.data
+          ? enunRes.data
+          : []) as LitigioMultaEnunciado[];
         supabaseLoaded = true;
       }
     } catch {
@@ -83,7 +94,48 @@ export async function getLitigiosMultasAction(
   if (!supabaseLoaded) {
     const db = readLocalDb();
     rawItems = [...(db.litigios_multas || [])];
+    rawEnunciados = [...(db.litigios_multas_enunciados || [])];
   }
+
+  // Cruce en memoria sin depender de FK en Supabase
+  const enunciadosByMulta = new Map<string, LitigioMultaEnunciado[]>();
+  for (const e of rawEnunciados) {
+    const key = String(e.multa_id);
+    const list = enunciadosByMulta.get(key) || [];
+    list.push(e);
+    enunciadosByMulta.set(key, list);
+  }
+
+  rawItems = rawItems.map((m) => {
+    const list = (enunciadosByMulta.get(String(m.id)) || []).sort((a, b) =>
+      String(a.correlativo_id || "").localeCompare(
+        String(b.correlativo_id || ""),
+        "es",
+        { numeric: true }
+      )
+    );
+    const sumOrig =
+      list.length > 0
+        ? list.reduce((acc, e) => acc + Number(e.monto_pesos || 0), 0)
+        : Number(m.monto_original_clp ?? m.monto_sancion ?? 0);
+    const sumVig =
+      list.length > 0
+        ? list.reduce((acc, e) => acc + Number(e.nuevo_monto_pesos ?? e.monto_pesos ?? 0), 0)
+        : Number(m.monto_vigente_clp ?? m.monto_sancion ?? 0);
+    const pagado = Number(
+      m.monto_pagado ?? (m.estado === "PAGADA" ? sumVig : 0)
+    );
+
+    return {
+      ...m,
+      monto_sancion: sumVig,
+      monto_original_clp: sumOrig,
+      monto_vigente_clp: sumVig,
+      monto_pagado: pagado,
+      cantidad_enunciados: list.length > 0 ? list.length : Number(m.cantidad_enunciados || 1),
+      enunciados: list,
+    };
+  });
 
   // Calcular KPIs con todos los registros
   const kpis: LitigiosMultasKpis = {
@@ -96,14 +148,17 @@ export async function getLitigiosMultasAction(
   };
 
   for (const m of rawItems) {
-    const monto = Number(m.monto_sancion || 0);
-    kpis.montoTotalSancion += monto;
+    const montoVigente = Number(m.monto_vigente_clp ?? m.monto_sancion ?? 0);
+    const pagado = Number(m.monto_pagado ?? (m.estado === "PAGADA" ? montoVigente : 0));
+    const saldo = Math.max(0, montoVigente - pagado);
+
+    kpis.montoTotalSancion += montoVigente;
+    kpis.montoPagado += pagado;
     if (m.estado === "PENDIENTE") {
       kpis.pendientesCount++;
-      kpis.montoPendiente += monto;
+      kpis.montoPendiente += saldo;
     } else if (m.estado === "PAGADA") {
       kpis.pagadasCount++;
-      kpis.montoPagado += monto;
     }
   }
 
@@ -137,6 +192,17 @@ export async function getLitigiosMultasAction(
   return { items, kpis };
 }
 
+export interface EnunciadoMultaInput {
+  id?: string;
+  nro_resolucion: string;
+  correlativo_id: string;
+  total_moneda?: number | null;
+  moneda: MonedaMultaEnunciado;
+  monto_pesos: number;
+  nuevo_monto_pesos: number;
+  observaciones?: string | null;
+}
+
 export async function upsertLitigioMultaAction(input: {
   id?: string;
   procedencia: string;
@@ -151,6 +217,7 @@ export async function upsertLitigioMultaAction(input: {
   fecha_pago?: string | null;
   estado: EstadoLitigioMulta;
   observaciones?: string | null;
+  enunciados?: EnunciadoMultaInput[];
 }): Promise<{ success: boolean; data?: LitigioMulta; error?: string }> {
   try {
     const auth = await assertCanManage(["litigios_multas", "reg_litigios"]);
@@ -161,10 +228,25 @@ export async function upsertLitigioMultaAction(input: {
     if (!input.procedencia.trim()) return { success: false, error: "La procedencia o causal es obligatoria." };
     if (!input.nro_multa.trim()) return { success: false, error: "El N° de Multa es obligatorio." };
     if (!input.fecha_publicacion) return { success: false, error: "La fecha de publicación es obligatoria." };
-    if (input.monto_sancion === undefined || input.monto_sancion === null || input.monto_sancion < 0) {
+
+    const enunciadosList = Array.isArray(input.enunciados) ? input.enunciados : [];
+    const montoOriginal =
+      enunciadosList.length > 0
+        ? enunciadosList.reduce((acc, e) => acc + Math.round(Number(e.monto_pesos || 0)), 0)
+        : Math.round(Number(input.monto_sancion || 0));
+    const montoVigente =
+      enunciadosList.length > 0
+        ? enunciadosList.reduce(
+            (acc, e) => acc + Math.round(Number(e.nuevo_monto_pesos ?? e.monto_pesos ?? 0)),
+            0
+          )
+        : Math.round(Number(input.monto_sancion || 0));
+
+    if (montoVigente < 0 || montoOriginal < 0) {
       return { success: false, error: "El monto de sanción debe ser mayor o igual a 0." };
     }
 
+    const nowIso = new Date().toISOString();
     const payload = {
       ...(input.id ? { id: input.id } : {}),
       procedencia: input.procedencia.trim(),
@@ -173,13 +255,16 @@ export async function upsertLitigioMultaAction(input: {
       nombre_trabajador: input.nombre_trabajador?.trim() || null,
       nro_multa: input.nro_multa.trim().toUpperCase(),
       fecha_publicacion: input.fecha_publicacion,
-      monto_sancion: Number(input.monto_sancion),
+      monto_sancion: montoVigente,
+      monto_original_clp: montoOriginal,
+      monto_vigente_clp: montoVigente,
+      cantidad_enunciados: enunciadosList.length > 0 ? enunciadosList.length : 1,
       nro_resolucion: input.nro_resolucion?.trim() || null,
       fecha_resolucion: input.fecha_resolucion || null,
-      fecha_pago: input.estado === "PAGADA" ? (input.fecha_pago || new Date().toISOString().slice(0, 10)) : null,
+      fecha_pago: input.estado === "PAGADA" ? (input.fecha_pago || nowIso.slice(0, 10)) : null,
       estado: input.estado || "PENDIENTE",
       observaciones: input.observaciones?.trim() || null,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
     };
 
     if (isServerSupabaseConfigured()) {
@@ -195,20 +280,50 @@ export async function upsertLitigioMultaAction(input: {
       }
 
       if (data) {
+        const savedMulta = data as LitigioMulta;
+        if (enunciadosList.length > 0) {
+          await supabase
+            .from("litigios_multas_enunciados")
+            .delete()
+            .eq("multa_id", savedMulta.id);
+
+          const childrenPayload = enunciadosList.map((e, idx) => ({
+            multa_id: savedMulta.id,
+            nro_resolucion: (e.nro_resolucion || payload.nro_resolucion || payload.nro_multa).trim(),
+            correlativo_id: String(e.correlativo_id || idx + 1).trim(),
+            moneda: e.moneda || "UTM",
+            monto_pesos: Math.round(Number(e.monto_pesos || 0)),
+            nuevo_monto_pesos: Math.round(Number(e.nuevo_monto_pesos ?? e.monto_pesos ?? 0)),
+            observaciones: e.observaciones?.trim() || null,
+            updated_at: nowIso,
+          }));
+
+          const { error: childErr } = await supabase
+            .from("litigios_multas_enunciados")
+            .insert(childrenPayload);
+
+          if (childErr) {
+            return {
+              success: false,
+              error: `Error al guardar enunciados de la multa: ${childErr.message}`,
+            };
+          }
+        }
+
         safeRevalidatePath("/reg-litigios/multas");
         safeRevalidatePath("/reg-litigios/calendario");
-        return { success: true, data: data as LitigioMulta };
+        return { success: true, data: savedMulta };
       }
     }
 
     const db = readLocalDb();
     if (!db.litigios_multas) db.litigios_multas = [];
+    if (!db.litigios_multas_enunciados) db.litigios_multas_enunciados = [];
 
     const existingIndex = input.id
       ? db.litigios_multas.findIndex((m) => m.id === input.id)
       : db.litigios_multas.findIndex((m) => m.nro_multa === payload.nro_multa);
 
-    const nowIso = new Date().toISOString();
     let savedRecord: LitigioMulta;
 
     if (existingIndex >= 0) {
@@ -221,9 +336,31 @@ export async function upsertLitigioMultaAction(input: {
       savedRecord = {
         id: input.id || `mul-${Date.now()}`,
         ...payload,
+        monto_pagado: input.estado === "PAGADA" ? montoVigente : 0,
         created_at: nowIso,
       };
       db.litigios_multas.push(savedRecord);
+    }
+
+    if (enunciadosList.length > 0) {
+      db.litigios_multas_enunciados = db.litigios_multas_enunciados.filter(
+        (e) => String(e.multa_id) !== String(savedRecord.id)
+      );
+      enunciadosList.forEach((e, idx) => {
+        db.litigios_multas_enunciados!.push({
+          id: e.id || `enun-${Date.now()}-${idx}`,
+          multa_id: savedRecord.id,
+          nro_resolucion: (e.nro_resolucion || payload.nro_resolucion || payload.nro_multa).trim(),
+          correlativo_id: String(e.correlativo_id || idx + 1).trim(),
+          total_moneda: e.total_moneda ?? null,
+          moneda: e.moneda || "UTM",
+          monto_pesos: Math.round(Number(e.monto_pesos || 0)),
+          nuevo_monto_pesos: Math.round(Number(e.nuevo_monto_pesos ?? e.monto_pesos ?? 0)),
+          observaciones: e.observaciones?.trim() || null,
+          created_at: nowIso,
+          updated_at: nowIso,
+        });
+      });
     }
 
     writeLocalDb(db);
@@ -232,6 +369,207 @@ export async function upsertLitigioMultaAction(input: {
     return { success: true, data: savedRecord };
   } catch (err: any) {
     return { success: false, error: err?.message || "Error inesperado al guardar la multa." };
+  }
+}
+
+export async function registrarAbonoMultaAction(input: {
+  multaId: string;
+  montoAbono: number;
+  fechaPago: string;
+  observacion?: string | null;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auth = await assertCanManage(["litigios_multas", "reg_litigios"]);
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
+    }
+
+    const abono = Math.round(Number(input.montoAbono || 0));
+    if (!input.multaId || abono <= 0) {
+      return { success: false, error: "El monto del abono debe ser mayor a $0." };
+    }
+
+    const nowIso = new Date().toISOString();
+    const fechaPagoFinal = input.fechaPago || nowIso.slice(0, 10);
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { data: multa, error: fetchErr } = await supabase
+        .from("litigios_multas")
+        .select("*")
+        .eq("id", input.multaId)
+        .single();
+
+      if (fetchErr || !multa) {
+        return { success: false, error: "Multa no encontrada en Supabase." };
+      }
+
+      const m = multa as LitigioMulta;
+      const vigente = Number(m.monto_vigente_clp ?? m.monto_sancion ?? 0);
+      const pagadoPrev = Number(m.monto_pagado || 0);
+      const nuevoPagado = pagadoPrev + abono;
+      const quedaSaldada = nuevoPagado >= vigente && vigente > 0;
+      const obsNota = input.observacion?.trim()
+        ? `${m.observaciones ? `${m.observaciones} | ` : ""}Abono ${fechaPagoFinal} ($${abono.toLocaleString("es-CL")}): ${input.observacion.trim()}`
+        : m.observaciones || null;
+
+      const { error: updErr } = await supabase
+        .from("litigios_multas")
+        .update({
+          monto_pagado: nuevoPagado,
+          estado: quedaSaldada ? "PAGADA" : m.estado,
+          fecha_pago: quedaSaldada ? fechaPagoFinal : m.fecha_pago || null,
+          observaciones: obsNota,
+          updated_at: nowIso,
+        })
+        .eq("id", input.multaId);
+
+      if (updErr) {
+        return { success: false, error: `Error al registrar abono: ${updErr.message}` };
+      }
+
+      safeRevalidatePath("/reg-litigios/multas");
+      safeRevalidatePath("/reg-litigios/calendario");
+      return { success: true };
+    }
+
+    const db = readLocalDb();
+    const idx = (db.litigios_multas || []).findIndex((m) => m.id === input.multaId);
+    if (idx === -1) {
+      return { success: false, error: "Multa no encontrada." };
+    }
+
+    const m = db.litigios_multas[idx];
+    const vigente = Number(m.monto_vigente_clp ?? m.monto_sancion ?? 0);
+    const nuevoPagado = Number(m.monto_pagado || 0) + abono;
+    const quedaSaldada = nuevoPagado >= vigente && vigente > 0;
+
+    db.litigios_multas[idx] = {
+      ...m,
+      monto_pagado: nuevoPagado,
+      estado: quedaSaldada ? "PAGADA" : m.estado,
+      fecha_pago: quedaSaldada ? fechaPagoFinal : m.fecha_pago || null,
+      observaciones: input.observacion?.trim()
+        ? `${m.observaciones ? `${m.observaciones} | ` : ""}Abono ${fechaPagoFinal} ($${abono.toLocaleString("es-CL")}): ${input.observacion.trim()}`
+        : m.observaciones || null,
+      updated_at: nowIso,
+    };
+
+    writeLocalDb(db);
+    safeRevalidatePath("/reg-litigios/multas");
+    safeRevalidatePath("/reg-litigios/calendario");
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error al registrar abono." };
+  }
+}
+
+export async function actualizarEnunciadoMultaAction(input: {
+  enunciadoId: string;
+  multaId: string;
+  nuevoMontoPesos: number;
+  observaciones?: string | null;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auth = await assertCanManage(["litigios_multas", "reg_litigios"]);
+    if (!auth.authorized) {
+      return { success: false, error: auth.error || "Acceso denegado." };
+    }
+
+    const nuevoMonto = Math.max(0, Math.round(Number(input.nuevoMontoPesos || 0)));
+    const nowIso = new Date().toISOString();
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+      const { error: updEnunErr } = await supabase
+        .from("litigios_multas_enunciados")
+        .update({
+          nuevo_monto_pesos: nuevoMonto,
+          observaciones: input.observaciones?.trim() || null,
+          updated_at: nowIso,
+        })
+        .eq("id", input.enunciadoId);
+
+      if (updEnunErr) {
+        return { success: false, error: `Error al actualizar enunciado: ${updEnunErr.message}` };
+      }
+
+      const [{ data: siblings }, { data: multaRow }] = await Promise.all([
+        supabase
+          .from("litigios_multas_enunciados")
+          .select("monto_pesos, nuevo_monto_pesos")
+          .eq("multa_id", input.multaId),
+        supabase
+          .from("litigios_multas")
+          .select("monto_pagado, estado")
+          .eq("id", input.multaId)
+          .single(),
+      ]);
+
+      const sumVig = (siblings || []).reduce(
+        (acc, e: { nuevo_monto_pesos?: number; monto_pesos?: number }) =>
+          acc + Number(e.nuevo_monto_pesos ?? e.monto_pesos ?? 0),
+        0
+      );
+      const sumOrig = (siblings || []).reduce(
+        (acc, e: { monto_pesos?: number }) => acc + Number(e.monto_pesos ?? 0),
+        0
+      );
+      const pagado = Number((multaRow as { monto_pagado?: number } | null)?.monto_pagado || 0);
+      const estadoActual = (multaRow as { estado?: EstadoLitigioMulta } | null)?.estado || "PENDIENTE";
+      const quedaSaldada = pagado >= sumVig && sumVig > 0;
+
+      await supabase
+        .from("litigios_multas")
+        .update({
+          monto_sancion: sumVig,
+          monto_vigente_clp: sumVig,
+          monto_original_clp: sumOrig,
+          estado: quedaSaldada ? "PAGADA" : estadoActual,
+          updated_at: nowIso,
+        })
+        .eq("id", input.multaId);
+
+      safeRevalidatePath("/reg-litigios/multas");
+      safeRevalidatePath("/reg-litigios/calendario");
+      return { success: true };
+    }
+
+    const db = readLocalDb();
+    const enuns = db.litigios_multas_enunciados || [];
+    const eIdx = enuns.findIndex((e) => e.id === input.enunciadoId);
+    if (eIdx === -1) {
+      return { success: false, error: "Enunciado no encontrado." };
+    }
+    enuns[eIdx] = {
+      ...enuns[eIdx],
+      nuevo_monto_pesos: nuevoMonto,
+      observaciones: input.observaciones?.trim() || null,
+      updated_at: nowIso,
+    };
+
+    const siblings = enuns.filter((e) => String(e.multa_id) === String(input.multaId));
+    const sumVig = siblings.reduce((acc, e) => acc + Number(e.nuevo_monto_pesos ?? e.monto_pesos ?? 0), 0);
+    const sumOrig = siblings.reduce((acc, e) => acc + Number(e.monto_pesos ?? 0), 0);
+    const mIdx = (db.litigios_multas || []).findIndex((m) => m.id === input.multaId);
+    if (mIdx !== -1) {
+      const pagado = Number(db.litigios_multas[mIdx].monto_pagado || 0);
+      db.litigios_multas[mIdx] = {
+        ...db.litigios_multas[mIdx],
+        monto_sancion: sumVig,
+        monto_vigente_clp: sumVig,
+        monto_original_clp: sumOrig,
+        estado: pagado >= sumVig && sumVig > 0 ? "PAGADA" : db.litigios_multas[mIdx].estado,
+        updated_at: nowIso,
+      };
+    }
+
+    writeLocalDb(db);
+    safeRevalidatePath("/reg-litigios/multas");
+    safeRevalidatePath("/reg-litigios/calendario");
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Error al actualizar enunciado." };
   }
 }
 

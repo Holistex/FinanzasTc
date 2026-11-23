@@ -20,6 +20,7 @@ import {
   HistorialRenovacionGarantia,
   GestionGarantia,
   LitigioMulta,
+  LitigioMultaEnunciado,
   LitigioJuicio,
   LitigioAudienciaJuicio,
   LitigioComparendo,
@@ -60,6 +61,7 @@ export interface LocalDatabaseSchema {
   historial_renovaciones_garantias?: HistorialRenovacionGarantia[];
   gestiones_garantias?: GestionGarantia[];
   litigios_multas?: LitigioMulta[];
+  litigios_multas_enunciados?: LitigioMultaEnunciado[];
   litigios_juicios?: LitigioJuicio[];
   litigios_audiencias_juicio?: LitigioAudienciaJuicio[];
   litigios_comparendos?: LitigioComparendo[];
@@ -558,6 +560,7 @@ const INITIAL_SEED: LocalDatabaseSchema = {
     },
   ],
   litigios_multas: [],
+  litigios_multas_enunciados: [],
   litigios_juicios: [],
   litigios_audiencias_juicio: [],
   litigios_comparendos: [],
@@ -705,6 +708,11 @@ export function readLocalDb(): LocalDatabaseSchema {
     }
     if (!parsed.litigios_multas) {
       parsed.litigios_multas = structuredClone(INITIAL_SEED.litigios_multas || []);
+    }
+    if (!parsed.litigios_multas_enunciados) {
+      parsed.litigios_multas_enunciados = structuredClone(
+        INITIAL_SEED.litigios_multas_enunciados || []
+      );
     }
     if (!parsed.litigios_juicios) {
       parsed.litigios_juicios = structuredClone(INITIAL_SEED.litigios_juicios || []);

@@ -740,6 +740,22 @@ export interface GarantiasKpiSummary {
 
 export type EstadoLitigioMulta = "PENDIENTE" | "PAGADA";
 
+export type MonedaMultaEnunciado = "UTM" | "CLP" | "UF";
+
+export interface LitigioMultaEnunciado {
+  id: string;
+  multa_id: string;
+  nro_resolucion: string;
+  correlativo_id: string;
+  total_moneda?: number | null;
+  moneda: MonedaMultaEnunciado;
+  monto_pesos: number;
+  nuevo_monto_pesos: number;
+  observaciones?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface LitigioMulta {
   id: string;
   procedencia: string;
@@ -749,6 +765,11 @@ export interface LitigioMulta {
   nro_multa: string;
   fecha_publicacion: string; // YYYY-MM-DD
   monto_sancion: number;
+  monto_original_clp?: number | null;
+  monto_vigente_clp?: number | null;
+  monto_pagado?: number | null;
+  cantidad_enunciados?: number | null;
+  enunciados?: LitigioMultaEnunciado[];
   nro_resolucion?: string | null;
   fecha_resolucion?: string | null; // YYYY-MM-DD
   fecha_pago?: string | null; // YYYY-MM-DD
