@@ -1163,6 +1163,9 @@ export async function cambiarEstadoCompraAction(input: {
 export async function netearFacturaCompraAction(input: {
   facturaId: string;
   notaCreditoId: string;
+  rutProveedor?: string;
+  folioFactura?: number;
+  montoNeteo?: number | null;
   montoManual?: number | null;
 }): Promise<{
   success: boolean;
@@ -1176,18 +1179,167 @@ export async function netearFacturaCompraAction(input: {
   }
 
   try {
-    if (!input.facturaId || !input.notaCreditoId) {
+    if ((!input.facturaId && !(input.rutProveedor && input.folioFactura)) || !input.notaCreditoId) {
       return { success: false, error: "Factura y Nota de Crédito son requeridas." };
     }
 
+    const requestedManual =
+      input.montoNeteo && input.montoNeteo > 0
+        ? input.montoNeteo
+        : input.montoManual && input.montoManual > 0
+        ? input.montoManual
+        : null;
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+
+      // 1. Buscar Factura por ID (con fallback por rut_proveedor + folio)
+      let factura: FacturaCompra | null = null;
+      if (input.facturaId) {
+        const { data, error } = await supabase
+          .from("facturas_compras")
+          .select("*")
+          .eq("id", input.facturaId)
+          .maybeSingle();
+        if (!error && data) factura = data as FacturaCompra;
+      }
+      if (!factura && input.rutProveedor && input.folioFactura) {
+        const { data, error } = await supabase
+          .from("facturas_compras")
+          .select("*")
+          .eq("rut_proveedor", input.rutProveedor)
+          .eq("folio", input.folioFactura)
+          .maybeSingle();
+        if (!error && data) factura = data as FacturaCompra;
+      }
+
+      if (!factura) {
+        return {
+          success: false,
+          error: `La factura de compra indicada no fue encontrada (ID: ${input.facturaId || "vacío"}).`,
+        };
+      }
+
+      // 2. Buscar Nota de Crédito
+      const { data: ncRow, error: errNc } = await supabase
+        .from("facturas_compras")
+        .select("*")
+        .eq("id", input.notaCreditoId)
+        .maybeSingle();
+
+      if (errNc || !ncRow) {
+        return { success: false, error: "La Nota de Crédito indicada no fue encontrada." };
+      }
+
+      const notaCredito = ncRow as FacturaCompra;
+      if (Number(notaCredito.tipo_doc) !== 61) {
+        return { success: false, error: "El documento seleccionado no es una Nota de Crédito (DTE 61)." };
+      }
+
+      if (normalizeRut(factura.rut_proveedor) !== normalizeRut(notaCredito.rut_proveedor)) {
+        return {
+          success: false,
+          error: `El RUT del proveedor de la factura (${factura.rut_proveedor}) no coincide con el de la Nota de Crédito (${notaCredito.rut_proveedor}).`,
+        };
+      }
+
+      // 3. Calcular saldos desde neteos_compras en Supabase
+      const [{ data: neteosFacRows }, { data: neteosNcRows }] = await Promise.all([
+        supabase
+          .from("neteos_compras")
+          .select("monto_neteado")
+          .eq("factura_id", factura.id),
+        supabase
+          .from("neteos_compras")
+          .select("monto_neteado")
+          .eq("nota_credito_id", notaCredito.id),
+      ]);
+
+      const yaNeteadoFactura = (neteosFacRows || []).reduce(
+        (acc: number, n: { monto_neteado?: number }) => acc + Number(n.monto_neteado || 0),
+        0
+      );
+      const saldoFactura = Math.max(0, Number(factura.monto_total) - yaNeteadoFactura);
+      if (saldoFactura <= 0) {
+        return { success: false, error: "Esta factura ya no tiene saldo pendiente por pagar." };
+      }
+
+      const yaUsadoNC = (neteosNcRows || []).reduce(
+        (acc: number, n: { monto_neteado?: number }) => acc + Number(n.monto_neteado || 0),
+        0
+      );
+      const saldoNC = Math.max(0, Number(notaCredito.monto_total) - yaUsadoNC);
+      if (saldoNC <= 0) {
+        return {
+          success: false,
+          error: "Esta Nota de Crédito ya ha sido utilizada en su totalidad en otros neteos.",
+        };
+      }
+
+      let montoANetear = Math.min(saldoFactura, saldoNC);
+      if (requestedManual) {
+        montoANetear = Math.min(requestedManual, montoANetear);
+      }
+      if (montoANetear <= 0) {
+        return { success: false, error: "El monto a netear debe ser mayor a $0." };
+      }
+
+      const nuevoSaldoFactura = Math.max(0, saldoFactura - montoANetear);
+
+      const { error: insErr } = await supabase.from("neteos_compras").insert({
+        factura_id: factura.id,
+        nota_credito_id: notaCredito.id,
+        monto_neteado: montoANetear,
+        saldo_restante: nuevoSaldoFactura,
+      });
+
+      if (insErr) {
+        return { success: false, error: `Error al registrar el neteo: ${insErr.message}` };
+      }
+
+      const { error: updErr } = await supabase
+        .from("facturas_compras")
+        .update({
+          monto_saldo: nuevoSaldoFactura,
+          estado: nuevoSaldoFactura === 0 ? "NETEO_NC" : factura.estado,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", factura.id);
+
+      if (updErr) {
+        return { success: false, error: `Error al actualizar saldo de factura: ${updErr.message}` };
+      }
+
+      revalidatePath("/compras-tensacon/facturas-compras");
+      revalidatePath("/compras-tensacon/compromisos");
+      revalidatePath("/compras-tensacon/deuda-proveedores");
+      return {
+        success: true,
+        montoNeteado: montoANetear,
+        saldoRestanteFactura: nuevoSaldoFactura,
+      };
+    }
+
+    // Fallback local cuando Supabase no está configurado
     const db = readLocalDb();
     if (!db.facturas_compras) db.facturas_compras = [];
     if (!db.neteos_compras) db.neteos_compras = [];
 
     // 1. Obtener Factura
-    const factura = db.facturas_compras.find((f) => f.id === input.facturaId);
+    const factura =
+      db.facturas_compras.find((f) => f.id === input.facturaId) ||
+      (input.rutProveedor && input.folioFactura
+        ? db.facturas_compras.find(
+            (f) =>
+              normalizeRut(f.rut_proveedor) === normalizeRut(input.rutProveedor || "") &&
+              Number(f.folio) === Number(input.folioFactura)
+          )
+        : undefined);
     if (!factura) {
-      return { success: false, error: "La factura de compra indicada no fue encontrada." };
+      return {
+        success: false,
+        error: `La factura de compra indicada no fue encontrada (ID: ${input.facturaId || "vacío"}).`,
+      };
     }
 
     // 2. Obtener Nota de Crédito
@@ -1228,8 +1380,8 @@ export async function netearFacturaCompraAction(input: {
 
     // 6. Determinar monto a netear
     let montoANetear = Math.min(saldoFactura, saldoNC);
-    if (input.montoManual && input.montoManual > 0) {
-      montoANetear = Math.min(input.montoManual, montoANetear);
+    if (requestedManual) {
+      montoANetear = Math.min(requestedManual, montoANetear);
     }
 
     if (montoANetear <= 0) {
@@ -1263,27 +1415,9 @@ export async function netearFacturaCompraAction(input: {
 
     writeLocalDb(db);
 
-    // 9. Si Supabase está disponible, persistir
-    if (isServerSupabaseConfigured()) {
-      const supabase = await createServerSupabaseClient();
-      await supabase.from("neteos_compras").insert({
-        factura_id: factura.id,
-        nota_credito_id: notaCredito.id,
-        monto_neteado: montoANetear,
-        saldo_restante: nuevoSaldoFactura,
-      });
-
-      await supabase
-        .from("facturas_compras")
-        .update({
-          monto_saldo: nuevoSaldoFactura,
-          estado: nuevoSaldoFactura === 0 ? "NETEO_NC" : factura.estado,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", factura.id);
-    }
-
     revalidatePath("/compras-tensacon/facturas-compras");
+    revalidatePath("/compras-tensacon/compromisos");
+    revalidatePath("/compras-tensacon/deuda-proveedores");
     return {
       success: true,
       montoNeteado: montoANetear,

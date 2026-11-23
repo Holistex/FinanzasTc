@@ -439,6 +439,9 @@ export function CambiarEstadoCompraModal({
           const resNeteo = await netearFacturaCompraAction({
             facturaId: factura.id,
             notaCreditoId: selectedNcId,
+            rutProveedor: factura.rut_proveedor,
+            folioFactura: factura.folio,
+            montoNeteo: montoANetear,
           });
 
           if (resNeteo.success) {
