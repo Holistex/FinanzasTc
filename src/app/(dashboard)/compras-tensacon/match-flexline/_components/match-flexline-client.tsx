@@ -72,6 +72,16 @@ function getTipoDteLabel(tipoDoc?: number | string | null): string {
   return String(tipoDoc);
 }
 
+function formatFechaEmisionCL(raw?: string | null): string {
+  const s = String(raw || "").trim();
+  if (!s || s === "-") return "-";
+  const isoMatch = s.match(/^(\d{4})[-/](\d{2})[-/](\d{2})/);
+  if (isoMatch) return `${isoMatch[3]}-${isoMatch[2]}-${isoMatch[1]}`;
+  const clMatch = s.match(/^(\d{2})[-/](\d{2})[-/](\d{4})/);
+  if (clMatch) return `${clMatch[1]}-${clMatch[2]}-${clMatch[3]}`;
+  return formatDateCL(s) || "-";
+}
+
 function getTipoDteOptionLabel(code: string): string {
   switch (code) {
     case "33":
@@ -574,6 +584,7 @@ export function MatchFlexlineClient({
         FOLIO: r.folio,
         "RUT PROVEEDOR": r.rut_proveedor,
         PROVEEDOR: r.proveedor,
+        "FECHA EMISION": formatFechaEmisionCL(r.fecha_emision),
         "MONTO SII": r.monto_sii ?? "-",
         "MONTO FLEXLINE": r.monto_flexline,
         "DIFERENCIA ($ CLP)": r.diferencia,
@@ -678,6 +689,7 @@ export function MatchFlexlineClient({
             "FOLIO",
             "RUT PROVEEDOR",
             "PROVEEDOR",
+            "FECHA EMISIÓN",
             "MONTO SII",
             "MONTO FLEXLINE",
             "DIFERENCIA",
@@ -689,6 +701,7 @@ export function MatchFlexlineClient({
           r.folio,
           r.rut_proveedor,
           r.proveedor,
+          formatFechaEmisionCL(r.fecha_emision),
           r.monto_sii !== null ? formatCLP(r.monto_sii) : "-",
           formatCLP(r.monto_flexline),
           formatCLP(r.diferencia),
@@ -1117,6 +1130,7 @@ export function MatchFlexlineClient({
                   <th className="py-2.5 px-3">FOLIO</th>
                   <th className="py-2.5 px-3">RUT PROVEEDOR</th>
                   <th className="py-2.5 px-3">PROVEEDOR</th>
+                  <th className="py-2.5 px-3">FECHA EMISIÓN</th>
                   <th className="py-2.5 px-3 text-right">MONTO SII</th>
                   <th className="py-2.5 px-3 text-right">MONTO FLEXLINE</th>
                   <th className="py-2.5 px-3 text-right">DIFERENCIA ($ CLP)</th>
@@ -1125,7 +1139,7 @@ export function MatchFlexlineClient({
               <tbody className="divide-y divide-slate-200/80 text-xs">
                 {paginatedMalIngresadas.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-10 text-center text-slate-500">
+                    <td colSpan={9} className="py-10 text-center text-slate-500">
                       No se detectaron inconsistencias ni errores de ingreso para los filtros seleccionados.
                     </td>
                   </tr>
@@ -1157,6 +1171,9 @@ export function MatchFlexlineClient({
                       </td>
                       <td className="py-2 px-3 font-medium text-slate-800">
                         {r.proveedor}
+                      </td>
+                      <td className="px-4 py-3 text-xs font-mono text-slate-600 whitespace-nowrap">
+                        {formatFechaEmisionCL(r.fecha_emision) || "-"}
                       </td>
                       <td className="py-2 px-3 text-right font-mono text-slate-900 whitespace-nowrap">
                         {r.monto_sii !== null ? formatCLP(r.monto_sii) : "-"}
