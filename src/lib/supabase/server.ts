@@ -170,3 +170,32 @@ export const createServerSupabaseClient = cache(async () => {
     }
   );
 });
+
+/**
+ * Descarga todas las filas de una consulta Supabase paginando en bloques de 1.000
+ * para evitar el límite por defecto de PostgREST.
+ */
+export async function fetchAllSupabaseRows<T = Record<string, unknown>>(
+  buildQuery: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
+): Promise<{ data: T[]; error: string | null }> {
+  const pageSize = 1000;
+  const allRows: T[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await buildQuery(from, from + pageSize - 1);
+    if (error) {
+      return { data: allRows, error: error.message };
+    }
+    const batch = (data || []) as T[];
+    if (batch.length > 0) {
+      allRows.push(...batch);
+    }
+    if (batch.length < pageSize) {
+      break;
+    }
+    from += pageSize;
+  }
+
+  return { data: allRows, error: null };
+}

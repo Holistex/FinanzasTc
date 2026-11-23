@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import {
   createServerSupabaseClient,
+  fetchAllSupabaseRows,
   isServerSupabaseConfigured,
 } from "@/lib/supabase/server";
 import { readLocalDb, writeLocalDb } from "@/lib/supabase/local-fallback-db";
@@ -99,18 +100,23 @@ export async function getFacturasComprasAction(
     const factoringMap = new Map(factoringProveedores.map((p) => [String(p.id), p]));
     const confirmingMap = new Map(empresasConfirming.map((c) => [String(c.id), c]));
 
-    // 2. Consultar facturas de compras (lectura directa sin JOIN por foreign key)
-    const { data, error } = await supabase
-      .from("facturas_compras")
-      .select("*")
-      .order("fecha_docto", { ascending: false });
+    // 2. Consultar facturas de compras paginando con .range() para evitar límite de 1.000 filas
+    const { data, error } = await fetchAllSupabaseRows<Record<string, unknown>>(
+      (from, to) =>
+        supabase
+          .from("facturas_compras")
+          .select("*")
+          .order("fecha_docto", { ascending: false })
+          .order("id", { ascending: true })
+          .range(from, to)
+    );
 
     if (error) {
-      console.error("[FacturasCompras] Error lectura:", error.message);
+      console.error("[FacturasCompras] Error lectura:", error);
     }
 
     if (!error && data) {
-      rawCompras = (data as unknown as Array<Record<string, unknown>>).map((r) => {
+      rawCompras = data.map((r) => {
         const rawEstado = String(r.estado || "").toUpperCase();
         const rawModPago = String(r.modalidad_pago || "").toUpperCase();
         const rawMod = String(r.modalidad || "").toUpperCase();
@@ -192,17 +198,25 @@ export async function getFacturasComprasAction(
       });
     }
 
-    // 3. Consultar neteos de compras
-    const { data: neteosData } = await supabase.from("neteos_compras").select("*");
-    if (neteosData) {
-      rawNeteos = neteosData as NeteoCompra[];
-    }
-
-    // 4. Consultar cheques de compras
-    const { data: chequesData } = await supabase.from("cheques_compras").select("*");
-    if (chequesData) {
-      rawCheques = chequesData as ChequeCompra[];
-    }
+    // 3. Consultar neteos y cheques de compras sin límite de 1.000 filas
+    const [{ data: neteosData }, { data: chequesData }] = await Promise.all([
+      fetchAllSupabaseRows<NeteoCompra>((from, to) =>
+        supabase
+          .from("neteos_compras")
+          .select("*")
+          .order("id", { ascending: true })
+          .range(from, to)
+      ),
+      fetchAllSupabaseRows<ChequeCompra>((from, to) =>
+        supabase
+          .from("cheques_compras")
+          .select("*")
+          .order("id", { ascending: true })
+          .range(from, to)
+      ),
+    ]);
+    rawNeteos = neteosData;
+    rawCheques = chequesData;
   }
 
   // Fallback si no hay Supabase o para hidratación local

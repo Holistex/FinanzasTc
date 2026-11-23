@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import {
   createServerSupabaseClient,
+  fetchAllSupabaseRows,
   isServerSupabaseConfigured,
 } from "@/lib/supabase/server";
 import { assertIsAdmin } from "@/lib/auth/session";
@@ -141,21 +142,33 @@ export async function getHistoricoPagosComprasAction(params?: {
         { data: supaPagos },
         { data: supaColabs },
       ] = await Promise.all([
-        supabase
-          .from("facturas_compras")
-          .select("*")
-          .neq("tipo_doc", 61)
-          .gt("monto_total", 0),
-        supabase
-          .from("pagos_facturas_compras")
-          .select("*")
-          .gt("monto_pago", 0)
-          .order("fecha_pago", { ascending: false }),
-        supabase
-          .from("pagos_compras")
-          .select("*")
-          .gt("monto_pagado", 0)
-          .order("fecha_real_pago", { ascending: false }),
+        fetchAllSupabaseRows<Record<string, unknown>>((from, to) =>
+          supabase
+            .from("facturas_compras")
+            .select("*")
+            .neq("tipo_doc", 61)
+            .gt("monto_total", 0)
+            .order("id", { ascending: true })
+            .range(from, to)
+        ),
+        fetchAllSupabaseRows<Record<string, unknown>>((from, to) =>
+          supabase
+            .from("pagos_facturas_compras")
+            .select("*")
+            .gt("monto_pago", 0)
+            .order("fecha_pago", { ascending: false })
+            .order("id", { ascending: true })
+            .range(from, to)
+        ),
+        fetchAllSupabaseRows<Record<string, unknown>>((from, to) =>
+          supabase
+            .from("pagos_compras")
+            .select("*")
+            .gt("monto_pagado", 0)
+            .order("fecha_real_pago", { ascending: false })
+            .order("id", { ascending: true })
+            .range(from, to)
+        ),
         supabase
           .from("mantenedor_colaboradores")
           .select("id, nombre"),
@@ -347,12 +360,13 @@ export async function getHistoricoPagosComprasAction(params?: {
               tipo_doc: Number(sFac.tipo_doc || 33),
               modalidad_pago: mod,
               monto_pagado: montoTotalNum,
-              fecha_real_pago:
+              fecha_real_pago: String(
                 (sFacRec.fecha_pago_real ? String(sFacRec.fecha_pago_real).slice(0, 10) : "") ||
-                sFac.fecha_vencimiento_cheque ||
-                (sFac.updated_at
-                  ? String(sFac.updated_at).slice(0, 10)
-                  : sFac.fecha_vencimiento || sFac.fecha_docto || new Date().toISOString().slice(0, 10)),
+                  sFac.fecha_vencimiento_cheque ||
+                  (sFac.updated_at
+                    ? String(sFac.updated_at).slice(0, 10)
+                    : sFac.fecha_vencimiento || sFac.fecha_docto || new Date().toISOString().slice(0, 10))
+              ),
               observacion: mods.includes("COMPRA_TC")
                 ? sFacRec.observacion_tc && String(sFacRec.observacion_tc).trim()
                   ? colabNombre
@@ -905,10 +919,15 @@ export async function getCompromisosComprasAction(params?: {
     if (isServerSupabaseConfigured()) {
       try {
         const supabase = await createServerSupabaseClient();
-        const { data: supaFacs } = await supabase
-          .from("facturas_compras")
-          .select("*")
-          .neq("tipo_doc", 61);
+        const { data: supaFacs } = await fetchAllSupabaseRows<Record<string, unknown>>(
+          (from, to) =>
+            supabase
+              .from("facturas_compras")
+              .select("*")
+              .neq("tipo_doc", 61)
+              .order("id", { ascending: true })
+              .range(from, to)
+        );
 
         if (supaFacs && supaFacs.length > 0) {
           for (const sf of supaFacs) {
@@ -939,7 +958,9 @@ export async function getCompromisosComprasAction(params?: {
                 rut_proveedor: String(sf.rut_proveedor || ""),
                 razon_social: String(sf.razon_social || ""),
                 referencia_doc: sf.numero_cheque ? `Cheque #${sf.numero_cheque}` : `FAC #${fol}`,
-                fecha_vencimiento: toDateOnlyString(sf.fecha_vencimiento_cheque || sf.fecha_vencimiento || "2026-10-30"),
+                fecha_vencimiento: toDateOnlyString(
+                  String(sf.fecha_vencimiento_cheque || sf.fecha_vencimiento || "2026-10-30")
+                ),
                 monto: Number(sf.monto_total || 0),
                 created_at: String(sf.created_at || ""),
               });
