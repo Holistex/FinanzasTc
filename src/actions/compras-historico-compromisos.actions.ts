@@ -246,32 +246,56 @@ export async function getHistoricoPagosComprasAction(params?: {
         };
       };
 
-      // 3.1 Consolidar pagos_facturas_compras
+      // 3.1 Consolidar pagos_facturas_compras (sumando múltiples abonos de una misma factura)
+      const pagosFacAgrupados = new Map<string, PagoCompraHistorico>();
       for (const rawP of supaPagosFac || []) {
         const p = normalizarPagoSupa(rawP as Record<string, unknown>);
-        if (
-          p &&
-          !foliosRegistrados.has(p.folio) &&
-          (!p.factura_id || !facturasIdRegistrados.has(p.factura_id))
-        ) {
-          rawPagos.unshift(p);
-          if (p.folio > 0) foliosRegistrados.add(p.folio);
-          if (p.factura_id) facturasIdRegistrados.add(p.factura_id);
+        if (!p) continue;
+        const groupKey = p.factura_id
+          ? `id:${p.factura_id}`
+          : p.folio > 0
+          ? `folio:${p.folio}`
+          : `row:${p.id}`;
+        const existing = pagosFacAgrupados.get(groupKey);
+        if (existing) {
+          existing.monto_pagado += p.monto_pagado;
+        } else {
+          pagosFacAgrupados.set(groupKey, { ...p });
         }
       }
+      for (const p of pagosFacAgrupados.values()) {
+        rawPagos.unshift(p);
+        if (p.folio > 0) foliosRegistrados.add(p.folio);
+        if (p.factura_id) facturasIdRegistrados.add(p.factura_id);
+      }
 
-      // 3.2 Consolidar pagos_compras
+      // 3.2 Consolidar pagos_compras (sumando múltiples abonos si la factura no vino de pagos_facturas_compras)
+      const pagosComprasAgrupados = new Map<string, PagoCompraHistorico>();
       for (const rawP of supaPagos || []) {
         const p = normalizarPagoSupa(rawP as Record<string, unknown>);
+        if (!p) continue;
         if (
-          p &&
-          !foliosRegistrados.has(p.folio) &&
-          (!p.factura_id || !facturasIdRegistrados.has(p.factura_id))
+          foliosRegistrados.has(p.folio) ||
+          (p.factura_id && facturasIdRegistrados.has(p.factura_id))
         ) {
-          rawPagos.unshift(p);
-          if (p.folio > 0) foliosRegistrados.add(p.folio);
-          if (p.factura_id) facturasIdRegistrados.add(p.factura_id);
+          continue;
         }
+        const groupKey = p.factura_id
+          ? `id:${p.factura_id}`
+          : p.folio > 0
+          ? `folio:${p.folio}`
+          : `row:${p.id}`;
+        const existing = pagosComprasAgrupados.get(groupKey);
+        if (existing) {
+          existing.monto_pagado += p.monto_pagado;
+        } else {
+          pagosComprasAgrupados.set(groupKey, { ...p });
+        }
+      }
+      for (const p of pagosComprasAgrupados.values()) {
+        rawPagos.unshift(p);
+        if (p.folio > 0) foliosRegistrados.add(p.folio);
+        if (p.factura_id) facturasIdRegistrados.add(p.factura_id);
       }
 
       // 3.3 Respaldo: facturas saldadas o COMPRA_TC en facturas_compras no presentes en pagos_facturas_compras

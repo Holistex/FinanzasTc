@@ -2000,8 +2000,10 @@ export async function registrarPagoFacturaCompraAction(
       throw new Error("Factura de compra no encontrada.");
     }
 
-    const nuevoSaldo = Math.max(0, Math.round(saldoActual - Number(montoPago)));
-    const estaSaldada = nuevoSaldo <= 0;
+    const pagoEfectivo = Math.round(Number(montoPago || 0));
+    const diferencia = Math.round(saldoActual) - pagoEfectivo;
+    const nuevoSaldo = diferencia <= 1 ? 0 : Math.max(0, diferencia);
+    const estaSaldada = nuevoSaldo === 0;
     const estadoVigente = ["FACTORING", "CONFIRMING"].includes(
       String(targetFactura.estado || "").toUpperCase()
     )
