@@ -434,7 +434,8 @@ export async function registrarAbonoMultaAction(input: {
     }
 
     const db = readLocalDb();
-    const idx = (db.litigios_multas || []).findIndex((m) => m.id === input.multaId);
+    if (!db.litigios_multas) db.litigios_multas = [];
+    const idx = db.litigios_multas.findIndex((m) => m.id === input.multaId);
     if (idx === -1) {
       return { success: false, error: "Multa no encontrada." };
     }
@@ -507,12 +508,12 @@ export async function actualizarEnunciadoMultaAction(input: {
       ]);
 
       const sumVig = (siblings || []).reduce(
-        (acc, e: { nuevo_monto_pesos?: number; monto_pesos?: number }) =>
+        (acc: number, e: { nuevo_monto_pesos?: number; monto_pesos?: number }) =>
           acc + Number(e.nuevo_monto_pesos ?? e.monto_pesos ?? 0),
         0
       );
       const sumOrig = (siblings || []).reduce(
-        (acc, e: { monto_pesos?: number }) => acc + Number(e.monto_pesos ?? 0),
+        (acc: number, e: { monto_pesos?: number }) => acc + Number(e.monto_pesos ?? 0),
         0
       );
       const pagado = Number((multaRow as { monto_pagado?: number } | null)?.monto_pagado || 0);
@@ -551,7 +552,8 @@ export async function actualizarEnunciadoMultaAction(input: {
     const siblings = enuns.filter((e) => String(e.multa_id) === String(input.multaId));
     const sumVig = siblings.reduce((acc, e) => acc + Number(e.nuevo_monto_pesos ?? e.monto_pesos ?? 0), 0);
     const sumOrig = siblings.reduce((acc, e) => acc + Number(e.monto_pesos ?? 0), 0);
-    const mIdx = (db.litigios_multas || []).findIndex((m) => m.id === input.multaId);
+    if (!db.litigios_multas) db.litigios_multas = [];
+    const mIdx = db.litigios_multas.findIndex((m) => m.id === input.multaId);
     if (mIdx !== -1) {
       const pagado = Number(db.litigios_multas[mIdx].monto_pagado || 0);
       db.litigios_multas[mIdx] = {
