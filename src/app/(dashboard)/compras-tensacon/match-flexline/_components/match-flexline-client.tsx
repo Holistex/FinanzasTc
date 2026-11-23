@@ -31,6 +31,7 @@ import {
   getExistingFlexlineKeysAction,
   getMatchFlexlineDataAction,
   importarMatchFlexlineChunkAction,
+  vaciarMalIngresadasFlexlineAction,
   vaciarMatchFlexlineAction,
 } from "@/actions/match-flexline.actions";
 import {
@@ -156,6 +157,57 @@ export function MatchFlexlineClient({
     type: "success" | "error";
     message: string;
   } | null>(null);
+  const [isEmptyingMalIngresadas, setIsEmptyingMalIngresadas] = useState(false);
+
+  const handleVaciarMalIngresadas = async () => {
+    const flexlineIds = filteredMalIngresadas
+      .map((r) => r.flexline_id)
+      .filter((id): id is string => Boolean(id));
+
+    if (flexlineIds.length === 0) {
+      setFeedback({
+        type: "error",
+        message: "No se encontraron IDs de Flexline válidos para eliminar.",
+      });
+      return;
+    }
+
+    const confirmado = window.confirm(
+      `¿Está seguro de eliminar ${flexlineIds.length} registro(s) de "Mal Ingresadas" de la base Flexline?\n\nEsta acción conservará intactas las facturas ingresadas correctamente y el libro SII.`
+    );
+    if (!confirmado) return;
+
+    setIsEmptyingMalIngresadas(true);
+    setFeedback(null);
+    try {
+      const res = await vaciarMalIngresadasFlexlineAction(flexlineIds);
+      if (!res.success) {
+        setFeedback({
+          type: "error",
+          message: res.error || "No se pudieron eliminar los registros.",
+        });
+        return;
+      }
+
+      const fresh = await getMatchFlexlineDataAction();
+      setData(fresh);
+      router.refresh();
+      setFeedback({
+        type: "success",
+        message: `Se eliminaron ${res.eliminados ?? flexlineIds.length} registros de Mal Ingresadas de Flexline.`,
+      });
+    } catch (err: unknown) {
+      setFeedback({
+        type: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Error al vaciar Mal Ingresadas.",
+      });
+    } finally {
+      setIsEmptyingMalIngresadas(false);
+    }
+  };
 
   const normalizeQuery = (val: string) =>
     val
@@ -977,6 +1029,21 @@ export function MatchFlexlineClient({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {activeTab === "MAL_INGRESADAS" && filteredMalIngresadas.length > 0 && (
+            <button
+              type="button"
+              onClick={handleVaciarMalIngresadas}
+              disabled={isEmptyingMalIngresadas}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {isEmptyingMalIngresadas ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+              Vaciar Mal Ingresadas
+            </button>
+          )}
           <button
             type="button"
             onClick={handleExportExcel}

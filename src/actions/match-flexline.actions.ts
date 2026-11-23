@@ -52,6 +52,7 @@ export type MotivoMalIngresada =
 
 export interface MatchFlexlineMalIngresadaRow {
   id: string;
+  flexline_id?: string;
   key2: string;
   tipo_doc?: number | string | null;
   motivo: MotivoMalIngresada;
@@ -231,6 +232,63 @@ export async function vaciarMatchFlexlineAction(): Promise<{
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Error inesperado al vaciar Flexline.";
+    return { success: false, error: message };
+  }
+}
+
+export async function vaciarMalIngresadasFlexlineAction(
+  flexlineIds: string[]
+): Promise<{
+  success: boolean;
+  eliminados?: number;
+  error?: string;
+}> {
+  try {
+    const session = await getServerUserSession();
+    const { canManage } = getModuleAccess(session, [
+      "match_flexline",
+      "compras_global",
+    ]);
+    if (!canManage) {
+      return {
+        success: false,
+        error: "No tienes permisos para eliminar registros de Match Flexline.",
+      };
+    }
+
+    if (!isServerSupabaseConfigured()) {
+      return {
+        success: false,
+        error: "Supabase no está configurado en el servidor.",
+      };
+    }
+
+    const idsUnicos = Array.from(new Set(flexlineIds.filter(Boolean)));
+    if (idsUnicos.length === 0) {
+      return { success: true, eliminados: 0 };
+    }
+
+    const supabase = await createServerSupabaseClient();
+    const chunkSize = 200;
+    for (let i = 0; i < idsUnicos.length; i += chunkSize) {
+      const lote = idsUnicos.slice(i, i + chunkSize);
+      const { error } = await supabase
+        .from("compras_flexline_import")
+        .delete()
+        .in("id", lote);
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    revalidatePath("/compras-tensacon/match-flexline");
+    return { success: true, eliminados: idsUnicos.length };
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : "Error al vaciar Mal Ingresadas.";
     return { success: false, error: message };
   }
 }
@@ -558,6 +616,7 @@ function reconcileMatchFlexline(
         const montoFlex = Math.round(Number(dupRow.monto_total || 0));
         malIngresadas.push({
           id: `${doc.id}-dup-${dupRow.id || idx}`,
+          flexline_id: dupRow.id,
           key2: dupRow.key2_original || key,
           tipo_doc: Number(doc.tipo_doc || 33),
           motivo: "Duplicado en Flexline",
@@ -580,6 +639,7 @@ function reconcileMatchFlexline(
       if (Math.abs(diff) >= UMBRAL_DIFERENCIA_MONTO) {
         malIngresadas.push({
           id: `${doc.id}-diff-${primaryFlex.id || "0"}`,
+          flexline_id: primaryFlex.id,
           key2: primaryFlex.key2_original || key,
           tipo_doc: Number(doc.tipo_doc || 33),
           motivo: "Diferencia de Monto",
@@ -632,6 +692,7 @@ function reconcileMatchFlexline(
 
       malIngresadas.push({
         id: `flex-nosii-${row.id || key}-${idx}`,
+        flexline_id: row.id,
         key2: row.key2_original || key,
         tipo_doc: inferredTipoDoc,
         motivo: idx > 0 ? "Duplicado en Flexline" : "Error de Folio / No existe en SII",
