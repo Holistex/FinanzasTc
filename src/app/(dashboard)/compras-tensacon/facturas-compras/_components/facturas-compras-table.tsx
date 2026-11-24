@@ -893,9 +893,25 @@ export function FacturasComprasTable({
                     const totalCheques = (factura.cheques || []).reduce((sum, c) => sum + Number(c.monto_cheque || 0), 0);
                     const tieneAjusteParcial = saldo < factura.monto_total;
 
-                    // Cálculos de vencimiento
-                    const dueDateInfo = factura.fecha_vencimiento
-                      ? calculateDueDateInfo(factura.fecha_docto, factura.fecha_vencimiento)
+                    // Cálculos de vencimiento (priorizar fecha de cheque cuando la modalidad es CHEQUE)
+                    const esCheque =
+                      factura.estado === "CHEQUE" ||
+                      factura.modalidad_pago === "CHEQUE" ||
+                      activeTab === "CHEQUES";
+                    const chequeActivo =
+                      (factura.cheques || []).find(
+                        (c) => c.estado !== "COBRADO" && c.estado !== "ANULADO"
+                      ) || factura.cheques?.[0];
+                    const fechaVencimientoOficial =
+                      (esCheque &&
+                        (chequeActivo?.fecha_vencimiento ||
+                          factura.fecha_vencimiento_cheque)) ||
+                      factura.fecha_vencimiento;
+                    const dueDateInfo = fechaVencimientoOficial
+                      ? calculateDueDateInfo(
+                          factura.fecha_docto,
+                          fechaVencimientoOficial
+                        )
                       : null;
 
                     return (
@@ -945,19 +961,25 @@ export function FacturasComprasTable({
                                 {formatDateCL(factura.fecha_docto)}
                               </div>
                               <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                                <span className={factura.estado === "CHEQUE" || activeTab === "CHEQUES" ? "text-amber-700 font-semibold" : "text-slate-400"}>
-                                  {factura.estado === "CHEQUE" || activeTab === "CHEQUES" ? "Cobro:" : "Venc:"}
-                                </span>
-                                <span className={cn(
-                                  "font-semibold",
-                                  factura.estado === "CHEQUE" || activeTab === "CHEQUES" ? "text-amber-900 font-mono font-bold" : "text-slate-700"
-                                )}>
-                                  {factura.estado === "CHEQUE" && factura.fecha_vencimiento_cheque
-                                    ? formatDateCL(factura.fecha_vencimiento_cheque)
-                                    : factura.fecha_vencimiento
-                                    ? formatDateCL(factura.fecha_vencimiento)
-                                    : "—"}
-                                </span>
+                                {esCheque ? (
+                                  <span className="text-[11px] font-semibold text-amber-700">
+                                    Se cobrará el:{" "}
+                                    <span className="text-amber-900 font-mono font-bold">
+                                      {fechaVencimientoOficial
+                                        ? formatDateCL(fechaVencimientoOficial)
+                                        : "—"}
+                                    </span>
+                                  </span>
+                                ) : (
+                                  <>
+                                    <span className="text-slate-400">Venc:</span>
+                                    <span className="font-semibold text-slate-700">
+                                      {fechaVencimientoOficial
+                                        ? formatDateCL(fechaVencimientoOficial)
+                                        : "—"}
+                                    </span>
+                                  </>
+                                )}
                               </div>
                               {factura.periodo_libro &&
                                 factura.fecha_docto &&
@@ -977,12 +999,13 @@ export function FacturasComprasTable({
                               <span
                                 className={cn(
                                   "inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[10px] font-bold shadow-xs",
-                                  dueDateInfo.badgeColor === "emerald" &&
-                                    "bg-emerald-100 text-emerald-800 border border-emerald-300",
-                                  dueDateInfo.badgeColor === "amber" &&
-                                    "bg-amber-100 text-amber-800 border border-amber-300",
-                                  dueDateInfo.badgeColor === "rose" &&
-                                    "bg-rose-100 text-rose-800 border border-rose-300 animate-pulse"
+                                  dueDateInfo.diasRestantes > 15 &&
+                                    "bg-emerald-50 text-emerald-700 border border-emerald-200",
+                                  dueDateInfo.diasRestantes >= 1 &&
+                                    dueDateInfo.diasRestantes <= 15 &&
+                                    "bg-amber-50 text-amber-700 border border-amber-200",
+                                  dueDateInfo.diasRestantes <= 0 &&
+                                    "bg-rose-50 text-rose-700 border border-rose-200"
                                 )}
                                 title={
                                   dueDateInfo.diasRestantes > 0

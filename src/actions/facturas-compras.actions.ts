@@ -353,6 +353,20 @@ export async function getFacturasComprasAction(
       );
       fc.total_cheques_emitidos = totalCheques;
 
+      const chequeActivo =
+        chequesDeEstaFactura.find(
+          (c) => c.estado !== "COBRADO" && c.estado !== "ANULADO"
+        ) || chequesDeEstaFactura[0];
+      const fechaChequeOficial =
+        chequeActivo?.fecha_vencimiento || fc.fecha_vencimiento_cheque || null;
+      if (
+        (fc.estado === "CHEQUE" || fc.modalidad_pago === "CHEQUE") &&
+        fechaChequeOficial
+      ) {
+        fc.fecha_vencimiento_cheque = fechaChequeOficial;
+        fc.fecha_vencimiento = fechaChequeOficial;
+      }
+
       const chequesCobrados = chequesDeEstaFactura.filter((c) => c.estado === "COBRADO");
       const totalChequesCobrados = chequesCobrados.reduce(
         (sum, c) => sum + Number(c.monto_cheque || 0),
@@ -1645,6 +1659,7 @@ export async function registrarChequesCompraAction(
     db.facturas_compras[localIdx].numero_cheque = refNumCheque;
     db.facturas_compras[localIdx].banco_emisor = refBanco;
     db.facturas_compras[localIdx].fecha_vencimiento_cheque = refFechaVcto;
+    db.facturas_compras[localIdx].fecha_vencimiento = refFechaVcto;
     db.facturas_compras[localIdx].updated_at = new Date().toISOString();
 
     writeLocalDb(db);
@@ -1680,6 +1695,7 @@ export async function registrarChequesCompraAction(
         numero_cheque: refNumCheque,
         banco_emisor: refBanco,
         fecha_vencimiento_cheque: refFechaVcto,
+        fecha_vencimiento: refFechaVcto,
         updated_at: new Date().toISOString(),
       };
 
