@@ -600,9 +600,9 @@ export function PagosTesoreriaClient({
         <div className="overflow-x-auto">
           <table className="min-w-[850px] lg:min-w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50 text-slate-600 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200">
+              <tr>
                 {/* Columna 1: Clasificación (Fijada a la izquierda con ancho cómodo) */}
-                <th className="py-3 px-4 whitespace-nowrap min-w-[220px]">
+                <th className="py-3.5 px-4 whitespace-nowrap min-w-[220px] text-slate-800 font-extrabold text-xs uppercase tracking-wider bg-slate-100/80 border-b border-slate-200">
                   1. CLASIFICACIÓN
                 </th>
 
@@ -614,10 +614,10 @@ export function PagosTesoreriaClient({
                     <th
                       key={sem.id}
                       className={cn(
-                        "py-3 px-3.5 text-right whitespace-nowrap font-mono text-[11px] transition-colors",
+                        "py-3.5 px-4 text-right text-xs font-bold uppercase tracking-wider border-b transition-colors whitespace-nowrap font-mono",
                         isHighlighted
-                          ? "bg-[#E05A10] text-white shadow-inner font-extrabold"
-                          : "text-slate-200"
+                          ? "bg-[#E05A10] text-white border-[#E05A10]"
+                          : "bg-slate-100/80 text-slate-700 border-slate-200"
                       )}
                     >
                       {sem.label}
@@ -626,7 +626,7 @@ export function PagosTesoreriaClient({
                 })}
 
                 {/* Columna Final: Total Fila */}
-                <th className="py-3 px-4 text-right whitespace-nowrap font-mono text-[11px] bg-[#080E1C] text-[#E05A10] min-w-[150px]">
+                <th className="py-3.5 px-4 text-right whitespace-nowrap font-mono text-xs bg-[#0B1528] text-amber-400 font-extrabold uppercase tracking-wider border-b border-[#0B1528] min-w-[150px]">
                   TOTAL CATEGORÍA
                 </th>
               </tr>
