@@ -143,10 +143,10 @@ export function MultasModuleView({
   ): EnunciadoDraft => ({
     nro_resolucion: baseRes,
     correlativo_id: String(idx + 1),
-    total_moneda_raw: "",
+    total_moneda_raw: "0",
     moneda: "UTM",
-    monto_pesos_raw: "",
-    nuevo_monto_pesos_raw: "",
+    monto_pesos_raw: "0",
+    nuevo_monto_pesos_raw: "0",
     nuevoMontoTouched: false,
     observaciones: "",
   });
@@ -1416,7 +1416,7 @@ export function MultasModuleView({
                                   )
                                 );
                               }}
-                              placeholder={formData.nro_resolucion || "1126/26/2"}
+                              placeholder={formData.nro_resolucion || "N° Res."}
                               className="w-full px-2 py-1 text-xs rounded border border-slate-300 font-mono text-slate-900 focus:border-[#E05A10] focus:outline-none"
                             />
                           </td>
@@ -1439,6 +1439,24 @@ export function MultasModuleView({
                             <input
                               type="text"
                               value={row.total_moneda_raw}
+                              onFocus={() => {
+                                if (row.total_moneda_raw.trim() === "0") {
+                                  setEnunciadosDraft((prev) =>
+                                    prev.map((item, i) =>
+                                      i === idx ? { ...item, total_moneda_raw: "" } : item
+                                    )
+                                  );
+                                }
+                              }}
+                              onBlur={() => {
+                                if (!row.total_moneda_raw.trim()) {
+                                  setEnunciadosDraft((prev) =>
+                                    prev.map((item, i) =>
+                                      i === idx ? { ...item, total_moneda_raw: "0" } : item
+                                    )
+                                  );
+                                }
+                              }}
                               onChange={(e) => {
                                 const val = e.target.value;
                                 setEnunciadosDraft((prev) =>
@@ -1459,7 +1477,7 @@ export function MultasModuleView({
                                   })
                                 );
                               }}
-                              placeholder={row.moneda === "CLP" ? "1.450.000" : "40,00"}
+                              placeholder="0"
                               className="w-full px-2 py-1 text-xs rounded border border-slate-300 font-mono text-right text-slate-900 focus:border-[#E05A10] focus:outline-none"
                             />
                           </td>
@@ -1505,6 +1523,32 @@ export function MultasModuleView({
                                 type="text"
                                 required
                                 value={row.monto_pesos_raw}
+                                onFocus={() => {
+                                  if (row.monto_pesos_raw.trim() === "0") {
+                                    setEnunciadosDraft((prev) =>
+                                      prev.map((item, i) =>
+                                        i === idx ? { ...item, monto_pesos_raw: "" } : item
+                                      )
+                                    );
+                                  }
+                                }}
+                                onBlur={() => {
+                                  if (!row.monto_pesos_raw.trim()) {
+                                    setEnunciadosDraft((prev) =>
+                                      prev.map((item, i) =>
+                                        i === idx
+                                          ? {
+                                              ...item,
+                                              monto_pesos_raw: "0",
+                                              nuevo_monto_pesos_raw: item.nuevoMontoTouched
+                                                ? item.nuevo_monto_pesos_raw
+                                                : "0",
+                                            }
+                                          : item
+                                      )
+                                    );
+                                  }
+                                }}
                                 onChange={(e) => {
                                   const formatted = formatNumberInput(e.target.value);
                                   setEnunciadosDraft((prev) =>
@@ -1522,7 +1566,7 @@ export function MultasModuleView({
                                     )
                                   );
                                 }}
-                                placeholder="2.868.840"
+                                placeholder="$ 0"
                                 className="w-full pl-5 pr-2 py-1 text-xs rounded border border-slate-300 font-mono text-right font-semibold text-slate-900 focus:border-[#E05A10] focus:outline-none"
                               />
                             </div>
@@ -1535,6 +1579,28 @@ export function MultasModuleView({
                               <input
                                 type="text"
                                 value={row.nuevo_monto_pesos_raw}
+                                onFocus={() => {
+                                  if (row.nuevo_monto_pesos_raw.trim() === "0") {
+                                    setEnunciadosDraft((prev) =>
+                                      prev.map((item, i) =>
+                                        i === idx
+                                          ? { ...item, nuevo_monto_pesos_raw: "" }
+                                          : item
+                                      )
+                                    );
+                                  }
+                                }}
+                                onBlur={() => {
+                                  if (!row.nuevo_monto_pesos_raw.trim()) {
+                                    setEnunciadosDraft((prev) =>
+                                      prev.map((item, i) =>
+                                        i === idx
+                                          ? { ...item, nuevo_monto_pesos_raw: "0" }
+                                          : item
+                                      )
+                                    );
+                                  }
+                                }}
                                 onChange={(e) => {
                                   const formatted = formatNumberInput(e.target.value);
                                   setEnunciadosDraft((prev) =>
@@ -1549,7 +1615,7 @@ export function MultasModuleView({
                                     )
                                   );
                                 }}
-                                placeholder="2.868.840"
+                                placeholder="$ 0"
                                 className="w-full pl-5 pr-2 py-1 text-xs rounded border border-emerald-300 bg-emerald-50/30 font-mono text-right font-bold text-slate-900 focus:border-[#E05A10] focus:outline-none"
                               />
                             </div>
@@ -1566,7 +1632,7 @@ export function MultasModuleView({
                                   )
                                 );
                               }}
-                              placeholder="Detalle punto infractor / rebaja..."
+                              placeholder="Detalle punto infractor..."
                               className="w-full px-2 py-1 text-xs rounded border border-slate-300 text-slate-800 focus:border-[#E05A10] focus:outline-none"
                             />
                           </td>
