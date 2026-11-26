@@ -162,6 +162,7 @@ export interface FacturaVenta {
   entidad_factoring?: string | null;
   empresa_factoring_cliente?: EmpresaFactoringCliente | null;
   monto_neto_saldo: number;
+  saldo_pendiente?: number | null;
   deuda_cliente?: number | null;
   on_proyecto?: string | null;
   url_pdf?: string | null;

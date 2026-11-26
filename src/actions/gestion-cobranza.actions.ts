@@ -13,7 +13,7 @@ import {
   PagoFactura,
   TipoGestionCobranza,
 } from "@/types/database.types";
-import { formatDateCL } from "@/lib/utils";
+import { formatDateCL, normalizeRut } from "@/lib/utils";
 import { assertCanManage } from "@/lib/auth/session";
 
 async function getCurrentSessionUser(): Promise<{ id?: string; nombre: string }> {
@@ -157,18 +157,18 @@ function getIsoWeekInfo(dateInput: Date | string): {
  */
 export async function getCarteraCobranzaAction(): Promise<CarteraCobranzaData> {
   let allFacturas: FacturaVenta[] = [];
+  const pagosMap = new Map<string, PagoFactura[]>();
   const gestionesMap = new Map<string, GestionCobranza[]>();
   const allGestionesList: GestionCobranza[] = [];
 
   if (isServerSupabaseConfigured()) {
     const supabase = await createServerSupabaseClient();
 
-    // Ejecutar las 3 consultas a Supabase en paralelo para minimizar latencia
+    // Ejecutar las 3 consultas a Supabase en paralelo (incluyendo NC tipo_doc=61 para neteo en memoria)
     const [facturasRes, pagosRes, gestionesRes] = await Promise.all([
       supabase
         .from("facturas_ventas")
         .select("*, empresa_factoring_cliente(*)")
-        .neq("tipo_doc", 61)
         .neq("tipo_doc", 46)
         .order("fecha_docto", { ascending: false })
         .order("folio", { ascending: false }),
@@ -183,13 +183,12 @@ export async function getCarteraCobranzaAction(): Promise<CarteraCobranzaData> {
     if (facturasErr) {
       console.warn("Error consultando facturas en Supabase:", facturasErr.message);
       const localDb = readLocalDb();
-      allFacturas = localDb.facturas_ventas.filter((f) => Number(f.tipo_doc) !== 61 && Number(f.tipo_doc) !== 46);
+      allFacturas = localDb.facturas_ventas.filter((f) => Number(f.tipo_doc) !== 46);
     } else {
       allFacturas = (facturasData as FacturaVenta[]) || [];
     }
 
     const { data: supaPagos } = pagosRes;
-    const pagosMap = new Map<string, PagoFactura[]>();
     if (supaPagos) {
       for (const p of supaPagos as Array<Record<string, unknown>>) {
         const fid = String(p.factura_id || "");
@@ -242,13 +241,21 @@ export async function getCarteraCobranzaAction(): Promise<CarteraCobranzaData> {
     );
 
     allFacturas = localDb.facturas_ventas
-      .filter((f) => Number(f.tipo_doc) !== 61 && Number(f.tipo_doc) !== 46)
+      .filter((f) => Number(f.tipo_doc) !== 46)
       .map((f) => ({
         ...f,
         empresa_factoring_cliente: f.factoring_cliente_id
           ? clientesMap.get(f.factoring_cliente_id) || null
           : null,
       }));
+
+    for (const p of localDb.pagos_facturas || []) {
+      if (p.factura_id && Number(p.monto_pago) > 0) {
+        const list = pagosMap.get(p.factura_id) || [];
+        list.push(p);
+        pagosMap.set(p.factura_id, list);
+      }
+    }
 
     for (const g of localDb.gestiones_cobranza || []) {
       allGestionesList.push(g);
@@ -258,20 +265,50 @@ export async function getCarteraCobranzaAction(): Promise<CarteraCobranzaData> {
     }
   }
 
-  // Filtrado estricto de la cartera: Solo facturas con deuda pendiente > 0
-  // Excluye facturas pagadas a $0 y facturas neteadas con NC a $0
+  // Construir mapa de Notas de Crédito (DTE 61) agrupado por rutNormalizado|folioReferencia
+  const ncByTargetKey = new Map<string, number>();
+  for (const doc of allFacturas) {
+    if (Number(doc.tipo_doc) === 61 && doc.folio_docto_ref) {
+      const rutNorm = normalizeRut(doc.rut_cliente);
+      const refFolio = Number(doc.folio_docto_ref);
+      const key = `${rutNorm}|${refFolio}`;
+      ncByTargetKey.set(
+        key,
+        (ncByTargetKey.get(key) || 0) + Math.abs(Number(doc.monto_total || 0))
+      );
+    }
+  }
+
+  // Filtrado estricto de la cartera: Solo facturas con deuda pendiente real > 0
+  // Excluye DTE 61, facturas pagadas a $0 y facturas neteadas con NC a $0
   const pendingFacturas: FacturaVenta[] = [];
   const facturasById = new Map<string, FacturaVenta>();
 
   for (const f of allFacturas) {
-    const deuda =
-      f.deuda_cliente !== null && f.deuda_cliente !== undefined
-        ? Math.max(0, Number(f.deuda_cliente))
-        : Math.max(0, Number(f.monto_neto_saldo ?? f.monto_total ?? 0));
+    if (Number(f.tipo_doc) === 61 || Number(f.tipo_doc) === 46) continue;
 
-    // Solo incorporar si tiene saldo adeudado
+    const fIdStr = String(f.id);
+    const rutNorm = normalizeRut(f.rut_cliente);
+    const totalNcFactura = ncByTargetKey.get(`${rutNorm}|${Number(f.folio)}`) || 0;
+    const totalPagadoFactura = (pagosMap.get(fIdStr) || []).reduce(
+      (acc, p) => acc + Number(p.monto_pago || 0),
+      0
+    );
+    const saldoCalculado = Math.max(
+      0,
+      Number(f.monto_total || 0) - totalNcFactura - totalPagadoFactura
+    );
+    const sp = f.saldo_pendiente;
+    const deuda =
+      sp !== null && sp !== undefined
+        ? Math.min(Math.max(0, Number(sp)), saldoCalculado)
+        : Math.min(
+            Math.max(0, Number(f.deuda_cliente ?? f.monto_neto_saldo ?? f.monto_total ?? 0)),
+            saldoCalculado
+          );
+
+    // Solo incorporar si tiene saldo adeudado real > 0
     if (deuda > 0) {
-      const fIdStr = String(f.id);
       const gestiones = gestionesMap.get(fIdStr) || [];
       // Ordenar gestiones de la más reciente a la más antigua
       gestiones.sort(
@@ -281,6 +318,8 @@ export async function getCarteraCobranzaAction(): Promise<CarteraCobranzaData> {
         ...f,
         id: fIdStr,
         deuda_cliente: deuda,
+        saldo_pendiente: deuda,
+        monto_neto_saldo: deuda,
         gestiones_cobranza: gestiones,
       };
       pendingFacturas.push(facturaEnriquecida);

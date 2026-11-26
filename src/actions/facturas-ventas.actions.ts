@@ -170,20 +170,22 @@ export async function registrarPagoFacturaAction(params: {
       }
     }
 
-    // 3. Actualizar deuda_cliente y monto_neto_saldo en facturas_ventas
+    // 3. Actualizar deuda_cliente, saldo_pendiente y monto_neto_saldo en facturas_ventas
     const { error: updateWithDeudaErr } = await supabase
       .from("facturas_ventas")
       .update({
         deuda_cliente: nuevaDeuda,
+        saldo_pendiente: nuevaDeuda,
         monto_neto_saldo: nuevaDeuda,
       })
       .eq("id", params.facturaId);
 
     if (updateWithDeudaErr) {
-      // Fallback si la columna deuda_cliente aún no ha sido agregada en Supabase SQL Editor
+      // Fallback si la columna deuda_cliente aún no existe en Supabase
       const { error: fallbackErr } = await supabase
         .from("facturas_ventas")
         .update({
+          saldo_pendiente: nuevaDeuda,
           monto_neto_saldo: nuevaDeuda,
         })
         .eq("id", params.facturaId);
@@ -196,7 +198,9 @@ export async function registrarPagoFacturaAction(params: {
     }
 
     revalidatePath("/finanzas/facturas-ventas");
-    revalidatePath("/finanzas/facturas-ventas/factoring-clientes");
+    revalidatePath("/ventas-tensacon/facturas-ventas");
+    revalidatePath("/ventas-tensacon/gestion-cobranza");
+    revalidatePath("/ventas-tensacon/reportes");
     return {
       success: true,
       nuevaDeuda,
@@ -464,6 +468,7 @@ export async function injectSiiCsvBatchAction(csvText: string): Promise<{
       es_deuda_directa: null,
       entidad_factoring: null,
       monto_neto_saldo: row.monto_neto_saldo,
+      saldo_pendiente: row.tipo_doc === 61 ? 0 : row.monto_neto_saldo,
     }));
 
     const { error } = await supabase.from("facturas_ventas").upsert(payload, {
@@ -482,7 +487,10 @@ export async function injectSiiCsvBatchAction(csvText: string): Promise<{
       ) {
         await supabase
           .from("facturas_ventas")
-          .update({ monto_neto_saldo: neteo.nuevo_saldo_neto })
+          .update({
+            monto_neto_saldo: neteo.nuevo_saldo_neto,
+            saldo_pendiente: neteo.nuevo_saldo_neto,
+          })
           .eq("rut_cliente", neteo.rut_cliente)
           .eq("folio", neteo.factura_origen_folio);
       }
