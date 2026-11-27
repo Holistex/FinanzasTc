@@ -1507,6 +1507,8 @@ export interface ChequeCompraInputItem {
   bancoEmisor: string;
   fechaVencimiento: string;
   montoCheque: number;
+  montoCapital?: number;
+  montoInteres?: number;
   observacion?: string;
 }
 
@@ -1604,17 +1606,31 @@ export async function registrarChequesCompraAction(
       return { success: false, error: "La factura seleccionada no fue encontrada." };
     }
 
-    const sumaCheques = input.cheques.reduce((sum, c) => sum + Number(c.montoCheque || 0), 0);
+    const sumaCapital = input.cheques.reduce(
+      (sum, c) => sum + Math.round(Number(c.montoCapital ?? c.montoCheque ?? 0)),
+      0
+    );
+    const sumaCheques = input.cheques.reduce(
+      (sum, c) =>
+        sum +
+        Math.round(
+          Number(
+            c.montoCheque ||
+              Number(c.montoCapital ?? 0) + Number(c.montoInteres ?? 0)
+          )
+        ),
+      0
+    );
     const saldoActual = Number(
       factura.monto_saldo !== undefined && factura.monto_saldo !== null
         ? factura.monto_saldo
         : factura.monto_total
     );
 
-    if (sumaCheques > saldoActual) {
+    if (sumaCapital > saldoActual) {
       return {
         success: false,
-        error: `La suma de los cheques ($${sumaCheques.toLocaleString("es-CL")}) excede el saldo pendiente de la factura ($${saldoActual.toLocaleString("es-CL")}).`,
+        error: `El capital aplicado ($${sumaCapital.toLocaleString("es-CL")}) excede el saldo pendiente de la factura ($${saldoActual.toLocaleString("es-CL")}).`,
       };
     }
 
@@ -1622,18 +1638,25 @@ export async function registrarChequesCompraAction(
     // NO se reduce a cero ni se inserta en pagos hasta que el cheque sea efectivamente cobrado/pagado.
     const saldoActivo = saldoActual > 0 ? saldoActual : Number(factura.monto_total || 0);
 
-    // Crear entidades ChequeCompra
-    const nuevosCheques: ChequeCompra[] = input.cheques.map((c, idx) => ({
-      id: `chk-compra-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
-      factura_id: factura!.id,
-      numero_cheque: c.numeroCheque.trim(),
-      banco_emisor: c.bancoEmisor.trim(),
-      fecha_vencimiento: c.fechaVencimiento,
-      monto_cheque: Number(c.montoCheque),
-      estado: "EMITIDO",
-      observacion: c.observacion?.trim() || null,
-      created_at: new Date().toISOString(),
-    }));
+    // Crear entidades ChequeCompra (soporta capital + intereses y reutilización de folio)
+    const nuevosCheques: ChequeCompra[] = input.cheques.map((c, idx) => {
+      const capital = Math.round(Number(c.montoCapital ?? c.montoCheque ?? 0));
+      const interes = Math.max(0, Math.round(Number(c.montoInteres ?? 0)));
+      const totalChk = Math.round(Number(c.montoCheque || capital + interes));
+      return {
+        id: `chk-compra-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+        factura_id: factura!.id,
+        numero_cheque: c.numeroCheque.trim(),
+        banco_emisor: c.bancoEmisor.trim(),
+        fecha_vencimiento: c.fechaVencimiento,
+        monto_cheque: totalChk,
+        monto_capital: capital,
+        monto_interes: interes,
+        estado: "EMITIDO",
+        observacion: c.observacion?.trim() || null,
+        created_at: new Date().toISOString(),
+      };
+    });
 
     // Actualizar localDb
     let localIdx = db.facturas_compras.findIndex((f) => f.id === factura!.id);
@@ -1668,7 +1691,7 @@ export async function registrarChequesCompraAction(
     if (isServerSupabaseConfigured()) {
       const supabase = await createServerSupabaseClient();
       try {
-        await supabase.from("cheques_compras").insert(
+        const { error: errChk } = await supabase.from("cheques_compras").insert(
           nuevosCheques.map((c) => ({
             id: c.id,
             factura_id: c.factura_id,
@@ -1676,11 +1699,15 @@ export async function registrarChequesCompraAction(
             banco_emisor: c.banco_emisor,
             fecha_vencimiento: c.fecha_vencimiento,
             monto_cheque: c.monto_cheque,
+            monto_capital: c.monto_capital ?? c.monto_cheque,
+            monto_interes: c.monto_interes ?? 0,
             estado: c.estado,
-            observacion: c.observacion,
             created_at: c.created_at,
           }))
         );
+        if (errChk) {
+          console.warn("Error al insertar en cheques_compras:", errChk.message);
+        }
       } catch (errChk) {
         console.warn("Advertencia al registrar en cheques_compras:", errChk);
       }
@@ -1737,6 +1764,188 @@ export async function registrarChequesCompraAction(
 
 /** Alias para compatibilidad con llamadas de emisión de cheques */
 export const emitirChequeCompraAction = registrarChequesCompraAction;
+
+/**
+ * Reversa un cheque emitido (exclusivo perfil ADMINISTRADOR):
+ * Elimina el cheque de cheques_compras y restaura la factura a Facturas Pendientes / Cartera.
+ */
+export async function reversarChequeCompraAction(params: {
+  facturaId: string;
+  chequeId?: string | null;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    await assertIsAdmin();
+  } catch {
+    return {
+      success: false,
+      error: "Acceso denegado: solo el perfil ADMINISTRADOR puede reversar cheques emitidos.",
+    };
+  }
+
+  try {
+    if (!params.facturaId) {
+      return { success: false, error: "ID de factura no proporcionado." };
+    }
+
+    const nowIso = new Date().toISOString();
+    const db = readLocalDb();
+    if (!db.cheques_compras) db.cheques_compras = [];
+    if (!db.facturas_compras) db.facturas_compras = [];
+
+    if (params.chequeId) {
+      db.cheques_compras = db.cheques_compras.filter(
+        (c) => c.id !== params.chequeId
+      );
+    } else {
+      db.cheques_compras = db.cheques_compras.filter(
+        (c) => c.factura_id !== params.facturaId
+      );
+    }
+
+    if (isServerSupabaseConfigured()) {
+      const supabase = await createServerSupabaseClient();
+
+      if (params.chequeId) {
+        const { error: delErr } = await supabase
+          .from("cheques_compras")
+          .delete()
+          .eq("id", params.chequeId);
+        if (delErr) {
+          return { success: false, error: `Error al eliminar cheque: ${delErr.message}` };
+        }
+      } else {
+        const { error: delErr } = await supabase
+          .from("cheques_compras")
+          .delete()
+          .eq("factura_id", params.facturaId);
+        if (delErr) {
+          return { success: false, error: `Error al eliminar cheques: ${delErr.message}` };
+        }
+      }
+
+      const [{ data: supaFac }, { data: remCheques }, { data: remNeteos }] =
+        await Promise.all([
+          supabase
+            .from("facturas_compras")
+            .select("*")
+            .eq("id", params.facturaId)
+            .maybeSingle(),
+          supabase
+            .from("cheques_compras")
+            .select("*")
+            .eq("factura_id", params.facturaId),
+          supabase
+            .from("neteos_compras")
+            .select("monto_neteado")
+            .eq("factura_id", params.facturaId),
+        ]);
+
+      if (supaFac) {
+        const facRec = supaFac as Record<string, unknown>;
+        const totalNeteado = (remNeteos || []).reduce(
+          (acc: number, n: { monto_neteado?: number }) =>
+            acc + Number(n.monto_neteado || 0),
+          0
+        );
+        const montoTotalSinCheques = Math.max(
+          0,
+          Number(facRec.monto_total || 0) - totalNeteado
+        );
+        const remaining = (remCheques || []) as ChequeCompra[];
+
+        const updatePayload: Record<string, unknown> =
+          remaining.length > 0
+            ? {
+                estado: "CHEQUE",
+                modalidad: "CHEQUE",
+                modalidad_pago: "CHEQUE",
+                numero_cheque: remaining.map((c) => c.numero_cheque).join(", "),
+                banco_emisor: remaining[0].banco_emisor,
+                fecha_vencimiento_cheque: remaining[0].fecha_vencimiento,
+                fecha_vencimiento: remaining[0].fecha_vencimiento,
+                monto_saldo: montoTotalSinCheques,
+                saldo_pendiente: montoTotalSinCheques,
+                deuda_proveedor: montoTotalSinCheques,
+                updated_at: nowIso,
+              }
+            : {
+                estado: "DEUDA_PROVEEDOR",
+                modalidad: "DEUDA_PROVEEDOR",
+                modalidad_pago: "DEUDA_PROVEEDOR",
+                numero_cheque: null,
+                banco_emisor: null,
+                fecha_vencimiento_cheque: null,
+                monto_saldo: montoTotalSinCheques,
+                saldo_pendiente: montoTotalSinCheques,
+                deuda_proveedor: montoTotalSinCheques,
+                updated_at: nowIso,
+              };
+
+        const { error: updErr } = await supabase
+          .from("facturas_compras")
+          .update(updatePayload)
+          .eq("id", params.facturaId);
+
+        if (updErr) {
+          delete updatePayload.modalidad;
+          delete updatePayload.saldo_pendiente;
+          delete updatePayload.deuda_proveedor;
+          await supabase
+            .from("facturas_compras")
+            .update(updatePayload)
+            .eq("id", params.facturaId);
+        }
+      }
+    }
+
+    // Sincronizar fallback local
+    const fIdx = db.facturas_compras.findIndex((f) => f.id === params.facturaId);
+    if (fIdx !== -1) {
+      const remLocal = db.cheques_compras.filter(
+        (c) => c.factura_id === params.facturaId
+      );
+      const totalNeteadoLocal = (db.neteos_compras || [])
+        .filter((n) => n.factura_id === params.facturaId)
+        .reduce((s, n) => s + Number(n.monto_neteado || 0), 0);
+      const montoTotalSinCheques = Math.max(
+        0,
+        Number(db.facturas_compras[fIdx].monto_total || 0) - totalNeteadoLocal
+      );
+      if (remLocal.length > 0) {
+        db.facturas_compras[fIdx].estado = "CHEQUE";
+        db.facturas_compras[fIdx].numero_cheque = remLocal
+          .map((c) => c.numero_cheque)
+          .join(", ");
+        db.facturas_compras[fIdx].banco_emisor = remLocal[0].banco_emisor;
+        db.facturas_compras[fIdx].fecha_vencimiento_cheque =
+          remLocal[0].fecha_vencimiento;
+        db.facturas_compras[fIdx].fecha_vencimiento =
+          remLocal[0].fecha_vencimiento;
+      } else {
+        db.facturas_compras[fIdx].estado = "DEUDA_PROVEEDOR";
+        db.facturas_compras[fIdx].modalidad = "DEUDA_PROVEEDOR";
+        db.facturas_compras[fIdx].modalidad_pago = "DEUDA_PROVEEDOR";
+        db.facturas_compras[fIdx].numero_cheque = null;
+        db.facturas_compras[fIdx].banco_emisor = null;
+        db.facturas_compras[fIdx].fecha_vencimiento_cheque = null;
+      }
+      db.facturas_compras[fIdx].monto_saldo = montoTotalSinCheques;
+      db.facturas_compras[fIdx].updated_at = nowIso;
+    }
+
+    writeLocalDb(db);
+    revalidatePath("/compras-tensacon/facturas-compras");
+    revalidatePath("/compras-tensacon/compromisos");
+    revalidatePath("/compras-tensacon/deuda-proveedores");
+    revalidatePath("/compras-tensacon/historico-pagos");
+    return { success: true };
+  } catch (err: unknown) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Error al reversar cheque.",
+    };
+  }
+}
 
 /**
  * Elimina un cheque emitido y restaura el saldo correspondiente en la factura

@@ -62,8 +62,24 @@ interface ChequeCuotaRow {
   numeroCheque: string;
   bancoEmisor: string;
   fechaVencimiento: string;
+  montoCapital: number;
+  montoInteres: number;
   montoCheque: number;
   observacion?: string;
+}
+
+function formatClpInput(val: number | string): string {
+  const num =
+    typeof val === "number"
+      ? Math.round(val)
+      : Number(String(val || "").replace(/\D/g, ""));
+  if (!num) return "";
+  return num.toLocaleString("es-CL");
+}
+
+function parseClpInput(raw: string): number {
+  const clean = String(raw || "").replace(/\D/g, "");
+  return clean ? Number(clean) : 0;
 }
 
 export function CambiarEstadoCompraModal({
@@ -102,6 +118,7 @@ export function CambiarEstadoCompraModal({
   const [fechaVencimientoCheque, setFechaVencimientoCheque] = useState<string>("");
   const [bancoEmisor, setBancoEmisor] = useState<string>("");
   const [montoChequeUnico, setMontoChequeUnico] = useState<number>(0);
+  const [montoInteresUnico, setMontoInteresUnico] = useState<number>(0);
 
   // Modo B (Múltiples Cuotas)
   const [cuotasCheques, setCuotasCheques] = useState<ChequeCuotaRow[]>([]);
@@ -208,6 +225,7 @@ export function CambiarEstadoCompraModal({
       setFechaVencimientoCheque(factura.fecha_vencimiento_cheque || factura.fecha_vencimiento || "");
       setBancoEmisor(factura.banco_emisor || "Banco de Chile");
       setMontoChequeUnico(currentSaldo);
+      setMontoInteresUnico(0);
 
       // Modo B initial rows
       const half = Math.floor(currentSaldo / 2);
@@ -217,6 +235,8 @@ export function CambiarEstadoCompraModal({
           numeroCheque: "",
           bancoEmisor: factura.banco_emisor || "Banco de Chile",
           fechaVencimiento: factura.fecha_vencimiento || new Date().toISOString().split("T")[0],
+          montoCapital: half > 0 ? half : currentSaldo,
+          montoInteres: 0,
           montoCheque: half > 0 ? half : currentSaldo,
         },
         {
@@ -224,6 +244,8 @@ export function CambiarEstadoCompraModal({
           numeroCheque: "",
           bancoEmisor: factura.banco_emisor || "Banco de Chile",
           fechaVencimiento: "",
+          montoCapital: currentSaldo - (half > 0 ? half : currentSaldo),
+          montoInteres: 0,
           montoCheque: currentSaldo - (half > 0 ? half : currentSaldo),
         },
       ]);
@@ -247,19 +269,52 @@ export function CambiarEstadoCompraModal({
   const montoANetear = Math.min(saldoActualFactura, saldoDisponibleNc);
   const nuevoSaldoPendienteNeteo = Math.max(0, saldoActualFactura - montoANetear);
 
-  // Cálculos de cheques
-  const totalChequesModoB = cuotasCheques.reduce(
-    (sum, c) => sum + (Number(c.montoCheque) || 0),
+  // Cálculos de cheques (Capital aplicado vs Intereses)
+  const totalCapitalModoB = cuotasCheques.reduce(
+    (sum, c) => sum + (Number(c.montoCapital) || 0),
     0
   );
-  const totalChequesIngresados =
-    chequeMode === "UNICO" ? Number(montoChequeUnico) || 0 : totalChequesModoB;
-  const diferenciaSaldoCheques = Math.max(0, saldoActualFactura - totalChequesIngresados);
-  const excesoSaldoCheques = Math.max(0, totalChequesIngresados - saldoActualFactura);
+  const totalInteresModoB = cuotasCheques.reduce(
+    (sum, c) => sum + (Number(c.montoInteres) || 0),
+    0
+  );
+  const totalChequesModoB = cuotasCheques.reduce(
+    (sum, c) => sum + ((Number(c.montoCapital) || 0) + (Number(c.montoInteres) || 0)),
+    0
+  );
+  const totalCapitalIngresado =
+    chequeMode === "UNICO" ? Number(montoChequeUnico) || 0 : totalCapitalModoB;
+  const totalTotalChequeUnico =
+    (Number(montoChequeUnico) || 0) + (Number(montoInteresUnico) || 0);
+  const diferenciaSaldoCheques = Math.max(0, saldoActualFactura - totalCapitalIngresado);
+  const excesoSaldoCheques = Math.max(0, totalCapitalIngresado - saldoActualFactura);
+
+  // Detectar si un folio de cheque ya existe en otras facturas (aviso informativo no bloqueante)
+  const getFolioReuseInfo = (numChequeRaw: string, bancoRaw: string) => {
+    const num = numChequeRaw.trim().toLowerCase();
+    if (!num) return null;
+    const banco = bancoRaw.trim().toLowerCase();
+    let sumaPrevia = 0;
+    const facturaIds = new Set<string>();
+    for (const f of todasLasFacturas) {
+      if (f.id === factura.id) continue;
+      for (const ch of f.cheques || []) {
+        const chNum = String(ch.numero_cheque || "").trim().toLowerCase();
+        const chBanco = String(ch.banco_emisor || "").trim().toLowerCase();
+        if (chNum === num && (!banco || !chBanco || chBanco === banco)) {
+          sumaPrevia += Number(ch.monto_cheque || 0);
+          facturaIds.add(f.id);
+        }
+      }
+    }
+    if (facturaIds.size === 0) return null;
+    return { sumaPrevia, cantidadFacturas: facturaIds.size };
+  };
+  const folioUnicoReuseInfo = getFolioReuseInfo(numeroCheque, bancoEmisor);
 
   // Manejo de cuotas dinámicas
   const handleAddCuota = () => {
-    const defaultMonto = Math.max(0, saldoActualFactura - totalChequesModoB);
+    const defaultMonto = Math.max(0, saldoActualFactura - totalCapitalModoB);
     const lastRow = cuotasCheques[cuotasCheques.length - 1];
     let nextDate = "";
     if (lastRow?.fechaVencimiento) {
@@ -279,6 +334,8 @@ export function CambiarEstadoCompraModal({
         numeroCheque: "",
         bancoEmisor: lastRow?.bancoEmisor || "Banco de Chile",
         fechaVencimiento: nextDate,
+        montoCapital: defaultMonto,
+        montoInteres: 0,
         montoCheque: defaultMonto,
       },
     ]);
@@ -400,14 +457,14 @@ export function CambiarEstadoCompraModal({
             setErrorMessage(`La cuota #${i + 1} (${c.numeroCheque}) no tiene fecha de vencimiento.`);
             return;
           }
-          if (!c.montoCheque || c.montoCheque <= 0) {
-            setErrorMessage(`La cuota #${i + 1} (${c.numeroCheque}) debe tener un monto mayor a $0.`);
+          if (!c.montoCapital || c.montoCapital <= 0) {
+            setErrorMessage(`La cuota #${i + 1} (${c.numeroCheque}) debe tener un capital mayor a $0.`);
             return;
           }
         }
-        if (totalChequesModoB > saldoActualFactura) {
+        if (totalCapitalModoB > saldoActualFactura) {
           setErrorMessage(
-            `La suma de los cheques (${formatCLP(totalChequesModoB)}) supera el saldo pendiente de la factura (${formatCLP(saldoActualFactura)}).`
+            `La suma del capital aplicado (${formatCLP(totalCapitalModoB)}) supera el saldo pendiente de la factura (${formatCLP(saldoActualFactura)}).`
           );
           return;
         }
@@ -462,16 +519,26 @@ export function CambiarEstadoCompraModal({
                     numeroCheque: numeroCheque.trim(),
                     bancoEmisor: bancoEmisor.trim(),
                     fechaVencimiento: fechaVencimientoCheque,
-                    montoCheque: Number(montoChequeUnico),
+                    montoCapital: Number(montoChequeUnico) || 0,
+                    montoInteres: Number(montoInteresUnico) || 0,
+                    montoCheque:
+                      (Number(montoChequeUnico) || 0) +
+                      (Number(montoInteresUnico) || 0),
                   },
                 ]
-              : cuotasCheques.map((c) => ({
-                  numeroCheque: c.numeroCheque.trim(),
-                  bancoEmisor: c.bancoEmisor.trim(),
-                  fechaVencimiento: c.fechaVencimiento,
-                  montoCheque: Number(c.montoCheque),
-                  observacion: c.observacion,
-                }));
+              : cuotasCheques.map((c) => {
+                  const cap = Number(c.montoCapital) || 0;
+                  const intr = Number(c.montoInteres) || 0;
+                  return {
+                    numeroCheque: c.numeroCheque.trim(),
+                    bancoEmisor: c.bancoEmisor.trim(),
+                    fechaVencimiento: c.fechaVencimiento,
+                    montoCapital: cap,
+                    montoInteres: intr,
+                    montoCheque: cap + intr,
+                    observacion: c.observacion,
+                  };
+                });
 
           const resCheques = await registrarChequesCompraAction({
             facturaId: factura.id,
@@ -839,7 +906,7 @@ export function CambiarEstadoCompraModal({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
                         Fecha Vencimiento / Cobro <span className="text-red-500">*</span>
@@ -863,7 +930,7 @@ export function CambiarEstadoCompraModal({
                             onClick={() => setMontoChequeUnico(saldoActualFactura)}
                             className="text-[10px] text-amber-700 bg-amber-100 hover:bg-amber-200 px-1.5 py-0.5 rounded font-medium"
                           >
-                            100% Saldo
+                            100%
                           </button>
                           <button
                             type="button"
@@ -874,14 +941,70 @@ export function CambiarEstadoCompraModal({
                           </button>
                         </div>
                       </div>
-                      <input
-                        type="number"
-                        min={1}
-                        max={saldoActualFactura}
-                        value={montoChequeUnico || ""}
-                        onChange={(e) => setMontoChequeUnico(Number(e.target.value))}
-                        className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 font-mono shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                      />
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-slate-400">
+                          $
+                        </span>
+                        <input
+                          type="text"
+                          value={formatClpInput(montoChequeUnico)}
+                          onChange={(e) => setMontoChequeUnico(parseClpInput(e.target.value))}
+                          placeholder="0"
+                          className="w-full rounded-md border border-slate-300 bg-white pl-6 pr-3 py-2 text-xs text-slate-800 font-mono font-bold text-right shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Monto Interés ($ CLP)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-slate-400">
+                          $
+                        </span>
+                        <input
+                          type="text"
+                          value={montoInteresUnico > 0 ? formatClpInput(montoInteresUnico) : ""}
+                          onChange={(e) => setMontoInteresUnico(parseClpInput(e.target.value))}
+                          placeholder="0"
+                          className="w-full rounded-md border border-slate-300 bg-white pl-6 pr-3 py-2 text-xs text-slate-800 font-mono text-right shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Aviso informativo de reutilización de folio */}
+                  {folioUnicoReuseInfo && (
+                    <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50/80 px-3 py-2 text-[11px] text-blue-900">
+                      <AlertTriangle className="h-3.5 w-3.5 text-blue-600 shrink-0 mt-0.5" />
+                      <span>
+                        El Cheque <strong>#{numeroCheque.trim()}</strong> ya tiene asignaciones previas por{" "}
+                        <strong className="font-mono">{formatCLP(folioUnicoReuseInfo.sumaPrevia)}</strong> en{" "}
+                        <strong>{folioUnicoReuseInfo.cantidadFacturas}</strong> factura(s). Esta asignación se sumará al mismo folio de cheque.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Resumen en vivo Capital + Interés = Total Cheque */}
+                  <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs space-y-1">
+                    <div className="flex items-center justify-between text-slate-600">
+                      <span>Capital aplicado a factura:</span>
+                      <span className="font-mono font-semibold text-slate-900">
+                        {formatCLP(montoChequeUnico)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-600">
+                      <span>Interés incluido en cheque:</span>
+                      <span className="font-mono font-semibold text-amber-800">
+                        {formatCLP(montoInteresUnico)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between border-t border-amber-200 pt-1 font-bold text-amber-950">
+                      <span>Monto Total del Cheque (Compromiso):</span>
+                      <span className="font-mono text-sm">
+                        {formatCLP(totalTotalChequeUnico)}
+                      </span>
                     </div>
                   </div>
 
@@ -1017,19 +1140,81 @@ export function CambiarEstadoCompraModal({
 
                           <div>
                             <label className="block text-[11px] font-medium text-slate-600 mb-0.5">
-                              Monto ($ CLP) <span className="text-red-500">*</span>
+                              Capital ($ CLP) <span className="text-red-500">*</span>
                             </label>
-                            <input
-                              type="number"
-                              min={1}
-                              value={cuota.montoCheque || ""}
-                              onChange={(e) =>
-                                handleUpdateCuota(cuota.id, "montoCheque", Number(e.target.value))
-                              }
-                              className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs font-mono text-slate-800 focus:border-amber-500 focus:outline-none"
-                            />
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-400">
+                                $
+                              </span>
+                              <input
+                                type="text"
+                                value={formatClpInput(cuota.montoCapital)}
+                                onChange={(e) => {
+                                  const cap = parseClpInput(e.target.value);
+                                  setCuotasCheques((prev) =>
+                                    prev.map((row) =>
+                                      row.id === cuota.id
+                                        ? {
+                                            ...row,
+                                            montoCapital: cap,
+                                            montoCheque: cap + (Number(row.montoInteres) || 0),
+                                          }
+                                        : row
+                                    )
+                                  );
+                                }}
+                                placeholder="0"
+                                className="w-full rounded border border-slate-300 bg-white pl-5 pr-2 py-1.5 text-xs font-mono text-right text-slate-800 focus:border-amber-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-medium text-slate-600 mb-0.5">
+                              Interés ($ CLP)
+                            </label>
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-mono text-slate-400">
+                                $
+                              </span>
+                              <input
+                                type="text"
+                                value={
+                                  cuota.montoInteres > 0
+                                    ? formatClpInput(cuota.montoInteres)
+                                    : ""
+                                }
+                                onChange={(e) => {
+                                  const intr = parseClpInput(e.target.value);
+                                  setCuotasCheques((prev) =>
+                                    prev.map((row) =>
+                                      row.id === cuota.id
+                                        ? {
+                                            ...row,
+                                            montoInteres: intr,
+                                            montoCheque: (Number(row.montoCapital) || 0) + intr,
+                                          }
+                                        : row
+                                    )
+                                  );
+                                }}
+                                placeholder="0"
+                                className="w-full rounded border border-slate-300 bg-white pl-5 pr-2 py-1.5 text-xs font-mono text-right text-slate-800 focus:border-amber-500 focus:outline-none"
+                              />
+                            </div>
                           </div>
                         </div>
+                        {(() => {
+                          const reuse = getFolioReuseInfo(cuota.numeroCheque, cuota.bancoEmisor);
+                          if (!reuse) return null;
+                          return (
+                            <div className="text-[10px] text-blue-800 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+                              Folio <strong>#{cuota.numeroCheque.trim()}</strong> ya usado por{" "}
+                              <strong className="font-mono">{formatCLP(reuse.sumaPrevia)}</strong> en{" "}
+                              {reuse.cantidadFacturas} factura(s).
+                            </div>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>
@@ -1040,7 +1225,7 @@ export function CambiarEstadoCompraModal({
                       Balance Financiero de la Emisión
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="grid grid-cols-4 gap-2 text-center">
                       <div className="bg-white/80 rounded p-1.5 border border-amber-200">
                         <span className="text-[10px] text-slate-500 block">Saldo a Cubrir</span>
                         <span className="font-bold text-xs text-slate-800 font-mono">
@@ -1049,55 +1234,52 @@ export function CambiarEstadoCompraModal({
                       </div>
 
                       <div className="bg-white/80 rounded p-1.5 border border-amber-200">
-                        <span className="text-[10px] text-slate-500 block">Total en Cheques</span>
-                        <span className="font-bold text-xs text-amber-800 font-mono">
-                          {formatCLP(totalChequesModoB)}
+                        <span className="text-[10px] text-slate-500 block">Capital Aplicado</span>
+                        <span className="font-bold text-xs text-slate-900 font-mono">
+                          {formatCLP(totalCapitalModoB)}
                         </span>
                       </div>
 
                       <div className="bg-white/80 rounded p-1.5 border border-amber-200">
-                        <span className="text-[10px] text-slate-500 block">Diferencia / Resto</span>
-                        <span
-                          className={`font-bold text-xs font-mono ${
-                            diferenciaSaldoCheques === 0
-                              ? "text-emerald-700"
-                              : excesoSaldoCheques > 0
-                              ? "text-red-600"
-                              : "text-amber-700"
-                          }`}
-                        >
-                          {excesoSaldoCheques > 0
-                            ? `+${formatCLP(excesoSaldoCheques)}`
-                            : formatCLP(diferenciaSaldoCheques)}
+                        <span className="text-[10px] text-slate-500 block">Total Intereses</span>
+                        <span className="font-bold text-xs text-amber-700 font-mono">
+                          {formatCLP(totalInteresModoB)}
+                        </span>
+                      </div>
+
+                      <div className="bg-white/80 rounded p-1.5 border border-amber-200">
+                        <span className="text-[10px] text-slate-500 block">Total Cheques</span>
+                        <span className="font-bold text-xs text-amber-900 font-mono">
+                          {formatCLP(totalChequesModoB)}
                         </span>
                       </div>
                     </div>
 
                     {/* Estado del balance */}
                     <div className="pt-1">
-                      {totalChequesModoB === saldoActualFactura && (
+                      {totalCapitalModoB === saldoActualFactura && (
                         <div className="flex items-center gap-1.5 text-emerald-800 bg-emerald-50 p-2 rounded border border-emerald-200 text-[11px]">
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                           <span>
-                            <strong>Factura Saldada 100%:</strong> La suma de los {cuotasCheques.length} cheques cubre exactamente el saldo total. La factura pasará a estado <strong>CHEQUE</strong>.
+                            <strong>Factura Saldada 100%:</strong> El capital aplicado de los {cuotasCheques.length} cheques cubre exactamente el saldo total. La factura pasará a estado <strong>CHEQUE</strong>.
                           </span>
                         </div>
                       )}
 
-                      {totalChequesModoB > 0 && totalChequesModoB < saldoActualFactura && (
+                      {totalCapitalModoB > 0 && totalCapitalModoB < saldoActualFactura && (
                         <div className="flex items-center gap-1.5 text-amber-900 bg-amber-50 p-2 rounded border border-amber-200 text-[11px]">
                           <ArrowRight className="h-3.5 w-3.5 text-amber-600 shrink-0" />
                           <span>
-                            <strong>Abono Parcial por Cheques:</strong> Se registrarán {cuotasCheques.length} cuotas por <strong>{formatCLP(totalChequesModoB)}</strong>. El remanente de <strong>{formatCLP(diferenciaSaldoCheques)}</strong> quedará en <strong>Deuda Proveedor</strong>.
+                            <strong>Abono Parcial por Cheques:</strong> Se registrarán {cuotasCheques.length} cuotas por capital de <strong>{formatCLP(totalCapitalModoB)}</strong> (Total cheques: <strong>{formatCLP(totalChequesModoB)}</strong>). El remanente de <strong>{formatCLP(diferenciaSaldoCheques)}</strong> quedará en <strong>Deuda Proveedor</strong>.
                           </span>
                         </div>
                       )}
 
-                      {totalChequesModoB > saldoActualFactura && (
+                      {totalCapitalModoB > saldoActualFactura && (
                         <div className="flex items-center gap-1.5 text-red-900 bg-red-50 p-2 rounded border border-red-200 text-[11px]">
                           <AlertTriangle className="h-3.5 w-3.5 text-red-600 shrink-0" />
                           <span>
-                            <strong>Exceso de Monto:</strong> La suma de los cheques supera el saldo pendiente por <strong>{formatCLP(excesoSaldoCheques)}</strong>. Ajuste los montos antes de guardar.
+                            <strong>Exceso de Capital:</strong> El capital aplicado supera el saldo pendiente por <strong>{formatCLP(excesoSaldoCheques)}</strong>. Ajuste los montos antes de guardar.
                           </span>
                         </div>
                       )}

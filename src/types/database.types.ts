@@ -70,6 +70,8 @@ export interface ChequeCompra {
   banco_emisor: string;
   fecha_vencimiento: string; // YYYY-MM-DD
   monto_cheque: number;
+  monto_capital?: number | null;
+  monto_interes?: number | null;
   estado: EstadoChequeCompra;
   observacion?: string | null;
   created_at: string;

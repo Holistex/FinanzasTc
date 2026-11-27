@@ -53,6 +53,7 @@ import {
 import {
   ComprasKPIs,
   getFacturasComprasAction,
+  reversarChequeCompraAction,
 } from "@/actions/facturas-compras.actions";
 import {
   calculateDueDateInfo,
@@ -173,11 +174,16 @@ export function FacturasComprasTable({
     "facturas_compras",
     "compras_global",
   ]);
+  const isAdmin = Boolean(
+    userSession?.esAdmin ||
+      String(userSession?.perfil || "").trim().toUpperCase() === "ADMINISTRADOR"
+  );
   const [data, setData] = useState<FacturaCompra[]>(initialData);
   const [kpis, setKpis] = useState<ComprasKPIs>(initialKpis);
   const [neteos, setNeteos] = useState<NeteoCompra[]>(initialNeteos);
   const [facNcCount, setFacNcCount] = useState<number>(initialFacNcCount);
   const [isPending, startTransition] = useTransition();
+  const [reversingFacturaId, setReversingFacturaId] = useState<string | null>(null);
 
   // Pestañas Principales: 5 Pestañas segmentadas por estado de pago
   const [activeTab, setActiveTab] = useState<TabCompras>("CARTERA");
@@ -236,6 +242,56 @@ export function FacturasComprasTable({
       setNeteos(response.neteos || []);
       setFacNcCount(response.facNcCount || 0);
     });
+  };
+
+  // Consolidado por folio de cheque (soporte de reutilización de folio en múltiples facturas)
+  const folioChequesTotals = useMemo(() => {
+    const map = new Map<string, { totalMonto: number; facturasIds: Set<string> }>();
+    for (const f of data) {
+      if (f.cheques && f.cheques.length > 0) {
+        for (const ch of f.cheques) {
+          const key = String(ch.numero_cheque || "").trim().toUpperCase();
+          if (!key) continue;
+          const prev = map.get(key) || { totalMonto: 0, facturasIds: new Set<string>() };
+          prev.totalMonto += Number(ch.monto_cheque || 0);
+          prev.facturasIds.add(f.id);
+          map.set(key, prev);
+        }
+      } else if (f.estado === "CHEQUE" && f.numero_cheque) {
+        const key = String(f.numero_cheque).trim().toUpperCase();
+        const prev = map.get(key) || { totalMonto: 0, facturasIds: new Set<string>() };
+        prev.totalMonto += Number(f.total_cheques_emitidos || f.monto_total || 0);
+        prev.facturasIds.add(f.id);
+        map.set(key, prev);
+      }
+    }
+    return map;
+  }, [data]);
+
+  const handleReversarCheque = async (factura: FacturaCompra) => {
+    if (!isAdmin) return;
+    const foliosLabel =
+      factura.cheques && factura.cheques.length > 0
+        ? factura.cheques.map((c) => `#${c.numero_cheque}`).join(", ")
+        : factura.numero_cheque
+        ? `#${factura.numero_cheque}`
+        : "emitido";
+    const confirmed = window.confirm(
+      `¿Confirmas REVERSAR el cheque ${foliosLabel} de la factura Folio #${factura.folio} (${factura.razon_social})?\n\nEsta acción eliminará el cheque de Cheques emitidos y devolverá la factura a Facturas Pendientes / Cartera.`
+    );
+    if (!confirmed) return;
+
+    setReversingFacturaId(factura.id);
+    try {
+      const res = await reversarChequeCompraAction({ facturaId: factura.id });
+      if (!res.success) {
+        window.alert(res.error || "No se pudo reversar el cheque.");
+        return;
+      }
+      handleRefresh();
+    } finally {
+      setReversingFacturaId(null);
+    }
   };
 
   const getSaldoPendienteFactura = (f: FacturaCompra): number => {
@@ -1103,31 +1159,82 @@ export function FacturasComprasTable({
                               </div>
                             )}
 
-                            {factura.estado === "CHEQUE" && (
-                              <div className="inline-flex items-center gap-1">
-                                <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-                                  Cheque
-                                </span>
-                                {factura.cheques && factura.cheques.length > 1 ? (
-                                  <span
-                                    className="text-[10px] text-amber-700 font-medium"
-                                    title={factura.cheques
-                                      .map(
-                                        (c) =>
-                                          `#${c.numero_cheque}: ${formatCLP(c.monto_cheque)} (${c.banco_emisor} - ${c.fecha_vencimiento})`
-                                      )
-                                      .join("\n")}
-                                  >
-                                    ({factura.cheques.length} cuotas)
-                                  </span>
-                                ) : factura.numero_cheque ? (
-                                  <span className="text-[10px] text-amber-700 font-mono">
-                                    #{factura.numero_cheque}
-                                  </span>
-                                ) : null}
-                              </div>
-                            )}
+                            {factura.estado === "CHEQUE" && (() => {
+                              const chequesFactura = factura.cheques || [];
+                              const totalInteres = chequesFactura.reduce(
+                                (acc, c) => acc + Number(c.monto_interes || 0),
+                                0
+                              );
+                              const totalCapital = chequesFactura.reduce(
+                                (acc, c) => acc + Number(c.monto_capital ?? c.monto_cheque ?? 0),
+                                0
+                              );
+                              const foliosUnicos = Array.from(
+                                new Set(
+                                  [
+                                    ...chequesFactura.map((c) => String(c.numero_cheque || "").trim()),
+                                    String(factura.numero_cheque || "").trim(),
+                                  ].filter(Boolean)
+                                )
+                              );
+                              const foliosCompartidos = foliosUnicos
+                                .map((folioStr) => {
+                                  const info = folioChequesTotals.get(folioStr.toUpperCase());
+                                  return info && info.facturasIds.size > 1
+                                    ? { folio: folioStr, ...info }
+                                    : null;
+                                })
+                                .filter(Boolean) as Array<{
+                                folio: string;
+                                totalMonto: number;
+                                facturasIds: Set<string>;
+                              }>;
+
+                              return (
+                                <div className="inline-flex flex-col items-start gap-0.5">
+                                  <div className="inline-flex items-center gap-1">
+                                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                                      Cheque
+                                    </span>
+                                    {chequesFactura.length > 1 ? (
+                                      <span
+                                        className="text-[10px] text-amber-700 font-medium"
+                                        title={chequesFactura
+                                          .map(
+                                            (c) =>
+                                              `#${c.numero_cheque}: ${formatCLP(c.monto_cheque)} (${c.banco_emisor} - ${c.fecha_vencimiento})`
+                                          )
+                                          .join("\n")}
+                                      >
+                                        ({chequesFactura.length} cuotas)
+                                      </span>
+                                    ) : factura.numero_cheque ? (
+                                      <span className="text-[10px] text-amber-700 font-mono">
+                                        #{factura.numero_cheque}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {totalInteres > 0 && (
+                                    <span
+                                      className="text-[9px] text-slate-600 font-medium"
+                                      title="Desglose del cheque: Capital aplicado + Intereses por mora"
+                                    >
+                                      Cap: {formatCLP(totalCapital)} + Int: {formatCLP(totalInteres)}
+                                    </span>
+                                  )}
+                                  {foliosCompartidos.map((fc) => (
+                                    <span
+                                      key={fc.folio}
+                                      className="inline-flex items-center gap-1 rounded bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold text-sky-800 border border-sky-200"
+                                      title={`Folio #${fc.folio} compartido entre ${fc.facturasIds.size} facturas`}
+                                    >
+                                      Folio compartido ({fc.facturasIds.size}) · Total: {formatCLP(fc.totalMonto)}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
 
                             {/* Abono Parcial por Cheque (si la factura aún tiene saldo en Deuda Directa u otro estado) */}
                             {factura.estado !== "CHEQUE" && totalCheques > 0 && (
@@ -1187,6 +1294,19 @@ export function FacturasComprasTable({
                                 >
                                   <CalendarClock className="h-3 w-3 text-amber-700" />
                                   <span>Prorrogar</span>
+                                </button>
+                              )}
+                              {isAdmin && (activeTab === "CHEQUES" || factura.estado === "CHEQUE") && (
+                                <button
+                                  onClick={() => handleReversarCheque(factura)}
+                                  disabled={reversingFacturaId === factura.id || isPending}
+                                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors shadow-xs disabled:opacity-50"
+                                  title="Reversar cheque emitido y devolver factura a Cartera Pendiente (Solo Administrador)"
+                                >
+                                  <RotateCcw className="h-3 w-3 text-rose-600" />
+                                  <span>
+                                    {reversingFacturaId === factura.id ? "Reversando..." : "Reversar"}
+                                  </span>
                                 </button>
                               )}
                               <button

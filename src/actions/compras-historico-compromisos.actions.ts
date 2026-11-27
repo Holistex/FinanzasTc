@@ -929,6 +929,39 @@ export async function getCompromisosComprasAction(params?: {
               .range(from, to)
         );
 
+        const { data: supaCheques } = await fetchAllSupabaseRows<Record<string, unknown>>(
+          (from, to) =>
+            supabase
+              .from("cheques_compras")
+              .select("factura_id, numero_cheque, monto_cheque, fecha_vencimiento, estado")
+              .neq("estado", "PAGADO")
+              .neq("estado", "ANULADO")
+              .order("id", { ascending: true })
+              .range(from, to)
+        );
+
+        const chequesMap = new Map<
+          string,
+          { totalMonto: number; folios: string[]; minFecha: string }
+        >();
+        for (const ch of supaCheques || []) {
+          const fid = String(ch.factura_id || "");
+          if (!fid) continue;
+          const prev = chequesMap.get(fid) || {
+            totalMonto: 0,
+            folios: [],
+            minFecha: "",
+          };
+          prev.totalMonto += Number(ch.monto_cheque || 0);
+          const num = String(ch.numero_cheque || "").trim();
+          if (num && !prev.folios.includes(num)) prev.folios.push(num);
+          const fVenc = toDateOnlyString(String(ch.fecha_vencimiento || ""));
+          if (fVenc && (!prev.minFecha || fVenc < prev.minFecha)) {
+            prev.minFecha = fVenc;
+          }
+          chequesMap.set(fid, prev);
+        }
+
         if (supaFacs && supaFacs.length > 0) {
           for (const sf of supaFacs) {
             const fol = Number(sf.folio || 0);
@@ -952,16 +985,32 @@ export async function getCompromisosComprasAction(params?: {
                   ? "CONFIRMING"
                   : "FACTORING";
 
+              const chequeInfo = chequesMap.get(String(sf.id));
+              const montoFinal =
+                mod === "CHEQUE" && chequeInfo && chequeInfo.totalMonto > 0
+                  ? chequeInfo.totalMonto
+                  : Number(sf.monto_total || 0);
+              const refFinal =
+                mod === "CHEQUE" && chequeInfo && chequeInfo.folios.length > 0
+                  ? `Cheque #${chequeInfo.folios.join(", #")}`
+                  : sf.numero_cheque
+                  ? `Cheque #${sf.numero_cheque}`
+                  : `FAC #${fol}`;
+              const fechaFinal =
+                mod === "CHEQUE" && chequeInfo?.minFecha
+                  ? chequeInfo.minFecha
+                  : toDateOnlyString(
+                      String(sf.fecha_vencimiento_cheque || sf.fecha_vencimiento || "2026-10-30")
+                    );
+
               rawCompromisos.push({
                 id: `comp-supa-${sf.id}`,
                 modalidad: mod,
                 rut_proveedor: String(sf.rut_proveedor || ""),
                 razon_social: String(sf.razon_social || ""),
-                referencia_doc: sf.numero_cheque ? `Cheque #${sf.numero_cheque}` : `FAC #${fol}`,
-                fecha_vencimiento: toDateOnlyString(
-                  String(sf.fecha_vencimiento_cheque || sf.fecha_vencimiento || "2026-10-30")
-                ),
-                monto: Number(sf.monto_total || 0),
+                referencia_doc: refFinal,
+                fecha_vencimiento: fechaFinal,
+                monto: montoFinal,
                 created_at: String(sf.created_at || ""),
               });
             }
