@@ -26,8 +26,10 @@ import {
   Upload,
   ShieldAlert,
   BarChart3,
+  CalendarDays,
   X,
 } from "lucide-react";
+import { EmitidasMesPanel } from "./emitidas-mes-panel";
 import {
   EmpresaFactoringCliente,
   EstadoDeudaTab,
@@ -112,11 +114,14 @@ export function FacturasVentasTable({
   );
   const [isPending, startTransition] = useTransition();
 
-  // Pestaña activa: 1. PENDIENTES | 2. PAGADAS | 3. FAC_NC | 4. RESUMEN
+  // Pestaña activa: 1. PENDIENTES | 2. PAGADAS | 3. FAC_NC | 4. RESUMEN | 5. EMITIDAS_MES
   const [estadoDeudaTab, setEstadoDeudaTab] =
     useState<EstadoDeudaTab>("PENDIENTES");
-  const [activeViewTab, setActiveViewTab] = useState<EstadoDeudaTab | "RESUMEN">(
-    "PENDIENTES"
+  const [activeViewTab, setActiveViewTab] = useState<
+    EstadoDeudaTab | "RESUMEN" | "EMITIDAS_MES"
+  >("PENDIENTES");
+  const [emitidasMesCount, setEmitidasMesCount] = useState<number | undefined>(
+    undefined
   );
 
   // Estado y filtros para Pestaña 4: Resumen por Razón Social
@@ -289,9 +294,9 @@ export function FacturasVentasTable({
     });
   };
 
-  const handleSwitchTab = (tab: EstadoDeudaTab | "RESUMEN") => {
+  const handleSwitchTab = (tab: EstadoDeudaTab | "RESUMEN" | "EMITIDAS_MES") => {
     setActiveViewTab(tab);
-    if (tab === "RESUMEN") {
+    if (tab === "RESUMEN" || tab === "EMITIDAS_MES") {
       if (resumenFacturas === null) {
         loadResumenData();
       }
@@ -687,6 +692,12 @@ export function FacturasVentasTable({
             icon: BarChart3,
             count: resumenFacturas !== null ? resumenClientes.length : undefined,
           },
+          {
+            id: "EMITIDAS_MES",
+            label: "Emitidas del Mes",
+            icon: CalendarDays,
+            count: emitidasMesCount,
+          },
         ]}
         rightSlot={
           (isPending || isLoadingResumen) ? (
@@ -1077,6 +1088,13 @@ export function FacturasVentasTable({
             />
           </div>
         </div>
+      ) : activeViewTab === "EMITIDAS_MES" ? (
+        <EmitidasMesPanel
+          facturas={resumenFacturas}
+          isLoading={isLoadingResumen}
+          catalogoOn={catalogoOn}
+          onCountChange={setEmitidasMesCount}
+        />
       ) : (
         <>
       {/* Compact Single-Row Filter Bar */}

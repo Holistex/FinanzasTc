@@ -161,17 +161,37 @@ function renderTopTotalLabel(props: {
   const label = formatMillonesLabel(val);
   if (!label) return null;
 
+  const cx = x + width / 2;
+  const boxWidth = Math.max(46, label.length * 6.5 + 10);
+
   return (
-    <text
-      x={x + width / 2}
-      y={y - 7}
-      fill="#0F172A"
-      textAnchor="middle"
-      fontSize={10}
-      fontWeight={700}
-    >
-      {label}
-    </text>
+    <g>
+      <rect
+        x={cx - boxWidth / 2}
+        y={y - 19}
+        width={boxWidth}
+        height={16}
+        rx={4}
+        fill="#FFFFFF"
+        fillOpacity={0.88}
+      />
+      <text
+        x={cx}
+        y={y - 7}
+        fill="#0F172A"
+        textAnchor="middle"
+        fontSize={10}
+        fontWeight={700}
+        style={{
+          paintOrder: "stroke",
+          stroke: "#FFFFFF",
+          strokeWidth: 4,
+          strokeLinejoin: "round",
+        }}
+      >
+        {label}
+      </text>
+    </g>
   );
 }
 
@@ -1782,11 +1802,11 @@ export function ReportesVentasClient({
                 className={cn(
                   "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border transition-opacity cursor-pointer",
                   showPromedio
-                    ? "border-slate-200 bg-slate-50 text-[#0F172A] font-semibold"
+                    ? "border-slate-200 bg-slate-50 text-slate-500 font-semibold"
                     : "border-slate-100 bg-white text-slate-400 opacity-50"
                 )}
               >
-                <span className="w-3 border-t-2 border-dashed border-[#0F172A]" />
+                <span className="w-3 border-t-2 border-dashed border-slate-400" />
                 Prom. Emitido
               </button>
             </div>
@@ -1797,11 +1817,11 @@ export function ReportesVentasClient({
               No existen documentos registrados para los filtros seleccionados.
             </div>
           ) : (
-            <div className="w-full h-[320px]">
+            <div className="w-full h-[340px]">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
                   data={monthlyChartData}
-                  margin={{ top: 26, right: 16, left: 4, bottom: 4 }}
+                  margin={{ top: 28, right: 20, left: 10, bottom: 22 }}
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -1810,9 +1830,53 @@ export function ReportesVentasClient({
                   />
                   <XAxis
                     dataKey="label"
-                    tick={{ fontSize: 11, fill: "#64748B" }}
+                    height={38}
                     axisLine={{ stroke: "#E2E8F0" }}
                     tickLine={false}
+                    tick={(tickProps: {
+                      x?: number | string;
+                      y?: number | string;
+                      payload?: { value?: string };
+                    }) => {
+                      const x = Number(tickProps.x ?? 0);
+                      const y = Number(tickProps.y ?? 0);
+                      const monthLabel = String(tickProps.payload?.value ?? "");
+                      const item = monthlyChartData.find(
+                        (d) => d.label === monthLabel
+                      );
+                      const totalLabel = item
+                        ? formatMillonesLabel(item.emitido) || "$ 0"
+                        : "";
+                      return (
+                        <g transform={`translate(${x},${y})`}>
+                          <text
+                            x={0}
+                            y={0}
+                            dy={12}
+                            textAnchor="middle"
+                            fill="#334155"
+                            fontSize={11}
+                            fontWeight={700}
+                          >
+                            {monthLabel}
+                          </text>
+                          {totalLabel && (
+                            <text
+                              x={0}
+                              y={0}
+                              dy={26}
+                              textAnchor="middle"
+                              fill="#64748B"
+                              fontSize={10}
+                              fontWeight={700}
+                              fontFamily="monospace"
+                            >
+                              {totalLabel}
+                            </text>
+                          )}
+                        </g>
+                      );
+                    }}
                   />
                   <YAxis
                     tickFormatter={formatAxisMillions}
@@ -1825,6 +1889,16 @@ export function ReportesVentasClient({
                     content={<ComposedChartTooltip />}
                     cursor={{ fill: "#F1F5F9", opacity: 0.6 }}
                   />
+                  {showPromedio && kpis.promedioMensual > 0 && (
+                    <ReferenceLine
+                      y={kpis.promedioMensual}
+                      stroke="#94A3B8"
+                      strokeDasharray="4 4"
+                      strokeWidth={1.25}
+                      strokeOpacity={0.45}
+                      ifOverflow="extendDomain"
+                    />
+                  )}
                   {showRecaudado && (
                     <Bar
                       dataKey="recaudado"
@@ -1866,24 +1940,17 @@ export function ReportesVentasClient({
                     </Bar>
                   )}
                   {showPromedio && kpis.promedioMensual > 0 && (
-                    <>
-                      <ReferenceLine
-                        y={kpis.promedioMensual}
-                        stroke="#0F172A"
-                        strokeDasharray="5 5"
-                        strokeWidth={2}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="promedioMensual"
-                        name="Prom. Mensual Emitido"
-                        stroke="#0F172A"
-                        strokeWidth={2}
-                        strokeDasharray="5 5"
-                        dot={false}
-                        activeDot={false}
-                      />
-                    </>
+                    <Line
+                      type="monotone"
+                      dataKey="promedioMensual"
+                      name="Prom. Mensual Emitido"
+                      stroke="#94A3B8"
+                      strokeWidth={1.25}
+                      strokeDasharray="4 4"
+                      strokeOpacity={0.45}
+                      dot={false}
+                      activeDot={false}
+                    />
                   )}
                 </ComposedChart>
               </ResponsiveContainer>
