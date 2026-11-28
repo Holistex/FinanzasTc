@@ -489,6 +489,17 @@ export function ReportesVentasClient({
     monthlyData,
     clientRows,
   } = useMemo(() => {
+    const mapaNcPorFactura = new Map<string, number>();
+    for (const nc of facturas) {
+      if (Number(nc.tipo_doc) === 61 && nc.folio_docto_ref) {
+        const key = `${normalizeRut(nc.rut_cliente)}|${Number(nc.folio_docto_ref)}`;
+        mapaNcPorFactura.set(
+          key,
+          (mapaNcPorFactura.get(key) || 0) + Math.abs(Number(nc.monto_total || 0))
+        );
+      }
+    }
+
     const monthMap = new Map<
       string,
       { emitido: number; recaudado: number; deuda: number; docsCount: number }
@@ -514,43 +525,30 @@ export function ReportesVentasClient({
 
     for (const f of filteredFacturas) {
       const tipo = Number(f.tipo_doc);
-      const isNC = tipo === 61;
+      if (tipo === 61) continue;
+
       const mesKey = String(f.fecha_docto || "").slice(0, 7);
       const rutKey = normalizeRut(f.rut_cliente) || "SIN-RUT";
-      const montoTotal = Number(f.monto_total) || 0;
+      const folioNorm = Number(f.folio || 0);
+      const ncAplicada = mapaNcPorFactura.get(`${rutKey}|${folioNorm}`) || 0;
+      const emitidoNetoFactura = Math.max(
+        0,
+        (Number(f.monto_total) || 0) - ncAplicada
+      );
 
-      let emitidoDelta = 0;
-      let recaudadoDelta = 0;
-      let deudaDelta = 0;
+      // Si fue 100% anulada por Nota de Crédito, excluirla completamente
+      if (emitidoNetoFactura <= 0) continue;
 
-      if (isNC) {
-        emitidoDelta = -Math.abs(montoTotal);
-      } else {
-        totalDocsEmitidos += 1;
-        const deuda = resolveDeudaClientSide(f);
-        const sumPagos = (f.pagos_facturas || []).reduce(
-          (acc, p) => acc + (Number(p.monto_pago) || 0),
-          0
-        );
-        const hasNC =
-          Boolean(f.nc_referenciada_folio) ||
-          (deuda === 0 &&
-            Number(f.monto_neto_saldo ?? montoTotal) < montoTotal &&
-            sumPagos === 0);
+      const deudaBruta = resolveDeudaClientSide(f);
+      const deudaReal = Math.min(emitidoNetoFactura, Math.max(0, deudaBruta));
+      const recaudadoReal = Math.max(0, emitidoNetoFactura - deudaReal);
 
-        const recaudado = hasNC
-          ? Math.min(montoTotal, sumPagos)
-          : Math.max(0, montoTotal - deuda);
+      totalDocsEmitidos += 1;
+      if (deudaReal > 0) docsPendientes += 1;
 
-        emitidoDelta = montoTotal;
-        recaudadoDelta = recaudado;
-        deudaDelta = deuda;
-        if (deuda > 0) docsPendientes += 1;
-      }
-
-      totalEmitido += emitidoDelta;
-      totalRecaudado += recaudadoDelta;
-      totalDeuda += deudaDelta;
+      totalEmitido += emitidoNetoFactura;
+      totalRecaudado += recaudadoReal;
+      totalDeuda += deudaReal;
 
       if (/^\d{4}-\d{2}$/.test(mesKey)) {
         const prevM = monthMap.get(mesKey) || {
@@ -559,10 +557,10 @@ export function ReportesVentasClient({
           deuda: 0,
           docsCount: 0,
         };
-        prevM.emitido += emitidoDelta;
-        prevM.recaudado += recaudadoDelta;
-        prevM.deuda += deudaDelta;
-        if (!isNC) prevM.docsCount += 1;
+        prevM.recaudado += recaudadoReal;
+        prevM.deuda += deudaReal;
+        prevM.emitido = prevM.recaudado + prevM.deuda;
+        prevM.docsCount += 1;
         monthMap.set(mesKey, prevM);
       }
 
@@ -575,10 +573,10 @@ export function ReportesVentasClient({
         deuda: 0,
         docsCount: 0,
       };
-      prevC.emitido += emitidoDelta;
-      prevC.pagado += recaudadoDelta;
-      prevC.deuda += deudaDelta;
-      if (!isNC) prevC.docsCount += 1;
+      prevC.pagado += recaudadoReal;
+      prevC.deuda += deudaReal;
+      prevC.emitido = prevC.pagado + prevC.deuda;
+      prevC.docsCount += 1;
       clientMap.set(rutKey, prevC);
     }
 
@@ -1817,11 +1815,11 @@ export function ReportesVentasClient({
               No existen documentos registrados para los filtros seleccionados.
             </div>
           ) : (
-            <div className="w-full h-[340px]">
+            <div className="w-full h-[320px]">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart
                   data={monthlyChartData}
-                  margin={{ top: 28, right: 20, left: 10, bottom: 22 }}
+                  margin={{ top: 28, right: 20, left: 10, bottom: 8 }}
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -1830,53 +1828,9 @@ export function ReportesVentasClient({
                   />
                   <XAxis
                     dataKey="label"
-                    height={38}
+                    tick={{ fontSize: 11, fontWeight: 700, fill: "#475569" }}
                     axisLine={{ stroke: "#E2E8F0" }}
                     tickLine={false}
-                    tick={(tickProps: {
-                      x?: number | string;
-                      y?: number | string;
-                      payload?: { value?: string };
-                    }) => {
-                      const x = Number(tickProps.x ?? 0);
-                      const y = Number(tickProps.y ?? 0);
-                      const monthLabel = String(tickProps.payload?.value ?? "");
-                      const item = monthlyChartData.find(
-                        (d) => d.label === monthLabel
-                      );
-                      const totalLabel = item
-                        ? formatMillonesLabel(item.emitido) || "$ 0"
-                        : "";
-                      return (
-                        <g transform={`translate(${x},${y})`}>
-                          <text
-                            x={0}
-                            y={0}
-                            dy={12}
-                            textAnchor="middle"
-                            fill="#334155"
-                            fontSize={11}
-                            fontWeight={700}
-                          >
-                            {monthLabel}
-                          </text>
-                          {totalLabel && (
-                            <text
-                              x={0}
-                              y={0}
-                              dy={26}
-                              textAnchor="middle"
-                              fill="#64748B"
-                              fontSize={10}
-                              fontWeight={700}
-                              fontFamily="monospace"
-                            >
-                              {totalLabel}
-                            </text>
-                          )}
-                        </g>
-                      );
-                    }}
                   />
                   <YAxis
                     tickFormatter={formatAxisMillions}
@@ -1912,12 +1866,16 @@ export function ReportesVentasClient({
                         dataKey="recaudado"
                         content={renderInnerBarLabel}
                       />
-                      {!showDeuda && (
-                        <LabelList
-                          dataKey="emitido"
-                          content={renderTopTotalLabel}
-                        />
-                      )}
+                      <LabelList
+                        dataKey="emitido"
+                        content={(labelProps) => {
+                          const idx = Number(labelProps.index ?? -1);
+                          const point = monthlyChartData[idx];
+                          if (!point) return null;
+                          if (showDeuda && point.deuda > 0) return null;
+                          return renderTopTotalLabel(labelProps);
+                        }}
+                      />
                     </Bar>
                   )}
                   {showDeuda && (
@@ -1935,7 +1893,13 @@ export function ReportesVentasClient({
                       />
                       <LabelList
                         dataKey="emitido"
-                        content={renderTopTotalLabel}
+                        content={(labelProps) => {
+                          const idx = Number(labelProps.index ?? -1);
+                          const point = monthlyChartData[idx];
+                          if (!point) return null;
+                          if (showRecaudado && point.deuda <= 0) return null;
+                          return renderTopTotalLabel(labelProps);
+                        }}
                       />
                     </Bar>
                   )}
