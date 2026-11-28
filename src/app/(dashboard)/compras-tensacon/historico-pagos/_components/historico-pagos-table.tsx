@@ -25,7 +25,9 @@ import {
   AlertTriangle,
   Loader2,
   X,
+  BarChart3,
 } from "lucide-react";
+import { AnalisisModalidadPanel } from "./analisis-modalidad-panel";
 import { PagoCompraHistorico, ModalidadPagoCompra } from "@/types/database.types";
 import {
   HistoricoPagosKPIs,
@@ -64,6 +66,7 @@ export function HistoricoPagosTable({
   const [sortField, setSortField] = useState<"fecha_real_pago" | "monto_pagado" | "folio">("fecha_real_pago");
   const [sortAsc, setSortAsc] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [activeTab, setActiveTab] = useState<"DETALLE" | "ANALISIS">("DETALLE");
 
   const handleConfirmReverse = async () => {
     if (!pagoToReverse || !esAdministrador) return;
@@ -418,6 +421,43 @@ export function HistoricoPagosTable({
         </div>
       </div>
 
+      {/* BARRA DE PESTAÑAS CORPORATIVAS */}
+      <div className="flex items-center gap-2 border-b border-slate-200">
+        <button
+          type="button"
+          onClick={() => setActiveTab("DETALLE")}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-colors ${
+            activeTab === "DETALLE"
+              ? "border-[#E05A10] text-slate-900 bg-white rounded-t-lg"
+              : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-t-lg"
+          }`}
+        >
+          <FileText
+            className={`h-4 w-4 ${
+              activeTab === "DETALLE" ? "text-[#E05A10]" : "text-slate-400"
+            }`}
+          />
+          <span>Detalle de Pagos ({filteredData.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("ANALISIS")}
+          className={`inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-colors ${
+            activeTab === "ANALISIS"
+              ? "border-[#E05A10] text-slate-900 bg-white rounded-t-lg"
+              : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-t-lg"
+          }`}
+        >
+          <BarChart3
+            className={`h-4 w-4 ${
+              activeTab === "ANALISIS" ? "text-[#E05A10]" : "text-slate-400"
+            }`}
+          />
+          <span>Análisis por Modalidad</span>
+        </button>
+      </div>
+
       {/* BARRA DE HERRAMIENTAS Y FILTROS */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-4">
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
@@ -523,8 +563,9 @@ export function HistoricoPagosTable({
         </div>
       </div>
 
-      {/* TABLA PRINCIPAL */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      {activeTab === "DETALLE" ? (
+        /* TABLA PRINCIPAL */
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-[850px] lg:min-w-full text-left text-sm text-slate-600">
             <thead className="bg-slate-50 border-b border-slate-200 text-xs font-semibold uppercase tracking-wider text-slate-600">
@@ -702,6 +743,9 @@ export function HistoricoPagosTable({
           onPageChange={setCurrentPage}
         />
       </div>
+      ) : (
+        <AnalisisModalidadPanel pagos={filteredData} />
+      )}
 
       {/* MODAL CONFIRMACIÓN DE REVERSA (SOLO ADMINISTRADOR) */}
       {esAdministrador && pagoToReverse && (
